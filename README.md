@@ -1,0 +1,2 @@
+# budu
+A budgeting app.
