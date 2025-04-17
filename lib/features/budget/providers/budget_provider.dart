@@ -54,7 +54,6 @@ class BudgetProvider with ChangeNotifier {
     try {
       _budget!.expenses[category] = amount;
       await _budgetRepository.saveBudget(userId, _budget!);
-      // Realtime-kuuntelu päivittää _budget-arvon automaattisesti, joten ei tarvita notifyListeners()
     } catch (e) {
       print('Error updating expense: $e');
       rethrow;
@@ -66,29 +65,45 @@ class BudgetProvider with ChangeNotifier {
     try {
       _budget!.expenses.remove(category);
       await _budgetRepository.saveBudget(userId, _budget!);
-      // Realtime-kuuntelu päivittää _budget-arvon automaattisesti, joten ei tarvita notifyListeners()
     } catch (e) {
       print('Error deleting expense: $e');
       rethrow;
     }
   }
-  
-Future<void> updateIncome({
-  required String userId,
-  required int year,
-  required int month,
-  required double income,
-}) async {
-  if (_budget == null) return;
-  try {
-    _budget!.income = income;
-    await _budgetRepository.saveBudget(userId, _budget!);
-    notifyListeners(); // Ilmoittaa kuuntelijoille muutoksesta
-  } catch (e) {
-    print('Error updating income: $e');
-    rethrow;
+
+  Future<void> updateIncome({
+    required String userId,
+    required int year,
+    required int month,
+    required double income,
+  }) async {
+    if (_budget == null) return;
+    try {
+      _budget!.income = income;
+      await _budgetRepository.saveBudget(userId, _budget!);
+      notifyListeners();
+    } catch (e) {
+      print('Error updating income: $e');
+      rethrow;
+    }
   }
-}
+
+  Future<void> addToIncome({
+    required String userId,
+    required int year,
+    required int month,
+    required double amount,
+  }) async {
+    if (_budget == null) return;
+    try {
+      _budget!.income += amount; // Lisätään summa income-arvoon
+      await _budgetRepository.saveBudget(userId, _budget!);
+      notifyListeners();
+    } catch (e) {
+      print('Error adding to income: $e');
+      rethrow;
+    }
+  }
 
   @override
   void dispose() {

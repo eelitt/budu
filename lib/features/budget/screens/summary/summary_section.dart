@@ -13,7 +13,7 @@ class SummarySection extends StatelessWidget {
     final expenseProvider = Provider.of<ExpenseProvider>(context);
 
     final totalBudget = budgetProvider.budget!.expenses.values.fold(0.0, (sum, value) => sum + value);
-    final totalIncome = budgetProvider.budget!.income + expenseProvider.totalIncome;
+    final totalIncome = budgetProvider.budget!.income;
     final balance = totalIncome - totalBudget;
 
     return Container(

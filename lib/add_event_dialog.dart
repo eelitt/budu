@@ -51,41 +51,41 @@ class _AddEventDialogState extends State<AddEventDialog> {
     }
   }
 
-  void _saveEvent(BuildContext context) {
-    final expenseProvider = Provider.of<ExpenseProvider>(context, listen: false);
-    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+ void _saveEvent(BuildContext context) {
+  final expenseProvider = Provider.of<ExpenseProvider>(context, listen: false);
+  final budgetProvider = Provider.of<BudgetProvider>(context, listen: false);
+  final authProvider = Provider.of<AuthProvider>(context, listen: false);
 
-    final amount = double.tryParse(_amountController.text);
-    if (amount == null || amount < 0) {
-      setState(() {
-        _errorMessage = 'Syötä positiivinen numero';
-      });
-      return;
-    }
-
-    // Kategoriavalinta vaaditaan vain menoille
-    if (_isExpense && _selectedCategory == null) {
-      setState(() {
-        _errorMessage = 'Valitse kategoria';
-      });
-      return;
-    }
-
-    if (authProvider.user != null) {
-      final event = ExpenseEvent(
-        id: const Uuid().v4(),
-        category: _isExpense ? _selectedCategory! : 'Tulo', // Tulolle asetetaan kategoria "Tulo"
-        amount: amount,
-        createdAt: _selectedDate,
-        type: _isExpense ? EventType.expense : EventType.income,
-        year: _selectedDate.year,
-        month: _selectedDate.month,
-        description: _descriptionController.text.isNotEmpty ? _descriptionController.text : null,
-      );
-      expenseProvider.addExpense(authProvider.user!.uid, event);
-      Navigator.pop(context);
-    }
+  final amount = double.tryParse(_amountController.text);
+  if (amount == null || amount < 0) {
+    setState(() {
+      _errorMessage = 'Syötä positiivinen numero';
+    });
+    return;
   }
+
+  if (_isExpense && _selectedCategory == null) {
+    setState(() {
+      _errorMessage = 'Valitse kategoria';
+    });
+    return;
+  }
+
+  if (authProvider.user != null) {
+    final event = ExpenseEvent(
+      id: const Uuid().v4(),
+      category: _isExpense ? _selectedCategory! : 'Tulo',
+      amount: amount,
+      createdAt: _selectedDate,
+      type: _isExpense ? EventType.expense : EventType.income,
+      year: _selectedDate.year,
+      month: _selectedDate.month,
+      description: _descriptionController.text.isNotEmpty ? _descriptionController.text : null,
+    );
+    expenseProvider.addExpense(authProvider.user!.uid, event, budgetProvider);
+    Navigator.pop(context);
+  }
+}
 
   @override
   Widget build(BuildContext context) {

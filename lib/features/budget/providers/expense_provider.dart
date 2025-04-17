@@ -1,3 +1,4 @@
+import 'package:budu/features/budget/providers/budget_provider.dart';
 import 'package:flutter/material.dart';
 import '../models/expense_event.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -44,7 +45,7 @@ class ExpenseProvider with ChangeNotifier {
       final snapshot = await query.get(const GetOptions(source: Source.serverAndCache));
       _expenses = snapshot.docs.map((doc) {
         final data = doc.data();
-        data['id'] = doc.id; // Lisätään dokumentin ID dataan
+        data['id'] = doc.id;
         return ExpenseEvent.fromMap(data);
       }).toList();
       _lastDoc = snapshot.docs.isNotEmpty ? snapshot.docs.last : null;
@@ -73,7 +74,7 @@ class ExpenseProvider with ChangeNotifier {
       final snapshot = await query.get();
       _expenses.addAll(snapshot.docs.map((doc) {
         final data = doc.data();
-        data['id'] = doc.id; // Lisätään dokumentin ID dataan
+        data['id'] = doc.id;
         return ExpenseEvent.fromMap(data);
       }));
       _lastDoc = snapshot.docs.isNotEmpty ? snapshot.docs.last : null;
@@ -85,7 +86,7 @@ class ExpenseProvider with ChangeNotifier {
     }
   }
 
-  Future<void> addExpense(String userId, ExpenseEvent expense) async {
+  Future<void> addExpense(String userId, ExpenseEvent expense, BudgetProvider budgetProvider) async {
     try {
       await FirebaseFirestore.instance
           .collection('budgets')
@@ -96,6 +97,17 @@ class ExpenseProvider with ChangeNotifier {
           .doc(expense.id)
           .set(expense.toMap());
       _expenses.add(expense);
+
+      // Jos tapahtuma on tulo, päivitetään budjetin income-arvo
+      if (expense.type == EventType.income) {
+        await budgetProvider.addToIncome(
+          userId: userId,
+          year: expense.year,
+          month: expense.month,
+          amount: expense.amount,
+        );
+      }
+
       notifyListeners();
     } catch (e) {
       print('Error adding expense: $e');
@@ -109,7 +121,7 @@ class ExpenseProvider with ChangeNotifier {
           .collection('budgets')
           .doc(userId)
           .collection('monthly_budgets')
-          .doc('${DateTime.now().year}_${DateTime.now().month}') // Oletetaan nykyinen kuukausi, päivitä logiikka tarpeen mukaan
+          .doc('${DateTime.now().year}_${DateTime.now().month}')
           .collection('expenses')
           .doc(expenseId)
           .delete();

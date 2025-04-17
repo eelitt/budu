@@ -40,42 +40,47 @@ class _BudgetScreenState extends State<BudgetScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder(
-      future: _loadBudgetFuture,
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
-        }
-        if (snapshot.hasError) {
-          return Center(child: Text('Virhe latauksessa: ${snapshot.error}'));
-        }
-        final budget = budgetProvider.budget;
-        if (budget == null) {
-          return const Center(child: Text('Luo budjetti ensin!'));
-        }
+    return Consumer<BudgetProvider>(
+      builder: (context, budgetProvider, child) {
+        return FutureBuilder(
+          future: _loadBudgetFuture,
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            if (snapshot.hasError) {
+              return Center(child: Text('Virhe latauksessa: ${snapshot.error}'));
+            }
+            final budget = budgetProvider.budget;
+            if (budget == null) {
+              return const Center(child: Text('Luo budjetti ensin!'));
+            }
 
-        return SingleChildScrollView(
-          child: Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                IncomeSection(income: budget.income),
-                BudgetCategorySection(categoryName: "Asuminen"),
-                BudgetCategorySection(categoryName: "Liikkuminen"),
-                BudgetCategorySection(categoryName: "Kodin kulut"),
-                BudgetCategorySection(categoryName: "Viihde"),
-                BudgetCategorySection(categoryName: "Harrastukset"),
-                BudgetCategorySection(categoryName: "Ruoka"),
-                BudgetCategorySection(categoryName: "Terveys"),
-                BudgetCategorySection(categoryName: "Hygienia"),
-                BudgetCategorySection(categoryName: "Lemmikit"),
-                BudgetCategorySection(categoryName: "Sijoittaminen"),
-                 BudgetCategorySection(categoryName: "Velat"),
-                BudgetCategorySection(categoryName: "Muut"),
-              ],
-            ),
-          ),
+            return SingleChildScrollView(
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    IncomeSection(), // IncomeSection päivittää itse itsensä
+                    const SizedBox(height: 16),
+                    BudgetCategorySection(categoryName: "Asuminen"),
+                    BudgetCategorySection(categoryName: "Liikkuminen"),
+                    BudgetCategorySection(categoryName: "Kodin kulut"),
+                    BudgetCategorySection(categoryName: "Viihde"),
+                    BudgetCategorySection(categoryName: "Harrastukset"),
+                    BudgetCategorySection(categoryName: "Ruoka"),
+                    BudgetCategorySection(categoryName: "Terveys"),
+                    BudgetCategorySection(categoryName: "Hygienia"),
+                    BudgetCategorySection(categoryName: "Lemmikit"),
+                    BudgetCategorySection(categoryName: "Sijoittaminen"),
+                    BudgetCategorySection(categoryName: "Velat"),
+                    BudgetCategorySection(categoryName: "Muut"),
+                  ],
+                ),
+              ),
+            );
+          },
         );
       },
     );
