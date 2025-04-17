@@ -1,5 +1,5 @@
 class BudgetModel {
-  final double income;
+  double income;
   final Map<String, double> expenses;
   final DateTime createdAt;
   final int year;
@@ -23,15 +23,17 @@ class BudgetModel {
     };
   }
 
-  factory BudgetModel.fromMap(Map<String, dynamic> map) {
-    return BudgetModel(
-      income: map['income']?.toDouble() ?? 0.0,
-      expenses: Map<String, double>.from(map['expenses'] ?? {}),
-      createdAt: DateTime.parse(map['createdAt']),
-      year: map['year'] ?? DateTime.now().year,
-      month: map['month'] ?? DateTime.now().month,
-    );
-  }
+ factory BudgetModel.fromMap(Map<String, dynamic> map) {
+  return BudgetModel(
+    income: double.tryParse(map['income']?.toString() ?? '0.0') ?? 0.0,
+    expenses: (map['expenses'] as Map<String, dynamic>?)?.map(
+          (key, value) => MapEntry(key, double.tryParse(value?.toString() ?? '0.0') ?? 0.0),
+        ) ?? {},
+    createdAt: DateTime.tryParse(map['createdAt'] ?? '') ?? DateTime.now(),
+    year: map['year'] as int? ?? DateTime.now().year,
+    month: map['month'] as int? ?? DateTime.now().month,
+  );
+}
 
   double get totalExpenses => expenses.values.fold(0.0, (sum, value) => sum + value);
   double get remaining => income - totalExpenses;

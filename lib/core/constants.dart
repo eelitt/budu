@@ -2,31 +2,36 @@ const Map<String, List<String>> categoryMapping = {
   "Asuminen": [
     "Vuokra",
     "Vesimaksu",
+    "Kotivakuutus",
     "Asuntolaina",
     "Lämmitys",
     "Kiinteistövero",
     "Jätehuolto",
-    "Kotivakuutus", // Lyhennetty "KotivakuutusVuokra" ja "KotivakuutusOmakotitalo" -> "Kotivakuutus"
   ],
   "Liikkuminen": [
-    "Polttoaine", // "AutoPolttoaine" -> "Polttoaine"
-    "Autovakuutus", // "AutoVakuutus" -> "Autovakuutus"
-    "Ajoneuvovero",
-    "Auton huolto",
-    "Auton rahoitus", // "AutoRahoitus" -> "Auton rahoitus"
+    "Auton rahoitus",
     "AutopaikanVuokra",
-    "Renkaiden vaihto ja säilytys", // "RenkaidenVaihtoJaSäilytys" -> "Renkaiden vaihto ja säilytys"
+    "Polttoaine",
+    "Autovakuutus",
+    "Ajoneuvovero",
+    "Renkaiden vaihto ja säilytys",
+    "Auton huolto",
   ],
-  "Palvelut": [
-    "Palvelut",
-    "Nettiliittymä",
-    "Puhelinlasku",
+  "Kodin kulut": [
     "Sähkö",
+    "Puhelinlasku",
+    "Nettiliittymä",
+  ],
+  "Viihde": [
+    "Viihde-Palvelut", // Kuukausimaksulliset palvelut (esim. Netflix, Spotify)
+  ],
+  "Harrastukset": [
+    "Harrastukset", // Uusi kategoria harrastuksille
   ],
   "Ruoka": ["Ruoka"],
-  "Terveys": ["Terveys"], // Jaetaan "Terveys ja hygienia" kahteen kategoriaan
+  "Terveys": ["Terveys"],
   "Hygienia": ["Hygienia"],
-  "Viihde": ["Viihde"],
   "Lemmikit": ["Lemmikit"],
-  "Muut": ["Muut"],
+  "Sijoittaminen": ["Säästäminen", "Sijoittaminen"],
+  "Velat":[], // Uusi kategoria säästämiselle ja sijoittamiselle
 };

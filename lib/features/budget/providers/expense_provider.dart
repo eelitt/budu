@@ -40,11 +40,13 @@ class ExpenseProvider with ChangeNotifier {
           .collection('expenses')
           .orderBy('createdAt', descending: true)
           .limit(50);
-      
+
       final snapshot = await query.get(const GetOptions(source: Source.serverAndCache));
-      _expenses = snapshot.docs
-          .map((doc) => ExpenseEvent.fromMap(doc.id, doc.data()))
-          .toList();
+      _expenses = snapshot.docs.map((doc) {
+        final data = doc.data();
+        data['id'] = doc.id; // Lisätään dokumentin ID dataan
+        return ExpenseEvent.fromMap(data);
+      }).toList();
       _lastDoc = snapshot.docs.isNotEmpty ? snapshot.docs.last : null;
       notifyListeners();
     } catch (e) {
@@ -67,9 +69,13 @@ class ExpenseProvider with ChangeNotifier {
           .orderBy('createdAt', descending: true)
           .startAfterDocument(_lastDoc!)
           .limit(50);
-      
+
       final snapshot = await query.get();
-      _expenses.addAll(snapshot.docs.map((doc) => ExpenseEvent.fromMap(doc.id, doc.data())));
+      _expenses.addAll(snapshot.docs.map((doc) {
+        final data = doc.data();
+        data['id'] = doc.id; // Lisätään dokumentin ID dataan
+        return ExpenseEvent.fromMap(data);
+      }));
       _lastDoc = snapshot.docs.isNotEmpty ? snapshot.docs.last : null;
     } catch (e) {
       rethrow;

@@ -1,12 +1,12 @@
 import 'package:budu/features/auth/providers/auth_provider.dart';
-import 'package:budu/features/budget/screens/summary_screen.dart';
+import 'package:budu/features/budget/screens/summary/summary_screen.dart';
 import 'package:budu/features/chatbot/providers/chatbot_provider.dart';
 import 'package:budu/features/chatbot/screens/chatbot_screen.dart';
 import 'package:budu/mainScreen.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../features/auth/screens/login_screen.dart';
-import '../features/budget/screens/budget_screen.dart';
+import '../features/budget/screens/budget/budget_screen.dart';
 
 class AppRouter {
   static const String loginRoute = '/login';

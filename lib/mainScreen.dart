@@ -1,13 +1,10 @@
+import 'package:budu/add_event_dialog.dart';
 import 'package:budu/core/app_router.dart';
 import 'package:budu/features/auth/providers/auth_provider.dart';
-import 'package:budu/features/budget/models/expense_event.dart';
-import 'package:budu/features/budget/providers/budget_provider.dart';
-import 'package:budu/features/budget/providers/expense_provider.dart';
-import 'package:budu/features/budget/screens/budget_screen.dart';
-import 'package:budu/features/budget/screens/summary_screen.dart';
+import 'package:budu/features/budget/screens/budget/budget_screen.dart';
+import 'package:budu/features/budget/screens/summary/summary_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:uuid/uuid.dart';
 
 class MainScreen extends StatefulWidget {
   final int initialIndex;
@@ -32,146 +29,69 @@ class _MainScreenState extends State<MainScreen> {
     const SummaryScreen(), // Indeksi 1: Yhteenveto
   ];
 
-  void _onItemTapped(int index) {
-    setState(() {
-      _selectedIndex = index;
-    });
-  }
-
-  void _showAddExpenseDialog(BuildContext context) {
-    final budgetProvider = Provider.of<BudgetProvider>(context, listen: false);
-    final expenseProvider = Provider.of<ExpenseProvider>(context, listen: false);
-    final authProvider = Provider.of<AuthProvider>(context, listen: false);
-    String? selectedCategory = budgetProvider.budget?.expenses.keys.first;
-    final amountController = TextEditingController();
-    String? errorMessage;
-
-    showDialog(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setState) => AlertDialog(
-          title: const Text('Lisää meno'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              DropdownButton<String>(
-                value: selectedCategory,
-                isExpanded: true,
-                items: budgetProvider.budget?.expenses.keys.map((key) {
-                  return DropdownMenuItem<String>(
-                    value: key,
-                    child: Text(key),
-                  );
-                }).toList() ?? [],
-                onChanged: (value) {
-                  setState(() {
-                    selectedCategory = value;
-                  });
-                },
-              ),
-              TextField(
-                controller: amountController,
-                keyboardType: TextInputType.number,
-                decoration: InputDecoration(
-                  labelText: 'Summa (€)',
-                  border: const OutlineInputBorder(),
-                  errorText: errorMessage,
-                ),
-                onChanged: (value) {
-                  setState(() {
-                    double? amount = double.tryParse(value);
-                    if (amount == null || amount < 0) {
-                      errorMessage = 'Syötä positiivinen numero';
-                    } else {
-                      errorMessage = null;
-                    }
-                  });
-                },
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Peruuta'),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                final amount = double.tryParse(amountController.text);
-                if (amount == null || amount < 0) {
-                  setState(() {
-                    errorMessage = 'Syötä positiivinen numero';
-                  });
-                  return;
-                }
-                if (selectedCategory != null && authProvider.user != null) {
-                  final expense = ExpenseEvent(
-                    id: const Uuid().v4(),
-                    category: selectedCategory!,
-                    amount: amount,
-                    createdAt: DateTime.now(),
-                    type: EventType.expense,
-                    year: DateTime.now().year,
-                    month: DateTime.now().month,
-                  );
-                  expenseProvider.addExpense(authProvider.user!.uid, expense);
-                  Navigator.pop(context);
-                }
-              },
-              child: const Text('Lisää'),
-            ),
-          ],
-        ),
-      ),
-    );
+  void _onItemTapped(int index) async {
+    if (index == 2) { // Uloskirjautuminen (indeksi 2)
+      final authProvider = Provider.of<AuthProvider>(context, listen: false);
+      await authProvider.signOut();
+      if (context.mounted) {
+        Navigator.pushReplacementNamed(context, AppRouter.loginRoute);
+      }
+    } else {
+      setState(() {
+        _selectedIndex = index;
+      });
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final authProvider = Provider.of<AuthProvider>(context);
-
     return Scaffold(
       appBar: AppBar(
+        automaticallyImplyLeading: false,
         title: const Text('Budu'),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.add),
-            onPressed: () => _showAddExpenseDialog(context),
-            tooltip: 'Lisää meno',
-          ),
-          IconButton(
-            icon: const Icon(Icons.logout),
-            onPressed: () async {
-              await authProvider.signOut();
-              if (context.mounted) {
-                Navigator.pushReplacementNamed(context, AppRouter.loginRoute);
-              }
-            },
-            tooltip: 'Kirjaudu ulos',
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8.0),
+            child: ElevatedButton.icon(
+              onPressed: () {
+                showDialog(
+                  context: context,
+                  builder: (context) => const AddEventDialog(),
+                );
+              },
+              icon: const Icon(Icons.add, size: 18),
+              label: const Text('Lisää tapahtuma'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blue,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                textStyle: const TextStyle(fontSize: 14),
+              ),
+            ),
           ),
         ],
       ),
-      body: _screens[_selectedIndex],
+      body: _selectedIndex < 2 ? _screens[_selectedIndex] : const SizedBox.shrink(), // Estetään näyttämästä tyhjää sivua uloskirjautumiselle
       bottomNavigationBar: BottomNavigationBar(
         items: const [
           BottomNavigationBarItem(
             icon: Icon(Icons.edit),
-            label: 'Muokkaa budjettia', // Indeksi 0
+            label: 'Muokkaa budjettia',
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.bar_chart),
-            label: 'Yhteenveto', // Indeksi 1
+            label: 'Yhteenveto',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.logout),
+            label: 'Kirjaudu ulos', // Uusi välilehti uloskirjautumiselle
           ),
         ],
-        currentIndex: _selectedIndex,
+        currentIndex: _selectedIndex < 2 ? _selectedIndex : 0, // Varmistetaan, että indeksi on validi
         onTap: _onItemTapped,
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          Navigator.pushNamed(context, AppRouter.chatbotRoute);
-        },
-        child: const Icon(Icons.chat),
-        backgroundColor: Colors.blueGrey[800],
       ),
     );
   }

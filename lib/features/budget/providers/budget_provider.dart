@@ -12,16 +12,15 @@ class BudgetProvider with ChangeNotifier {
   BudgetModel? get budget => _budget;
 
   Future<void> loadBudget(String userId, int year, int month) async {
-  try {
-    _budget = await _budgetRepository.getBudget(userId, year, month);
-    // Poista oletusbudjetin luonti täältä
-    _listenToBudget(userId, year, month);
-    notifyListeners();
-  } catch (e) {
-    print('Error loading budget: $e');
-    rethrow;
+    try {
+      _budget = await _budgetRepository.getBudget(userId, year, month);
+      _listenToBudget(userId, year, month);
+      notifyListeners();
+    } catch (e) {
+      print('budgetProvider, Error loading budget: $e');
+      rethrow;
+    }
   }
-}
 
   void _listenToBudget(String userId, int year, int month) {
     _budgetSubscription?.cancel();
@@ -49,6 +48,47 @@ class BudgetProvider with ChangeNotifier {
       rethrow;
     }
   }
+
+  Future<void> updateExpense({required int year, required String userId, required int month, required String category, required double amount}) async {
+    if (_budget == null) return;
+    try {
+      _budget!.expenses[category] = amount;
+      await _budgetRepository.saveBudget(userId, _budget!);
+      // Realtime-kuuntelu päivittää _budget-arvon automaattisesti, joten ei tarvita notifyListeners()
+    } catch (e) {
+      print('Error updating expense: $e');
+      rethrow;
+    }
+  }
+
+  Future<void> deleteExpense({required String userId, required int year, required int month, required String category}) async {
+    if (_budget == null) return;
+    try {
+      _budget!.expenses.remove(category);
+      await _budgetRepository.saveBudget(userId, _budget!);
+      // Realtime-kuuntelu päivittää _budget-arvon automaattisesti, joten ei tarvita notifyListeners()
+    } catch (e) {
+      print('Error deleting expense: $e');
+      rethrow;
+    }
+  }
+  
+Future<void> updateIncome({
+  required String userId,
+  required int year,
+  required int month,
+  required double income,
+}) async {
+  if (_budget == null) return;
+  try {
+    _budget!.income = income;
+    await _budgetRepository.saveBudget(userId, _budget!);
+    notifyListeners(); // Ilmoittaa kuuntelijoille muutoksesta
+  } catch (e) {
+    print('Error updating income: $e');
+    rethrow;
+  }
+}
 
   @override
   void dispose() {
