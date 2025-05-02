@@ -1,6 +1,5 @@
 import 'package:budu/core/utils.dart';
 import 'package:budu/features/budget/providers/budget_provider.dart';
-import 'package:budu/features/budget/providers/expense_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -10,9 +9,8 @@ class SummarySection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final budgetProvider = Provider.of<BudgetProvider>(context);
-    final expenseProvider = Provider.of<ExpenseProvider>(context);
 
-    final totalBudget = budgetProvider.budget!.expenses.values.fold(0.0, (sum, value) => sum + value);
+    final totalBudget = budgetProvider.budget!.totalExpenses; // Käytetään BudgetModelin totalExpenses-getteriä
     final totalIncome = budgetProvider.budget!.income;
     final balance = totalIncome - totalBudget;
 

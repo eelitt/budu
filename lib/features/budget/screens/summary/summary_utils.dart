@@ -1,34 +1,41 @@
 import 'package:flutter/material.dart';
 
-Map<String, double> combineSmallCategories(Map<String, double> expenses, double totalBudget) {
-  const double threshold = 5.0;
-  Map<String, double> combinedExpenses = {};
+// Muokataan funktiota tukemaan Map<String, Map<String, double>> -rakennetta
+Map<String, double> combineSmallCategories(Map<String, Map<String, double>> expenses, double totalBudget) {
+  const double thresholdPercentage = 5.0;
+  final Map<String, double> combined = {};
   double otherTotal = 0.0;
 
-  expenses.forEach((category, amount) {
-    final percentage = (amount / totalBudget) * 100;
-    if (percentage < threshold) {
-      otherTotal += amount;
+  // Lasketaan pääkategorioiden summat
+  expenses.forEach((category, subcategories) {
+    final categoryTotal = subcategories.values.fold(0.0, (sum, value) => sum + value);
+    final percentage = totalBudget > 0 ? (categoryTotal / totalBudget) * 100 : 0.0;
+
+    if (percentage < thresholdPercentage) {
+      otherTotal += categoryTotal;
     } else {
-      combinedExpenses[category] = amount;
+      combined[category] = categoryTotal;
     }
   });
 
   if (otherTotal > 0) {
-    combinedExpenses['Muut'] = otherTotal;
+    combined['Muut'] = otherTotal;
   }
 
-  return combinedExpenses;
+  return combined;
 }
 
-List<MapEntry<String, double>> getOtherCategoryDetails(Map<String, double> expenses, double totalBudget) {
-  const double threshold = 5.0;
-  List<MapEntry<String, double>> otherCategories = [];
+// Muokataan funktiota tukemaan Map<String, Map<String, double>> -rakennetta
+Map<String, double> getOtherCategoryDetails(Map<String, Map<String, double>> expenses, double totalBudget) {
+  const double thresholdPercentage = 5.0;
+  final Map<String, double> otherCategories = {};
 
-  expenses.forEach((category, amount) {
-    final percentage = (amount / totalBudget) * 100;
-    if (percentage < threshold) {
-      otherCategories.add(MapEntry(category, amount));
+  expenses.forEach((category, subcategories) {
+    final categoryTotal = subcategories.values.fold(0.0, (sum, value) => sum + value);
+    final percentage = totalBudget > 0 ? (categoryTotal / totalBudget) * 100 : 0.0;
+
+    if (percentage < thresholdPercentage) {
+      otherCategories[category] = categoryTotal;
     }
   });
 
@@ -36,20 +43,19 @@ List<MapEntry<String, double>> getOtherCategoryDetails(Map<String, double> expen
 }
 
 Color getColorForCategory(String category, List<String> categories) {
-  final colors = [
-    const Color(0xFF4CAF50),
-    const Color(0xFF2196F3),
-    const Color(0xFFFF9800),
-    const Color(0xFFE91E63),
-    const Color(0xFF9C27B0),
-    const Color(0xFF00BCD4),
-    const Color(0xFFFF5722),
-    const Color(0xFF795548),
-    const Color(0xFFCDDC39),
-    const Color(0xFF673AB7),
-    const Color(0xFF009688),
-    const Color(0xFFFFC107),
+  final List<Color> colors = [
+    Colors.blue,
+    Colors.red,
+    Colors.green,
+    Colors.orange,
+    Colors.purple,
+    Colors.teal,
+    Colors.pink,
+    Colors.amber,
+    Colors.cyan,
+    Colors.indigo,
   ];
+
   final index = categories.indexOf(category);
   return colors[index % colors.length];
 }

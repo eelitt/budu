@@ -46,18 +46,220 @@ class BudgetTrackingSection extends StatelessWidget {
     final categoryTotals = expenseProvider.getCategoryTotals();
     final budget = budgetProvider.budget!;
 
+    // Haetaan kaikki alakategoriat categoryMapping-vakiosta
     final allMappedCategories = categoryMapping.values.expand((categories) => categories).toSet();
-    final List<MapEntry<String, double>> unmappedExpenses = budget.expenses.entries
-        .where((entry) => !allMappedCategories.contains(entry.key))
+    // Haetaan yläkategoriat
+    final mappedMainCategories = categoryMapping.keys.toSet();
+    // Lasketaan unmappedCategories: Kategoriat, jotka eivät kuulu mihinkään yläkategoriaan
+    final unmappedCategories = budget.expenses.keys
+        .where((key) => !allMappedCategories.contains(key) && !mappedMainCategories.contains(key))
         .toList();
-    final double unmappedBudget = unmappedExpenses.fold<double>(0.0, (sum, e) => sum + e.value);
+
+    // Järjestä unmappedCategories aakkosjärjestykseen
+    unmappedCategories.sort();
+
+    // Lasketaan unmappedExpenses: Kategorioiden summat (huomioidaan alakategoriat)
+    final Map<String, double> unmappedExpenses = {};
+    for (var category in unmappedCategories) {
+      final subcategories = budget.expenses[category]!;
+      final categoryTotal = subcategories.values.fold(0.0, (sum, value) => sum + value);
+      unmappedExpenses[category] = categoryTotal;
+    }
+    final double unmappedBudget = unmappedExpenses.values.fold(0.0, (sum, value) => sum + value);
     final double unmappedSpent = categoryTotals.entries
-        .where((e) => !allMappedCategories.contains(e.key))
+        .where((e) => unmappedCategories.contains(e.key))
         .fold<double>(0.0, (sum, e) => sum + e.value);
     final double unmappedProgress = unmappedBudget > 0 ? unmappedSpent / unmappedBudget : 0.0;
     final double unmappedRemainingPercentage = unmappedBudget > 0
         ? ((unmappedBudget - unmappedSpent) / unmappedBudget * 100).clamp(0, 100)
         : 0.0;
+
+    // Järjestä yläkategoriat aakkosjärjestykseen ja muunna tulos Widget-listoiksi
+    final List<MapEntry<String, List<String>>> sortedCategories = categoryMapping.entries.toList()
+      ..sort((a, b) => a.key.compareTo(b.key)); // Järjestä yläkategoriat aakkosjärjestykseen
+
+    final List<Widget> categoryWidgets = sortedCategories.map((categoryEntry) {
+      final categoryName = categoryEntry.key;
+      final subCategories = categoryEntry.value;
+
+      // Haetaan yläkategorian budjetti ja kulutus
+      double directCategoryBudget = 0.0;
+      double directCategorySpent = 0.0;
+
+      // Jos kategoria on suoraan expenses-kentässä (esim. "Harrastukset")
+      if (budget.expenses.containsKey(categoryName)) {
+        directCategoryBudget = budget.expenses[categoryName]!.values.fold(0.0, (sum, value) => sum + value);
+        directCategorySpent = categoryTotals[categoryName] ?? 0.0;
+      }
+
+      // Haetaan yläkategorian alakategoriat
+      final categoryExpenses = budget.expenses.containsKey(categoryName)
+          ? budget.expenses[categoryName]!.entries.map((e) => MapEntry(e.key, e.value)).toList()
+          : <MapEntry<String, double>>[];
+
+      // Järjestä alakategoriat aakkosjärjestykseen
+      categoryExpenses.sort((a, b) => a.key.compareTo(b.key));
+
+      // Lasketaan yläkategorian kokonaisbudjetti ja -kulutus
+      final categoryBudget = subCategories.isNotEmpty
+          ? categoryExpenses.fold<double>(0.0, (sum, e) => sum + e.value)
+          : directCategoryBudget;
+      final categorySpent = subCategories.isNotEmpty
+          ? categoryTotals.entries
+              .where((e) => subCategories.contains(e.key))
+              .fold<double>(0.0, (sum, e) => sum + e.value)
+          : directCategorySpent;
+
+      // Piilotetaan vain, jos ei ole budjettia eikä kulutusta
+      if (categoryBudget == 0.0 && categorySpent == 0.0) {
+        return const SizedBox.shrink();
+      }
+
+      final progress = categoryBudget > 0 ? categorySpent / categoryBudget : 0.0;
+      final remainingPercentage = categoryBudget > 0
+          ? ((categoryBudget - categorySpent) / categoryBudget * 100).clamp(0, 100)
+          : 100.0;
+
+      return Container(
+        margin: const EdgeInsets.only(bottom: 16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 8,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Theme(
+          data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+          child: ExpansionTile(
+            tilePadding: const EdgeInsets.symmetric(horizontal: 0),
+            childrenPadding: const EdgeInsets.symmetric(horizontal: 0),
+            leading: Icon(
+              categoryName == "Asuminen"
+                  ? Icons.home
+                  : categoryName == "Liikkuminen"
+                      ? Icons.directions_car
+                      : categoryName == "Kodin kulut"
+                          ? Icons.power
+                          : categoryName == "Viihde"
+                              ? Icons.movie
+                              : categoryName == "Harrastukset"
+                                  ? Icons.sports
+                                  : categoryName == "Ruoka"
+                                      ? Icons.fastfood
+                                      : categoryName == "Terveys"
+                                          ? Icons.local_hospital
+                                          : categoryName == "Hygienia"
+                                              ? Icons.cleaning_services
+                                              : categoryName == "Lemmikit"
+                                                  ? Icons.pets
+                                                  : categoryName == "Sijoittaminen"
+                                                      ? Icons.savings
+                                                      : categoryName == "Velat"
+                                                          ? Icons.money_off
+                                                          : Icons.category,
+              color: Colors.blueGrey,
+              size: 24,
+            ),
+            title: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              mainAxisSize: MainAxisSize.max,
+              children: [
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.only(right: 8.0),
+                    child: Text(
+                      categoryName,
+                      style: Theme.of(context).textTheme.bodyLarge?.copyWith(fontSize: 16),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ),
+                Text(
+                  '${formatCurrency(categorySpent)} / ${formatCurrency(categoryBudget)}',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: Colors.black54,
+                        fontSize: 14,
+                      ),
+                ),
+              ],
+            ),
+            subtitle: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const SizedBox(height: 4),
+                LinearProgressIndicator(
+                  value: progress > 1 ? 1 : progress,
+                  backgroundColor: Colors.grey[200],
+                  valueColor: AlwaysStoppedAnimation<Color>(_getProgressColor(categoryName, progress)),
+                  minHeight: 8,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '${remainingPercentage.toStringAsFixed(0)}% jäljellä',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.black54),
+                ),
+              ],
+            ),
+            children: categoryExpenses.map((entry) {
+              final subCategory = entry.key;
+              final subCategoryBudget = entry.value;
+              final spentAmount = categoryTotals[subCategory] ?? 0.0;
+              final subProgress = subCategoryBudget > 0 ? spentAmount / subCategoryBudget : 0.0;
+              final subRemainingPercentage = subCategoryBudget > 0
+                  ? ((subCategoryBudget - spentAmount) / subCategoryBudget * 100).clamp(0, 100)
+                  : 0.0;
+
+              return Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Flexible(
+                          child: Text(
+                            subCategory,
+                            style: Theme.of(context).textTheme.bodyLarge,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        Flexible(
+                          child: Text(
+                            '${formatCurrency(spentAmount)} / ${formatCurrency(subCategoryBudget)}',
+                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.black54),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    LinearProgressIndicator(
+                      value: subProgress > 1 ? 1 : subProgress,
+                      backgroundColor: Colors.grey[200],
+                      valueColor: AlwaysStoppedAnimation<Color>(_getProgressColor(categoryName, subProgress)),
+                      minHeight: 8,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '${subRemainingPercentage.toStringAsFixed(0)}% jäljellä',
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.black54),
+                    ),
+                  ],
+                ),
+              );
+            }).toList(),
+          ),
+        ),
+      );
+    }).toList();
 
     return Container(
       decoration: BoxDecoration(
@@ -83,261 +285,123 @@ class BudgetTrackingSection extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 16),
-          ...categoryMapping.entries.map((categoryEntry) {
-            final categoryName = categoryEntry.key;
-            final subCategories = categoryEntry.value;
-            final categoryExpenses = budget.expenses.entries
-                .where((entry) => subCategories.contains(entry.key))
-                .toList();
-
-            // Lasketaan suoraan kategorian budjetti ja kulutus, jos alakategorioita ei ole
-            final directCategoryBudget = budget.expenses[categoryName] ?? 0.0;
-            final directCategorySpent = categoryTotals[categoryName] ?? 0.0;
-
-            // Piilotetaan vain, jos ei ole alakategorioita eikä suoraa budjettia/kulutusta
-            if (subCategories.isEmpty && directCategoryBudget == 0.0 && directCategorySpent == 0.0) {
-              return const SizedBox.shrink();
-            }
-
-            final categoryBudget = subCategories.isNotEmpty
-                ? categoryExpenses.fold<double>(0.0, (sum, e) => sum + e.value)
-                : directCategoryBudget;
-            final categorySpent = subCategories.isNotEmpty
-                ? categoryTotals.entries
-                    .where((e) => subCategories.contains(e.key))
-                    .fold<double>(0.0, (sum, e) => sum + e.value)
-                : directCategorySpent;
-            final progress = categoryBudget > 0 ? categorySpent / categoryBudget : 0.0;
-            final remainingPercentage = categoryBudget > 0
-                ? ((categoryBudget - categorySpent) / categoryBudget * 100).clamp(0, 100)
-                : 100.0;
-
-            return Material(
-              child: ExpansionTile(
-                tilePadding: const EdgeInsets.symmetric(horizontal: 0),
-                childrenPadding: const EdgeInsets.symmetric(horizontal: 0),
-                leading: Icon(
-                  categoryName == "Asuminen"
-                      ? Icons.home
-                      : categoryName == "Liikkuminen"
-                          ? Icons.directions_car
-                          : categoryName == "Kodin kulut"
-                              ? Icons.power
-                              : categoryName == "Viihde"
-                                  ? Icons.movie
-                                  : categoryName == "Harrastukset"
-                                      ? Icons.sports
-                                      : categoryName == "Ruoka"
-                                          ? Icons.fastfood
-                                          : categoryName == "Terveys"
-                                              ? Icons.local_hospital
-                                              : categoryName == "Hygienia"
-                                                  ? Icons.cleaning_services
-                                                  : categoryName == "Lemmikit"
-                                                      ? Icons.pets
-                                                      : categoryName == "Sijoittaminen"
-                                                          ? Icons.savings
-                                                          : categoryName == "Velat"
-                                                              ? Icons.money_off
-                                                              : Icons.category,
-                  color: Colors.blueGrey,
-                  size: 24,
-                ),
-                title: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  mainAxisSize: MainAxisSize.max,
-                  children: [
-                    Expanded(
-                      child: Padding(
-                        padding: const EdgeInsets.only(right: 8.0),
-                        child: Text(
-                          categoryName,
-                          style: Theme.of(context).textTheme.bodyLarge?.copyWith(fontSize: 16),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ),
-                    Text(
-                      '${formatCurrency(categorySpent)} / ${formatCurrency(categoryBudget)}',
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: Colors.black54,
-                            fontSize: 14,
-                          ),
-                    ),
-                  ],
-                ),
-                subtitle: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const SizedBox(height: 4),
-                    LinearProgressIndicator(
-                      value: progress > 1 ? 1 : progress,
-                      backgroundColor: Colors.grey[200],
-                      valueColor: AlwaysStoppedAnimation<Color>(_getProgressColor(categoryName, progress)),
-                      minHeight: 8,
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '${remainingPercentage.toStringAsFixed(0)}% jäljellä',
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.black54),
-                    ),
-                  ],
-                ),
-                children: categoryExpenses.map((entry) {
-                  final subCategory = entry.key;
-                  final budgetAmount = entry.value;
-                  final spentAmount = categoryTotals[subCategory] ?? 0.0;
-                  final subProgress = budgetAmount > 0 ? spentAmount / budgetAmount : 0.0;
-                  final subRemainingPercentage = budgetAmount > 0
-                      ? ((budgetAmount - spentAmount) / budgetAmount * 100).clamp(0, 100)
-                      : 0.0;
-
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 16.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Flexible(
-                              child: Text(
-                                subCategory,
-                                style: Theme.of(context).textTheme.bodyLarge,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                            Flexible(
-                              child: Text(
-                                '${formatCurrency(spentAmount)} / ${formatCurrency(budgetAmount)}',
-                                style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.black54),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 4),
-                        LinearProgressIndicator(
-                          value: subProgress > 1 ? 1 : subProgress,
-                          backgroundColor: Colors.grey[200],
-                          valueColor: AlwaysStoppedAnimation<Color>(_getProgressColor(categoryName, subProgress)),
-                          minHeight: 8,
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          '${subRemainingPercentage.toStringAsFixed(0)}% jäljellä',
-                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.black54),
-                        ),
-                      ],
-                    ),
-                  );
-                }).toList(),
-              ),
-            );
-          }),
+          ...categoryWidgets,
           if (unmappedExpenses.isNotEmpty) ...[
-            Material(
-              child: ExpansionTile(
-                tilePadding: const EdgeInsets.symmetric(horizontal: 0),
-                childrenPadding: const EdgeInsets.symmetric(horizontal: 0),
-                leading: const Icon(
-                  Icons.category,
-                  color: Colors.blueGrey,
-                  size: 24,
-                ),
-                title: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  mainAxisSize: MainAxisSize.max,
-                  children: [
-                    Expanded(
-                      child: Padding(
-                        padding: const EdgeInsets.only(right: 8.0),
-                        child: Text(
-                          'Muut',
-                          style: Theme.of(context).textTheme.bodyLarge?.copyWith(fontSize: 16),
-                          overflow: TextOverflow.ellipsis,
+            Container(
+              margin: const EdgeInsets.only(bottom: 16),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.05),
+                    blurRadius: 8,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Theme(
+                data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+                child: ExpansionTile(
+                  tilePadding: const EdgeInsets.symmetric(horizontal: 0),
+                  childrenPadding: const EdgeInsets.symmetric(horizontal: 0),
+                  leading: const Icon(
+                    Icons.category,
+                    color: Colors.blueGrey,
+                    size: 24,
+                  ),
+                  title: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    mainAxisSize: MainAxisSize.max,
+                    children: [
+                      Expanded(
+                        child: Padding(
+                          padding: const EdgeInsets.only(right: 8.0),
+                          child: Text(
+                            'Muut',
+                            style: Theme.of(context).textTheme.bodyLarge?.copyWith(fontSize: 16),
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
                       ),
-                    ),
-                    Text(
-                      '${formatCurrency(unmappedSpent)} / ${formatCurrency(unmappedBudget)}',
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: Colors.black54,
-                            fontSize: 14,
-                          ),
-                    ),
-                  ],
-                ),
-                subtitle: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const SizedBox(height: 4),
-                    LinearProgressIndicator(
-                      value: unmappedProgress > 1 ? 1 : unmappedProgress,
-                      backgroundColor: Colors.grey[200],
-                      valueColor: AlwaysStoppedAnimation<Color>(_getProgressColor('Muut', unmappedProgress)),
-                      minHeight: 8,
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '${unmappedRemainingPercentage.toStringAsFixed(0)}% jäljellä',
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.black54),
-                    ),
-                  ],
-                ),
-                children: unmappedExpenses.map((entry) {
-                  final subCategory = entry.key;
-                  final budgetAmount = entry.value;
-                  final spentAmount = categoryTotals[subCategory] ?? 0.0;
-                  final subProgress = budgetAmount > 0 ? spentAmount / budgetAmount : 0.0;
-                  final subRemainingPercentage = budgetAmount > 0
-                      ? ((budgetAmount - spentAmount) / budgetAmount * 100).clamp(0, 100)
-                      : 0.0;
+                      Text(
+                        '${formatCurrency(unmappedSpent)} / ${formatCurrency(unmappedBudget)}',
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                              color: Colors.black54,
+                              fontSize: 14,
+                            ),
+                      ),
+                    ],
+                  ),
+                  subtitle: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const SizedBox(height: 4),
+                      LinearProgressIndicator(
+                        value: unmappedProgress > 1 ? 1 : unmappedProgress,
+                        backgroundColor: Colors.grey[200],
+                        valueColor: AlwaysStoppedAnimation<Color>(_getProgressColor('Muut', unmappedProgress)),
+                        minHeight: 8,
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '${unmappedRemainingPercentage.toStringAsFixed(0)}% jäljellä',
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.black54),
+                      ),
+                    ],
+                  ),
+                  children: unmappedExpenses.entries.map((entry) {
+                    final subCategory = entry.key;
+                    final budgetAmount = entry.value;
+                    final spentAmount = categoryTotals[subCategory] ?? 0.0;
+                    final subProgress = budgetAmount > 0 ? spentAmount / budgetAmount : 0.0;
+                    final subRemainingPercentage = budgetAmount > 0
+                        ? ((budgetAmount - spentAmount) / budgetAmount * 100).clamp(0, 100)
+                        : 0.0;
 
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 16.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Flexible(
-                              child: Text(
-                                subCategory,
-                                style: Theme.of(context).textTheme.bodyLarge,
-                                overflow: TextOverflow.ellipsis,
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 16.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  subCategory,
+                                  style: Theme.of(context).textTheme.bodyLarge,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
                               ),
-                            ),
-                            Flexible(
-                              child: Text(
-                                '${formatCurrency(spentAmount)} / ${formatCurrency(budgetAmount)}',
-                                style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.black54),
-                                overflow: TextOverflow.ellipsis,
+                              Flexible(
+                                child: Text(
+                                  '${formatCurrency(spentAmount)} / ${formatCurrency(budgetAmount)}',
+                                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.black54),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
                               ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 4),
-                        LinearProgressIndicator(
-                          value: subProgress > 1 ? 1 : subProgress,
-                          backgroundColor: Colors.grey[200],
-                          valueColor: AlwaysStoppedAnimation<Color>(_getProgressColor('Muut', subProgress)),
-                          minHeight: 8,
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          '${subRemainingPercentage.toStringAsFixed(0)}% jäljellä',
-                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.black54),
-                        ),
-                      ],
-                    ),
-                  );
-                }).toList(),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          LinearProgressIndicator(
+                            value: subProgress > 1 ? 1 : subProgress,
+                            backgroundColor: Colors.grey[200],
+                            valueColor: AlwaysStoppedAnimation<Color>(_getProgressColor('Muut', subProgress)),
+                            minHeight: 8,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            '${subRemainingPercentage.toStringAsFixed(0)}% jäljellä',
+                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.black54),
+                          ),
+                        ],
+                      ),
+                    );
+                  }).toList(),
+                ),
               ),
             ),
           ],

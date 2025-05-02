@@ -88,6 +88,7 @@ class ExpenseProvider with ChangeNotifier {
 
   Future<void> addExpense(String userId, ExpenseEvent expense, BudgetProvider budgetProvider) async {
     try {
+      // Tallennetaan tapahtuma Firestoreen
       await FirebaseFirestore.instance
           .collection('budgets')
           .doc(userId)
@@ -96,6 +97,8 @@ class ExpenseProvider with ChangeNotifier {
           .collection('expenses')
           .doc(expense.id)
           .set(expense.toMap());
+
+      // Päivitetään paikallinen lista vasta, kun Firestore-tallennus on onnistunut
       _expenses.add(expense);
 
       // Jos tapahtuma on tulo, päivitetään budjetin income-arvo
@@ -111,17 +114,19 @@ class ExpenseProvider with ChangeNotifier {
       notifyListeners();
     } catch (e) {
       print('Error adding expense: $e');
-      rethrow;
+      throw Exception('Tapahtuman tallentaminen epäonnistui: $e');
     }
   }
 
   Future<void> deleteExpense(String userId, String expenseId) async {
     try {
+      // Haetaan poistettavan tapahtuman tiedot (vuosi ja kuukausi)
+      final expense = _expenses.firstWhere((e) => e.id == expenseId);
       await FirebaseFirestore.instance
           .collection('budgets')
           .doc(userId)
           .collection('monthly_budgets')
-          .doc('${DateTime.now().year}_${DateTime.now().month}')
+          .doc('${expense.year}_${expense.month}')
           .collection('expenses')
           .doc(expenseId)
           .delete();
@@ -129,7 +134,7 @@ class ExpenseProvider with ChangeNotifier {
       notifyListeners();
     } catch (e) {
       print('Error deleting expense: $e');
-      rethrow;
+      throw Exception('Tapahtuman poistaminen epäonnistui: $e');
     }
   }
 }

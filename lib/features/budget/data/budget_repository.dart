@@ -24,7 +24,7 @@ class BudgetRepository {
         .collection('monthly_budgets')
         .doc('${year}_${month}');
     
-    DocumentSnapshot doc = await docRef.get(const GetOptions(source: Source.cache));
+    DocumentSnapshot doc = await docRef.get(const GetOptions(source: Source.server));
     if (!doc.exists) {
       doc = await docRef.get(const GetOptions(source: Source.serverAndCache));
       if (!doc.exists) return null;

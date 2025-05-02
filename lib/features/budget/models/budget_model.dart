@@ -1,6 +1,6 @@
 class BudgetModel {
   double income;
-  final Map<String, double> expenses;
+   Map<String, Map<String, double>> expenses; // Pääkategoriat ja niiden alakategoriat
   final DateTime createdAt;
   final int year;
   final int month;
@@ -23,18 +23,29 @@ class BudgetModel {
     };
   }
 
- factory BudgetModel.fromMap(Map<String, dynamic> map) {
-  return BudgetModel(
-    income: double.tryParse(map['income']?.toString() ?? '0.0') ?? 0.0,
-    expenses: (map['expenses'] as Map<String, dynamic>?)?.map(
-          (key, value) => MapEntry(key, double.tryParse(value?.toString() ?? '0.0') ?? 0.0),
-        ) ?? {},
-    createdAt: DateTime.tryParse(map['createdAt'] ?? '') ?? DateTime.now(),
-    year: map['year'] as int? ?? DateTime.now().year,
-    month: map['month'] as int? ?? DateTime.now().month,
-  );
-}
+  factory BudgetModel.fromMap(Map<String, dynamic> map) {
+    return BudgetModel(
+      income: (map['income'] as num).toDouble(),
+      expenses: (map['expenses'] as Map<String, dynamic>).map(
+        (key, value) => MapEntry(
+          key,
+          (value as Map<String, dynamic>).map(
+            (subKey, subValue) => MapEntry(subKey, (subValue as num).toDouble()),
+          ),
+        ),
+      ),
+      createdAt: DateTime.parse(map['createdAt']),
+      year: map['year'] as int,
+      month: map['month'] as int,
+    );
+  }
 
-  double get totalExpenses => expenses.values.fold(0.0, (sum, value) => sum + value);
+  // Lasketaan kaikkien alakategorioiden summat pääkategorioista
+  double get totalExpenses {
+    return expenses.values.fold(0.0, (sum, subcategories) {
+      return sum + subcategories.values.fold(0.0, (subSum, value) => subSum + value);
+    });
+  }
+
   double get remaining => income - totalExpenses;
 }

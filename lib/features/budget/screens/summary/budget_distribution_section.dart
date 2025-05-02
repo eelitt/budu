@@ -16,7 +16,13 @@ class _BudgetDistributionSectionState extends State<BudgetDistributionSection> {
   int? touchedIndex;
   bool _isDialogOpen = false;
 
-  void _showCategoryDetails(BuildContext context, String category, double amount, double totalBudget, Map<String, double> originalExpenses) {
+  void _showCategoryDetails(
+    BuildContext context,
+    String category,
+    double amount,
+    double totalBudget,
+    Map<String, Map<String, double>> originalExpenses,
+  ) {
     if (_isDialogOpen) return;
     _isDialogOpen = true;
 
@@ -35,7 +41,7 @@ class _BudgetDistributionSectionState extends State<BudgetDistributionSection> {
                 Text('Yhteensä: ${formatCurrency(amount)} (${percentage.toStringAsFixed(1)}%)'),
                 const SizedBox(height: 8),
                 const Text('Sisältää:'),
-                ...otherCategories.map((entry) {
+                ...otherCategories.entries.map((entry) { // Käytetään entries.map
                   final subPercentage = (entry.value / totalBudget) * 100;
                   return Padding(
                     padding: const EdgeInsets.symmetric(vertical: 4.0),
@@ -97,7 +103,7 @@ class _BudgetDistributionSectionState extends State<BudgetDistributionSection> {
   Widget build(BuildContext context) {
     final budgetProvider = Provider.of<BudgetProvider>(context);
     final budget = budgetProvider.budget!;
-    final totalBudget = budget.expenses.values.fold(0.0, (sum, value) => sum + value);
+    final totalBudget = budget.totalExpenses;
     final combinedExpenses = combineSmallCategories(budget.expenses, totalBudget);
 
     return Container(
@@ -179,15 +185,12 @@ class _BudgetDistributionSectionState extends State<BudgetDistributionSection> {
                           pieTouchData: PieTouchData(
                             touchCallback: (FlTouchEvent event, pieTouchResponse) {
                               if (event is! FlTapUpEvent) return;
-                              print('Touch event: $event');
-                              print('Pie touch response: $pieTouchResponse');
                               setState(() {
                                 if (pieTouchResponse == null || pieTouchResponse.touchedSection == null) {
                                   touchedIndex = -1;
                                   return;
                                 }
                                 touchedIndex = pieTouchResponse.touchedSection!.touchedSectionIndex;
-                                print('Touched index: $touchedIndex');
                                 if (touchedIndex != -1) {
                                   final touchedCategory = combinedExpenses.keys.elementAt(touchedIndex!);
                                   final touchedAmount = combinedExpenses[touchedCategory]!;

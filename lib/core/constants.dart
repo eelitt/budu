@@ -33,5 +33,5 @@ const Map<String, List<String>> categoryMapping = {
   "Hygienia": ["Hygienia"],
   "Lemmikit": ["Lemmikit"],
   "Sijoittaminen": ["Säästäminen", "Sijoittaminen"],
-  "Velat":[], // Uusi kategoria säästämiselle ja sijoittamiselle
+  "Velat":["Velat"], // Uusi kategoria säästämiselle ja sijoittamiselle
 };

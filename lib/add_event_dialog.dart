@@ -19,6 +19,7 @@ class _AddEventDialogState extends State<AddEventDialog> {
   final TextEditingController _amountController = TextEditingController();
   final TextEditingController _descriptionController = TextEditingController();
   String? _selectedCategory;
+  String? _selectedSubcategory;
   DateTime _selectedDate = DateTime.now();
   String? _errorMessage;
 
@@ -51,45 +52,60 @@ class _AddEventDialogState extends State<AddEventDialog> {
     }
   }
 
- void _saveEvent(BuildContext context) {
-  final expenseProvider = Provider.of<ExpenseProvider>(context, listen: false);
-  final budgetProvider = Provider.of<BudgetProvider>(context, listen: false);
-  final authProvider = Provider.of<AuthProvider>(context, listen: false);
+  void _saveEvent(BuildContext context) async {
+    final expenseProvider = Provider.of<ExpenseProvider>(context, listen: false);
+    final budgetProvider = Provider.of<BudgetProvider>(context, listen: false);
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
 
-  final amount = double.tryParse(_amountController.text);
-  if (amount == null || amount < 0) {
-    setState(() {
-      _errorMessage = 'Syötä positiivinen numero';
-    });
-    return;
-  }
+    final amount = double.tryParse(_amountController.text);
+    if (amount == null || amount < 0) {
+      setState(() {
+        _errorMessage = 'Syötä positiivinen numero';
+      });
+      return;
+    }
 
-  if (_isExpense && _selectedCategory == null) {
-    setState(() {
-      _errorMessage = 'Valitse kategoria';
-    });
-    return;
-  }
+    if (_isExpense && _selectedCategory == null) {
+      setState(() {
+        _errorMessage = 'Valitse kategoria';
+      });
+      return;
+    }
 
-  if (authProvider.user != null) {
-    final event = ExpenseEvent(
-      id: const Uuid().v4(),
-      category: _isExpense ? _selectedCategory! : 'Tulo',
-      amount: amount,
-      createdAt: _selectedDate,
-      type: _isExpense ? EventType.expense : EventType.income,
-      year: _selectedDate.year,
-      month: _selectedDate.month,
-      description: _descriptionController.text.isNotEmpty ? _descriptionController.text : null,
-    );
-    expenseProvider.addExpense(authProvider.user!.uid, event, budgetProvider);
-    Navigator.pop(context);
+    if (authProvider.user != null) {
+      try {
+        final event = ExpenseEvent(
+          id: const Uuid().v4(),
+          category: _isExpense ? (_selectedSubcategory ?? _selectedCategory!) : 'Tulo',
+          amount: amount,
+          createdAt: _selectedDate,
+          type: _isExpense ? EventType.expense : EventType.income,
+          year: _selectedDate.year,
+          month: _selectedDate.month,
+          description: _descriptionController.text.isNotEmpty ? _descriptionController.text : null,
+        );
+        await expenseProvider.addExpense(authProvider.user!.uid, event, budgetProvider);
+        Navigator.pop(context);
+      } catch (e) {
+        setState(() {
+          _errorMessage = 'Virhe tallennettaessa tapahtumaa: $e';
+        });
+      }
+    } else {
+      setState(() {
+        _errorMessage = 'Käyttäjä ei ole kirjautunut';
+      });
+    }
   }
-}
 
   @override
   Widget build(BuildContext context) {
     final budgetProvider = Provider.of<BudgetProvider>(context);
+
+    // Haetaan valitun kategorian alakategoriat
+    final subCategories = _selectedCategory != null && budgetProvider.budget != null
+        ? budgetProvider.budget!.expenses[_selectedCategory]?.keys.toList() ?? []
+        : [];
 
     return AlertDialog(
       backgroundColor: Colors.white, // Valkoinen tausta
@@ -112,6 +128,7 @@ class _AddEventDialogState extends State<AddEventDialog> {
                   onSelected: (selected) {
                     setState(() {
                       _isExpense = !selected;
+                      _selectedSubcategory = null; // Nollataan alakategoria, jos vaihdetaan tuloon
                     });
                   },
                 ),
@@ -121,6 +138,7 @@ class _AddEventDialogState extends State<AddEventDialog> {
                   onSelected: (selected) {
                     setState(() {
                       _isExpense = selected;
+                      _selectedSubcategory = null; // Nollataan alakategoria, jos vaihdetaan menoon
                     });
                   },
                   selectedColor: Colors.red,
@@ -167,10 +185,39 @@ class _AddEventDialogState extends State<AddEventDialog> {
                 onChanged: (value) {
                   setState(() {
                     _selectedCategory = value;
+                    _selectedSubcategory = null; // Nollataan alakategoria, kun kategoria vaihtuu
                   });
                 },
               ),
             if (_isExpense) const SizedBox(height: 16),
+            // Alakategoria (vain menoille, jos alakategorioita on)
+            if (_isExpense && subCategories.isNotEmpty)
+              DropdownButtonFormField<String>(
+                value: _selectedSubcategory,
+                isExpanded: true,
+                decoration: const InputDecoration(
+                  labelText: 'Alakategoria (valinnainen)',
+                  border: OutlineInputBorder(),
+                ),
+                items: [
+                  const DropdownMenuItem<String>(
+                    value: null,
+                    child: Text('Ei alakategoriaa'),
+                  ),
+                  ...subCategories.map((subCategory) {
+                    return DropdownMenuItem<String>(
+                      value: subCategory,
+                      child: Text(subCategory),
+                    );
+                  }).toList(),
+                ],
+                onChanged: (value) {
+                  setState(() {
+                    _selectedSubcategory = value;
+                  });
+                },
+              ),
+            if (_isExpense && subCategories.isNotEmpty) const SizedBox(height: 16),
             // Kuvaus (valinnainen, näytetään sekä tuloille että menoille)
             TextField(
               controller: _descriptionController,
