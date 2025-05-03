@@ -1,10 +1,14 @@
 import 'package:budu/core/app_router.dart';
 import 'package:budu/core/utils.dart';
+import 'package:budu/features/update/dialogs/update_dialog.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
 import '../../budget/providers/budget_provider.dart';
+import '../../update/providers/update_provider.dart';
+import '../../update/services/update_service.dart'; 
+import 'package:package_info_plus/package_info_plus.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -14,6 +18,36 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
+  @override
+  void initState() {
+    super.initState();
+    _checkForAppUpdate(); // Tarkistetaan päivitykset käynnistyksessä
+  }
+
+  Future<void> _checkForAppUpdate() async {
+    final updateProvider = Provider.of<UpdateProvider>(context, listen: false);
+    await updateProvider.checkForUpdate(context);
+
+    if (updateProvider.isUpdateAvailable && updateProvider.apkUrl != null) {
+      final packageInfo = await PackageInfo.fromPlatform();
+      final currentVersion = packageInfo.version;
+
+      // Näytetään päivitysdialogi, jos päivitys on saatavilla
+      showDialog(
+        context: context,
+        barrierDismissible: false, // Käyttäjä ei voi sulkea dialogia
+        builder: (context) {
+          return UpdateDialog(
+            updateService: UpdateService(),
+            currentVersion: currentVersion,
+            latestVersion: updateProvider.latestVersion!,
+            apkUrl: updateProvider.apkUrl!,
+            scaffoldContext: context,
+          );
+        },
+      );
+    }
+  }
 
   Future<void> _navigateAfterLogin() async {
     print('_navigateAfterLogin: Aloitetaan');

@@ -1,4 +1,5 @@
 import 'package:budu/features/budget/providers/expense_provider.dart';
+import 'package:budu/features/update/providers/update_provider.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:flutter/material.dart';
@@ -36,7 +37,8 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => AuthProvider()..initialize()),
         ChangeNotifierProvider(create: (_) => BudgetProvider()),
         ChangeNotifierProvider(create: (_) => ExpenseProvider()),
-        ChangeNotifierProvider(create: (_) => NotificationProvider()), // Lisätään NotificationProvider
+        ChangeNotifierProvider(create: (_) => NotificationProvider()), 
+        ChangeNotifierProvider(create: (_) => UpdateProvider()),
       ],
       child: MaterialApp(
         title: 'Budu',

@@ -9,11 +9,7 @@ import 'package:budu/features/history/history_screen.dart';
 import 'package:budu/features/notification/banner/notification_banner.dart';
 import 'package:budu/features/notification/models/notification_message.dart';
 import 'package:budu/features/notification/providers/notification_provider.dart';
-import 'package:budu/features/update/dialogs/update_dialog.dart';
-import 'package:budu/features/update/providers/update_provider.dart';
-import 'package:budu/features/update/services/update_service.dart';
 import 'package:flutter/material.dart';
-import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
 
 class MainScreen extends StatefulWidget {
@@ -37,32 +33,7 @@ class _MainScreenState extends State<MainScreen> {
     _selectedIndex = widget.initialIndex;
     _loadBudget();
     _checkBudgetStatus();
-    _checkForAppUpdate();
-  }
 
-Future<void> _checkForAppUpdate() async {
-    final updateProvider = Provider.of<UpdateProvider>(context, listen: false);
-    await updateProvider.checkForUpdate(context);
-
-    if (updateProvider.isUpdateAvailable && updateProvider.apkUrl != null) {
-      final packageInfo = await PackageInfo.fromPlatform();
-      final currentVersion = packageInfo.version;
-
-      // Näytetään päivitysdialogi, jos päivitys on saatavilla
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (context) {
-          return UpdateDialog(
-            updateService: UpdateService(),
-            currentVersion: currentVersion,
-            latestVersion: updateProvider.latestVersion!,
-            apkUrl: updateProvider.apkUrl!,
-            scaffoldContext: context,
-          );
-        },
-      );
-    }
   }
 
   Future<void> _loadBudget() async {

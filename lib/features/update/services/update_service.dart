@@ -26,14 +26,32 @@ class UpdateService {
 
   // Tarkastetaan GitHubista, onko uutta versiota saatavilla
   Future<Map<String, dynamic>> checkForUpdate(BuildContext context) async {
+    // Varmistetaan, että .env-arvot ovat saatavilla
+    final versionUrl = dotenv.env['VERSION_URL'];
+    final apiToken = dotenv.env['GITHUB_API_TOKEN'];
+
+    // Tulostetaan arvot debuggausta varten
+    print('VERSION_URL: $versionUrl');
+    print('GITHUB_API_TOKEN: $apiToken');
+
+    if (versionUrl == null || versionUrl.isEmpty) {
+      FirebaseCrashlytics.instance.recordError(
+        Exception('VERSION_URL puuttuu .env-tiedostosta'),
+        StackTrace.current,
+        reason: 'Päivitystarkistus epäonnistui',
+      );
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Päivitystarkistus epäonnistui: VERSION_URL puuttuu')),
+      );
+      return {'isUpdateAvailable': false};
+    }
+
     final currentVersion = await _getAppVersion();
-    final versionUrl = dotenv.env['VERSION_URL'] ?? '';
-    final apiToken = dotenv.env['GITHUB_API_TOKEN'] ?? '';
 
     final response = await http.get(
       Uri.parse(versionUrl),
       headers: {
-        if (apiToken.isNotEmpty) 'Authorization': 'token $apiToken',
+        if (apiToken != null && apiToken.isNotEmpty) 'Authorization': 'token $apiToken',
         'Accept': 'application/vnd.github.v3.raw',
       },
     );
@@ -87,15 +105,27 @@ class UpdateService {
 
   // Haetaan APK-tiedoston URL GitHub Releases -osiosta
   Future<String?> _fetchApkUrl(String latestVersion, BuildContext context) async {
-    final repoOwner = dotenv.env['GITHUB_OWNER'] ?? '';
-    final repoName = dotenv.env['GITHUB_REPO'] ?? '';
-    final apiToken = dotenv.env['GITHUB_PAT'] ?? '';
+    final repoOwner = dotenv.env['GITHUB_OWNER'];
+    final repoName = dotenv.env['GITHUB_REPO'];
+    final apiToken = dotenv.env['GITHUB_API_TOKEN'];
+
+    if (repoOwner == null || repoOwner.isEmpty || repoName == null || repoName.isEmpty) {
+      FirebaseCrashlytics.instance.recordError(
+        Exception('GITHUB_OWNER tai GITHUB_REPO puuttuu .env-tiedostosta'),
+        StackTrace.current,
+        reason: 'Päivitystiedon haku epäonnistui',
+      );
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Päivitystiedon haku epäonnistui: GITHUB_OWNER tai GITHUB_REPO puuttuu')),
+      );
+      return null;
+    }
 
     final releasesUrl = Uri.parse('https://api.github.com/repos/$repoOwner/$repoName/releases/latest');
     final releaseResponse = await http.get(
       releasesUrl,
       headers: {
-        if (apiToken.isNotEmpty) 'Authorization': 'token $apiToken',
+        if (apiToken != null && apiToken.isNotEmpty) 'Authorization': 'token $apiToken',
         'Accept': 'application/vnd.github+json',
       },
     );
@@ -141,7 +171,7 @@ class UpdateService {
 
   // Ladataan ja avataan APK-tiedosto
   Future<void> downloadAndOpenApk(BuildContext context, String apkUrl, String latestVersion) async {
-    final apiToken = dotenv.env['GITHUB_API_TOKEN'] ?? '';
+    final apiToken = dotenv.env['GITHUB_API_TOKEN'];
 
     // Näytetään latausdialogi
     showDialog(
@@ -163,7 +193,7 @@ class UpdateService {
       final apkResponse = await http.get(
         Uri.parse(apkUrl),
         headers: {
-          if (apiToken.isNotEmpty) 'Authorization': 'token $apiToken',
+          if (apiToken != null && apiToken.isNotEmpty) 'Authorization': 'token $apiToken',
           'Accept': 'application/octet-stream',
         },
       );
