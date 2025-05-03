@@ -31,6 +31,7 @@ class ExpenseProvider with ChangeNotifier {
     return totals;
   }
 
+  // Ladataan tapahtumat tietylle kuukaudelle
   Future<void> loadExpenses(String userId, int year, int month) async {
     try {
       final query = FirebaseFirestore.instance
@@ -52,6 +53,44 @@ class ExpenseProvider with ChangeNotifier {
       notifyListeners();
     } catch (e) {
       print('Error loading expenses: $e');
+      rethrow;
+    }
+  }
+
+  // Ladataan kaikki tapahtumat
+  Future<void> loadAllExpenses(String userId) async {
+    try {
+      _expenses.clear(); // Tyhjennetään nykyinen lista
+      _lastDoc = null;
+
+      // Haetaan kaikki monthly_budgets-dokumentit
+      final monthlyBudgetsSnapshot = await FirebaseFirestore.instance
+          .collection('budgets')
+          .doc(userId)
+          .collection('monthly_budgets')
+          .get();
+
+      // Käydään läpi jokainen kuukausi ja haetaan sen tapahtumat
+      for (var monthlyBudgetDoc in monthlyBudgetsSnapshot.docs) {
+        final query = monthlyBudgetDoc.reference
+            .collection('expenses')
+            .orderBy('createdAt', descending: true);
+
+        final snapshot = await query.get(const GetOptions(source: Source.serverAndCache));
+        final monthlyExpenses = snapshot.docs.map((doc) {
+          final data = doc.data();
+          data['id'] = doc.id;
+          return ExpenseEvent.fromMap(data);
+        }).toList();
+
+        _expenses.addAll(monthlyExpenses);
+      }
+
+      // Järjestä tapahtumat createdAt-päivämäärän mukaan (uusin ensin)
+      _expenses.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      notifyListeners();
+    } catch (e) {
+      print('Error loading all expenses: $e');
       rethrow;
     }
   }
@@ -111,6 +150,8 @@ class ExpenseProvider with ChangeNotifier {
         );
       }
 
+      // Järjestä tapahtumat uudelleen createdAt-päivämäärän mukaan
+      _expenses.sort((a, b) => b.createdAt.compareTo(a.createdAt));
       notifyListeners();
     } catch (e) {
       print('Error adding expense: $e');

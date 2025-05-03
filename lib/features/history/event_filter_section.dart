@@ -3,14 +3,18 @@ import 'package:provider/provider.dart';
 import 'package:budu/features/budget/providers/budget_provider.dart';
 
 class EventFilterSection extends StatefulWidget {
+  final List<String> availableMonths; // Saatavilla olevat kuukaudet
   final Function(String?) onCategoryChanged;
   final Function(String?) onTypeChanged;
+  final Function(String?) onMonthChanged; // Uusi callback kuukausisuodatukselle
   final Function(String) onSearchQueryChanged;
 
   const EventFilterSection({
     super.key,
+    required this.availableMonths,
     required this.onCategoryChanged,
     required this.onTypeChanged,
+    required this.onMonthChanged,
     required this.onSearchQueryChanged,
   });
 
@@ -21,6 +25,7 @@ class EventFilterSection extends StatefulWidget {
 class _EventFilterSectionState extends State<EventFilterSection> {
   String? _selectedCategory = 'Kaikki kategoriat';
   String? _selectedType = 'Kaikki';
+  String? _selectedMonth = 'Kaikki kuukaudet';
   final TextEditingController _searchController = TextEditingController();
 
   @override
@@ -62,6 +67,28 @@ class _EventFilterSectionState extends State<EventFilterSection> {
                   setState(() {
                     _selectedCategory = value;
                     widget.onCategoryChanged(value);
+                  });
+                },
+              ),
+              const SizedBox(height: 16),
+              // Kuukausi-suodatin
+              DropdownButtonFormField<String>(
+                value: _selectedMonth,
+                isExpanded: true,
+                decoration: const InputDecoration(
+                  labelText: 'Kuukausi',
+                  border: OutlineInputBorder(),
+                ),
+                items: widget.availableMonths.map((month) {
+                  return DropdownMenuItem<String>(
+                    value: month,
+                    child: Text(month),
+                  );
+                }).toList(),
+                onChanged: (value) {
+                  setState(() {
+                    _selectedMonth = value;
+                    widget.onMonthChanged(value);
                   });
                 },
               ),

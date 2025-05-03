@@ -4,6 +4,7 @@ class BudgetModel {
   final DateTime createdAt;
   final int year;
   final int month;
+  final bool isPlaceholder;
 
   BudgetModel({
     required this.income,
@@ -11,6 +12,7 @@ class BudgetModel {
     required this.createdAt,
     required this.year,
     required this.month,
+    this.isPlaceholder = false, // Oletusarvoisesti false (käyttäjän luoma budjetti)
   });
 
   Map<String, dynamic> toMap() {
@@ -20,6 +22,7 @@ class BudgetModel {
       'createdAt': createdAt.toIso8601String(),
       'year': year,
       'month': month,
+      'isPlaceholder': isPlaceholder,
     };
   }
 
@@ -37,6 +40,7 @@ class BudgetModel {
       createdAt: DateTime.parse(map['createdAt']),
       year: map['year'] as int,
       month: map['month'] as int,
+      isPlaceholder: map['isPlaceholder'] as bool? ?? false,
     );
   }
 

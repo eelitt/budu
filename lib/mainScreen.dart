@@ -6,7 +6,14 @@ import 'package:budu/features/budget/screens/budget/budget_screen.dart';
 import 'package:budu/features/budget/screens/create_budget_screen.dart';
 import 'package:budu/features/budget/screens/summary/summary_screen.dart';
 import 'package:budu/features/history/history_screen.dart';
+import 'package:budu/features/notification/banner/notification_banner.dart';
+import 'package:budu/features/notification/models/notification_message.dart';
+import 'package:budu/features/notification/providers/notification_provider.dart';
+import 'package:budu/features/update/dialogs/update_dialog.dart';
+import 'package:budu/features/update/providers/update_provider.dart';
+import 'package:budu/features/update/services/update_service.dart';
 import 'package:flutter/material.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
 
 class MainScreen extends StatefulWidget {
@@ -29,7 +36,33 @@ class _MainScreenState extends State<MainScreen> {
     super.initState();
     _selectedIndex = widget.initialIndex;
     _loadBudget();
-    _checkNextMonthBudget();
+    _checkBudgetStatus();
+    _checkForAppUpdate();
+  }
+
+Future<void> _checkForAppUpdate() async {
+    final updateProvider = Provider.of<UpdateProvider>(context, listen: false);
+    await updateProvider.checkForUpdate(context);
+
+    if (updateProvider.isUpdateAvailable && updateProvider.apkUrl != null) {
+      final packageInfo = await PackageInfo.fromPlatform();
+      final currentVersion = packageInfo.version;
+
+      // Näytetään päivitysdialogi, jos päivitys on saatavilla
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) {
+          return UpdateDialog(
+            updateService: UpdateService(),
+            currentVersion: currentVersion,
+            latestVersion: updateProvider.latestVersion!,
+            apkUrl: updateProvider.apkUrl!,
+            scaffoldContext: context,
+          );
+        },
+      );
+    }
   }
 
   Future<void> _loadBudget() async {
@@ -71,11 +104,72 @@ class _MainScreenState extends State<MainScreen> {
     }
   }
 
+  Future<void> _checkBudgetStatus() async {
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    final budgetProvider = Provider.of<BudgetProvider>(context, listen: false);
+    final notificationProvider = Provider.of<NotificationProvider>(context, listen: false);
+    if (authProvider.user != null) {
+      final now = DateTime.now();
+      final availableMonths = await budgetProvider.getAvailableBudgetMonths(authProvider.user!.uid);
+
+      // Tarkistetaan, onko budjettia kuluvalle kuulle
+      final currentMonthExists = availableMonths.any((month) =>
+          month['year'] == now.year && month['month'] == now.month);
+
+      if (!currentMonthExists) {
+        // Ei budjettia kuluvalle kuulle
+        notificationProvider.showNotification(
+          message: 'Budjettia ei ole luotu kuluvalle kuulle (${now.month}/${now.year}).',
+          type: NotificationType.warning,
+          onAction: () => _createBudgetForNextMonth(context),
+          actionText: 'Luo budjetti',
+        );
+        return;
+      }
+
+      // Tarkistetaan, onko budjettia seuraavalle kuulle
+      final nextMonthDate = DateTime(now.year, now.month + 1);
+      final nextMonthExists = await budgetProvider.budgetExists(
+        authProvider.user!.uid,
+        nextMonthDate.year,
+        nextMonthDate.month,
+      );
+      setState(() {
+        _nextMonthBudgetExists = nextMonthExists;
+      });
+
+      if (!nextMonthExists) {
+        // Lasketaan jäljellä olevat päivät tässä kuussa
+        final daysInMonth = DateTime(now.year, now.month + 1, 0).day;
+        final currentDay = now.day;
+        final daysRemaining = daysInMonth - currentDay;
+
+        // Näytetään ilmoitus vain, jos jäljellä on 3 päivää tai vähemmän
+        const daysThreshold = 3;
+        if (daysRemaining <= daysThreshold) {
+          notificationProvider.showNotification(
+            message: 'Budjettia ei ole luotu seuraavalle kuulle (${nextMonthDate.month}/${nextMonthDate.year}).',
+            type: NotificationType.warning,
+            onAction: () => _createBudgetForNextMonth(context),
+            actionText: 'Luo budjetti',
+          );
+        } else {
+          // Jos jäljellä on enemmän kuin 3 päivää, poistetaan ilmoitus
+          notificationProvider.clearNotification();
+        }
+      } else {
+        // Jos budjetti on olemassa, poistetaan mahdollinen varoitus
+        notificationProvider.clearNotification();
+      }
+    }
+  }
+
   Future<void> _retryLoadBudget() async {
     setState(() {
       _hasBudgetLoadError = false;
     });
     await _loadBudget();
+    await _checkBudgetStatus();
   }
 
   final List<Widget> _screens = [
@@ -95,12 +189,15 @@ class _MainScreenState extends State<MainScreen> {
       setState(() {
         _selectedIndex = index;
       });
+      // Päivitetään budjetin tilan tarkistus aina, kun näkymä vaihtuu
+      await _checkBudgetStatus();
     }
   }
 
   Future<void> _createBudgetForNextMonth(BuildContext context) async {
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     final budgetProvider = Provider.of<BudgetProvider>(context, listen: false);
+    final notificationProvider = Provider.of<NotificationProvider>(context, listen: false);
     if (authProvider.user == null) return;
 
     // Haetaan saatavilla olevat budjettikuukaudet
@@ -146,7 +243,10 @@ class _MainScreenState extends State<MainScreen> {
             newMonth: targetMonth,
           ),
         ),
-      ).then((_) => _checkNextMonthBudget());
+      ).then((_) {
+        _checkNextMonthBudget();
+        _checkBudgetStatus(); // Päivitetään ilmoitukset budjetin luomisen jälkeen
+      });
     } else {
       // Jos budjettia ei ole, näytetään virhe tai ohjataan luomaan ensimmäinen budjetti
       ScaffoldMessenger.of(context).showSnackBar(
@@ -238,7 +338,16 @@ class _MainScreenState extends State<MainScreen> {
                     ),
                 ],
               ),
-              body: _selectedIndex < _screens.length ? _screens[_selectedIndex] : const SizedBox.shrink(),
+              body: Column(
+                children: [
+                  const NotificationBanner(), // Lisätään ilmoitusbanneri
+                  Expanded(
+                    child: _selectedIndex < _screens.length
+                        ? _screens[_selectedIndex]
+                        : const SizedBox.shrink(),
+                  ),
+                ],
+              ),
               bottomNavigationBar: BottomNavigationBar(
                 type: BottomNavigationBarType.fixed,
                 items: const [
