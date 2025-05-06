@@ -7,3 +7,7 @@
 - Lisätty tuki uusille budjettikategorioille
 - Parannettu suorituskykyä
 - Korjattu ongelma budjetin tallennuksessa
+
+## 1.0.3
+- Paranneltu ylä- ja alakategorioiden käsittelyä
+- Parannettu suorituskykyä
