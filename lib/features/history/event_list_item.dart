@@ -16,6 +16,7 @@ class EventListItem extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 16),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       elevation: 4,
+      color: Colors.white, // Varmistetaan kortin taustaväri valkoiseksi
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Row(

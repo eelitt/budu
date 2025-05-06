@@ -1,3 +1,4 @@
+// lib/features/budget/screens/budget/budget_screen.dart
 import 'package:budu/core/app_router.dart';
 import 'package:budu/core/constants.dart';
 import 'package:budu/features/auth/providers/auth_provider.dart';
@@ -138,80 +139,86 @@ class _BudgetScreenState extends State<BudgetScreen> {
             }
 
             // Järjestä kategoriat aakkosjärjestykseen ja muunna tulos Widget-listoiksi
-            final List<String> sortedCategories = categoryMapping.keys.toList()
-              ..sort(); // Järjestä kategoriat aakkosjärjestykseen
+            final List<String> sortedCategories = categoryMapping.keys.toList()..sort();
 
-            final List<Widget> categoryWidgets = sortedCategories.map((categoryName) {
-              return BudgetCategorySection(categoryName: categoryName);
-            }).toList();
+            final List<Widget> categoryWidgets = [];
+            for (int i = 0; i < sortedCategories.length; i++) {
+              final categoryName = sortedCategories[i];
+              categoryWidgets.add(BudgetCategorySection(categoryName: categoryName));
+              if (i < sortedCategories.length - 1) {
+                categoryWidgets.add(const SizedBox(height: 16));
+              }
+            }
 
             return SingleChildScrollView(
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Wrap(
-                      spacing: 8.0,
-                      runSpacing: 8.0,
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      children: [
-                        availableMonths.isNotEmpty
-                            ? Container(
-                                constraints: const BoxConstraints(maxWidth: 150),
-                                child: DropdownButton<Map<String, int>>(
-                                  isExpanded: true,
-                                  value: selectedMonth,
-                                  items: availableMonths.map((monthData) {
-                                    return DropdownMenuItem<Map<String, int>>(
-                                      value: monthData,
-                                      child: Text(
-                                        '${monthData['month']}/${monthData['year']}',
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    );
-                                  }).toList(),
-                                  onChanged: (value) {
-                                    if (value != null) {
-                                      setState(() {
-                                        selectedMonth = value;
-                                        currentYear = value['year']!;
-                                        currentMonth = value['month']!;
-                                      });
-                                      _loadBudget();
-                                    }
-                                  },
-                                ),
-                              )
-                            : const Text('Ei saatavilla olevia budjetteja'),
-                        ElevatedButton(
-                          onPressed: _showResetConfirmationDialog,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.orange,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                            textStyle: const TextStyle(fontSize: 14),
+              child: Container(
+                color: Theme.of(context).scaffoldBackgroundColor, // Asetetaan taustaväri helmenvalkoiseksi
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Wrap(
+                        spacing: 8.0,
+                        runSpacing: 8.0,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          availableMonths.isNotEmpty
+                              ? Container(
+                                  constraints: const BoxConstraints(maxWidth: 150),
+                                  child: DropdownButton<Map<String, int>>(
+                                    isExpanded: true,
+                                    value: selectedMonth,
+                                    items: availableMonths.map((monthData) {
+                                      return DropdownMenuItem<Map<String, int>>(
+                                        value: monthData,
+                                        child: Text(
+                                          '${monthData['month']}/${monthData['year']}',
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      );
+                                    }).toList(),
+                                    onChanged: (value) {
+                                      if (value != null) {
+                                        setState(() {
+                                          selectedMonth = value;
+                                          currentYear = value['year']!;
+                                          currentMonth = value['month']!;
+                                        });
+                                        _loadBudget();
+                                      }
+                                    },
+                                  ),
+                                )
+                              : const Text('Ei saatavilla olevia budjetteja'),
+                          ElevatedButton(
+                            onPressed: _showResetConfirmationDialog,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.orange,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                              textStyle: const TextStyle(fontSize: 14),
+                            ),
+                            child: const Text('Nollaa'),
                           ),
-                          child: const Text('Nollaa'),
-                        ),
-                        ElevatedButton(
-                          onPressed: _showDeleteConfirmationDialog,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.red,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                            textStyle: const TextStyle(fontSize: 14),
+                          ElevatedButton(
+                            onPressed: _showDeleteConfirmationDialog,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.red,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                              textStyle: const TextStyle(fontSize: 14),
+                            ),
+                            child: const Text('Poista'),
                           ),
-                          child: const Text('Poista'),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    const IncomeSection(),
-                    const SizedBox(height: 16),
-                    // Näytetään kategoriat aakkosjärjestyksessä
-                    ...categoryWidgets,
-                  ],
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      const IncomeSection(),
+                      const SizedBox(height: 16),
+                      ...categoryWidgets,
+                    ],
+                  ),
                 ),
               ),
             );

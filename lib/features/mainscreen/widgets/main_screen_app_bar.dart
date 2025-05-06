@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'package:flutter/material.dart';
+
 class MainScreenAppBar extends StatelessWidget implements PreferredSizeWidget {
   final String userFirstName;
   final bool nextMonthBudgetExists;
@@ -16,18 +18,31 @@ class MainScreenAppBar extends StatelessWidget implements PreferredSizeWidget {
   Widget build(BuildContext context) {
     return AppBar(
       automaticallyImplyLeading: false,
-      title: const Text('Budu'),
+      title: const Text(
+        'Budu',
+        style: TextStyle(color: Colors.black), // Otsikon väri mustaksi
+      ),
+      titleTextStyle: Theme.of(context).textTheme.titleLarge?.copyWith(
+            color: Colors.black, // Varmistetaan otsikon väri
+            fontSize: 20,
+          ),
       actions: [
         Padding(
           padding: const EdgeInsets.only(right: 8.0),
-          child: Center(child: Text(userFirstName)),
+          child: Center(
+            child: Text(
+              userFirstName,
+              style: const TextStyle(color: Colors.black), // Käyttäjän nimi mustaksi
+            ),
+          ),
         ),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 8.0),
           child: PopupMenuButton<String>(
-            icon: const Icon(Icons.menu, color: Colors.black),
+            icon: const Icon(Icons.menu, color: Colors.black), // Valikon ikoni mustaksi
             onSelected: onMenuSelected,
             position: PopupMenuPosition.under,
+            color: Colors.white, // Pudotusvalikon taustaväri valkoiseksi
             itemBuilder: (context) => [
               PopupMenuItem(
                 value: 'add_event',
@@ -60,6 +75,20 @@ class MainScreenAppBar extends StatelessWidget implements PreferredSizeWidget {
               ],
               const PopupMenuDivider(height: 1),
               PopupMenuItem(
+                value: 'settings',
+                child: ListTile(
+                  leading: const Icon(Icons.settings, color: Colors.black),
+                  title: Text(
+                    'Asetukset',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Colors.black,
+                          fontSize: 14,
+                        ),
+                  ),
+                ),
+              ),
+              const PopupMenuDivider(height: 1),
+              PopupMenuItem(
                 value: 'logout',
                 child: ListTile(
                   leading: const Icon(Icons.logout, color: Colors.black),
@@ -80,9 +109,23 @@ class MainScreenAppBar extends StatelessWidget implements PreferredSizeWidget {
           ),
         ),
       ],
+      flexibleSpace: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+               Color.fromARGB(255, 253, 228, 190), // Aloitetaan taustaväristä (ylhäältä)
+              Color(0xFFFFFCF5), // Päättyy keskivaaleaan oranssiin (alhaalla)
+            ],
+          ),
+        ),
+      ),
     );
   }
 
   @override
   Size get preferredSize => const Size.fromHeight(kToolbarHeight);
 }
+
+           

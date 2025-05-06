@@ -3,12 +3,18 @@ import 'package:flutter/material.dart';
 class AppTheme {
   static ThemeData get lightTheme {
     return ThemeData(
-      primaryColor: Colors.blueGrey[800], // Tumma sinivihreä pääväri
-      scaffoldBackgroundColor: Colors.grey[100], // Vaalea tausta
-      appBarTheme: AppBarTheme(
-        backgroundColor: Colors.blueGrey[800],
+      primaryColor: Colors.blueGrey[800],
+      scaffoldBackgroundColor: const Color(0xFFFFFCF5), // Valkoisempi kelta-oranssi
+      appBarTheme: const AppBarTheme(
+        backgroundColor: Colors.transparent, // Läpinäkyvä tausta, gradientti määritellään MainScreen.dart-tiedostossa
         foregroundColor: Colors.white,
-        elevation: 0, // Litteä, minimalistinen ilme
+        elevation: 0,
+      ),
+      bottomNavigationBarTheme: const BottomNavigationBarThemeData(
+        backgroundColor: Colors.transparent, // Läpinäkyvä tausta, gradientti määritellään MainScreen.dart-tiedostossa
+        selectedItemColor: Colors.blueGrey,
+        unselectedItemColor: Colors.grey,
+        elevation: 0,
       ),
       textTheme: const TextTheme(
         bodyLarge: TextStyle(color: Colors.black87, fontSize: 16),

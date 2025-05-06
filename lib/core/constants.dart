@@ -13,7 +13,7 @@ const Map<String, List<String>> categoryMapping = {
     "AutopaikanVuokra",
     "Polttoaine",
     "Autovakuutus",
-    "Ajoneuvovero",
+    "Käyttövoimavero",
     "Renkaiden vaihto ja säilytys",
     "Auton huolto",
   ],

@@ -1,4 +1,3 @@
-// mainscreen/main_screen.dart
 import 'package:budu/features/auth/providers/auth_provider.dart';
 import 'package:budu/features/budget/providers/budget_provider.dart';
 import 'package:budu/features/budget/screens/budget/budget_screen.dart';
@@ -29,7 +28,6 @@ class _MainScreenState extends State<MainScreen> {
   bool _hasBudgetLoadError = false;
   bool _nextMonthBudgetExists = false;
 
-  // Palvelut
   final MainScreenBudgetService _budgetService = MainScreenBudgetService();
   final MainScreenBudgetStatusService _budgetStatusService = MainScreenBudgetStatusService();
   final MainScreenUpdateDialogService _updateDialogService = MainScreenUpdateDialogService();
@@ -132,9 +130,21 @@ class _MainScreenState extends State<MainScreen> {
                   ),
                 ],
               ),
-              bottomNavigationBar: MainScreenBottomNavigationBar(
-                selectedIndex: _selectedIndex < _screens.length ? _selectedIndex : 0,
-                onItemTapped: _onItemTapped,
+              bottomNavigationBar: Container(
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.bottomCenter,
+                    end: Alignment.topCenter,
+                    colors: [
+                      Color.fromARGB(255, 253, 228, 190), // Aloitetaan taustaväristä (alhaalta)
+                     Color(0xFFFFFCF5) , // Päättyy keskivaaleaan oranssiin (ylhäällä)
+                    ],
+                  ),
+                ),
+                child: MainScreenBottomNavigationBar(
+                  selectedIndex: _selectedIndex < _screens.length ? _selectedIndex : 0,
+                  onItemTapped: _onItemTapped,
+                ),
               ),
             );
           },

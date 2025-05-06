@@ -1,3 +1,4 @@
+import 'package:budu/core/theme.dart';
 import 'package:budu/features/budget/providers/expense_provider.dart';
 import 'package:budu/features/update/providers/update_provider.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -42,9 +43,7 @@ class MyApp extends StatelessWidget {
       ],
       child: MaterialApp(
         title: 'Budu',
-        theme: ThemeData(
-          primarySwatch: Colors.blue,
-        ),
+        theme: AppTheme.lightTheme,
         initialRoute: AppRouter.loginRoute,
         onGenerateRoute: AppRouter.generateRoute,
         routes: AppRouter.routes,

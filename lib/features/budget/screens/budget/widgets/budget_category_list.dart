@@ -1,0 +1,135 @@
+// lib/features/budget/screens/budget/widgets/budget_category_list.dart
+import 'package:budu/features/auth/providers/auth_provider.dart';
+import 'package:budu/features/budget/screens/budget/services/budget_category_service.dart';
+import 'package:budu/features/budget/screens/budget/utils/budget_category_dialogs.dart';
+import 'package:budu/features/budget/screens/budget/widgets/edit_subcategory_form.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
+
+class BudgetCategoryList extends StatelessWidget {
+  final String categoryName;
+  final Map<String, double> displayedExpenses;
+  final bool isEditing;
+  final String? editingSubcategory;
+  final Map<String, TextEditingController> nameControllers;
+  final Map<String, TextEditingController> amountControllers;
+  final String? errorMessage;
+  final BudgetCategoryService service;
+  final VoidCallback onCancelEditing;
+  final Function(String) onStartEditing;
+  final Function(String) onUpdateSubcategory;
+
+  const BudgetCategoryList({
+    super.key,
+    required this.categoryName,
+    required this.displayedExpenses,
+    required this.isEditing,
+    required this.editingSubcategory,
+    required this.nameControllers,
+    required this.amountControllers,
+    required this.errorMessage,
+    required this.service,
+    required this.onCancelEditing,
+    required this.onStartEditing,
+    required this.onUpdateSubcategory,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final entries = displayedExpenses.entries.toList()..sort((a, b) => a.key.compareTo(b.key));
+    final List<Widget> subcategoryWidgets = entries.map((entry) {
+      final subcategory = entry.key;
+      final amount = entry.value;
+      return Container(
+        margin: const EdgeInsets.symmetric(vertical: 4.0),
+        padding: const EdgeInsets.all(8.0),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(8),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.05),
+              blurRadius: 4,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Expanded(
+              child: isEditing && editingSubcategory == subcategory
+                  ? EditSubcategoryForm(
+                      nameController: nameControllers[subcategory]!,
+                      amountController: amountControllers[subcategory]!,
+                      onSave: () => onUpdateSubcategory(subcategory),
+                      onCancel: onCancelEditing,
+                    )
+                  : Padding(
+                      padding: const EdgeInsets.only(left: 8.0), // Sisennys viivan korvaamiseksi
+                      child: Text(
+                        subcategory, // Poistettu viiva ("  - $subcategory" -> "subcategory")
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.black54),
+                      ),
+                    ),
+            ),
+            Row(
+              children: [
+                if (!(isEditing && editingSubcategory == subcategory)) ...[
+                  Text(
+                    '${amount.toStringAsFixed(2)} €',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.black54),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.edit, size: 20),
+                    onPressed: () => onStartEditing(subcategory),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.delete, size: 20, color: Colors.red),
+                    onPressed: () async {
+                      final deleteEvents = await confirmDeleteSubcategory(
+                        context: context,
+                        subcategory: subcategory,
+                        categoryName: categoryName,
+                      );
+                      if (!deleteEvents) return;
+
+                      final authProvider = Provider.of<AuthProvider>(context, listen: false);
+                      if (authProvider.user != null) {
+                        final now = DateTime.now();
+                        await service.deleteSubcategory(
+                          context: context,
+                          userId: authProvider.user!.uid,
+                          year: now.year,
+                          month: now.month,
+                          categoryName: categoryName,
+                          subcategory: subcategory,
+                          deleteEvents: deleteEvents,
+                        );
+                      }
+                    },
+                  ),
+                ],
+              ],
+            ),
+          ],
+        ),
+      );
+    }).toList();
+
+    return Column(
+      children: [
+        ...subcategoryWidgets,
+        if (errorMessage != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 8.0),
+            child: Text(
+              errorMessage!,
+              style: const TextStyle(color: Colors.red, fontSize: 12),
+            ),
+          ),
+      ],
+    );
+  }
+}

@@ -3,10 +3,10 @@ import 'package:provider/provider.dart';
 import 'package:budu/features/budget/providers/budget_provider.dart';
 
 class EventFilterSection extends StatefulWidget {
-  final List<String> availableMonths; // Saatavilla olevat kuukaudet
+  final List<String> availableMonths;
   final Function(String?) onCategoryChanged;
   final Function(String?) onTypeChanged;
-  final Function(String?) onMonthChanged; // Uusi callback kuukausisuodatukselle
+  final Function(String?) onMonthChanged;
   final Function(String) onSearchQueryChanged;
 
   const EventFilterSection({
@@ -44,11 +44,21 @@ class _EventFilterSectionState extends State<EventFilterSection> {
       child: Card(
         elevation: 4,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        color: Colors.white, // Varmistetaan kortin taustaväri valkoiseksi
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Lisätään "Historia"-otsikko kortin sisälle
+              Text(
+                'Historia',
+                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black87,
+                    ),
+              ),
+              const SizedBox(height: 16),
               // Kategoria-suodatin
               DropdownButtonFormField<String>(
                 value: _selectedCategory,

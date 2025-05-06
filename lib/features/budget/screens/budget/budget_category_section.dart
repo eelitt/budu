@@ -1,8 +1,11 @@
+// lib/features/budget/screens/budget/budget_category_section.dart
 import 'package:budu/features/auth/providers/auth_provider.dart';
+import 'package:budu/features/budget/screens/budget/services/budget_category_service.dart';
+import 'package:budu/features/budget/screens/budget/utils/category_icon_utils.dart';
+import 'package:budu/features/budget/screens/budget/widgets/add_subcategory_form.dart';
+import 'package:budu/features/budget/screens/budget/widgets/budget_category_list.dart';
 import 'package:budu/features/budget/providers/budget_provider.dart';
-import 'package:budu/features/budget/providers/expense_provider.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 class BudgetCategorySection extends StatefulWidget {
@@ -24,6 +27,7 @@ class _BudgetCategorySectionState extends State<BudgetCategorySection> {
   String? _errorMessage;
   final ExpansionTileController _expansionController = ExpansionTileController();
   final GlobalKey _expansionTileKey = GlobalKey();
+  final BudgetCategoryService _service = BudgetCategoryService();
 
   @override
   void dispose() {
@@ -36,13 +40,11 @@ class _BudgetCategorySectionState extends State<BudgetCategorySection> {
   void _startAdding() {
     final budgetProvider = Provider.of<BudgetProvider>(context, listen: false);
     final expenses = budgetProvider.budget?.expenses[widget.categoryName] ?? {};
-    final subcategoryCount = expenses.length;
+    final error = _service.checkSubcategoryLimit(expenses);
 
-    if (subcategoryCount >= 6) {
+    if (error != null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Ilmaisversiossa voit lisätä enintään 6 alakategoriaa per yläkategoria.'),
-        ),
+        SnackBar(content: Text(error)),
       );
       return;
     }
@@ -65,12 +67,16 @@ class _BudgetCategorySectionState extends State<BudgetCategorySection> {
     });
   }
 
-  void _startEditing(String subcategory, double currentAmount) {
+  void _startEditing(String subcategory) {
+    final budgetProvider = Provider.of<BudgetProvider>(context, listen: false);
+    final expenses = budgetProvider.budget?.expenses[widget.categoryName] ?? {};
+    final amount = expenses[subcategory] ?? 0.0;
+
     setState(() {
       _isEditing = true;
       _editingSubcategory = subcategory;
       _nameControllers[subcategory] = TextEditingController(text: subcategory);
-      _amountControllers[subcategory] = TextEditingController(text: currentAmount.toStringAsFixed(2));
+      _amountControllers[subcategory] = TextEditingController(text: amount.toStringAsFixed(2));
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
@@ -91,40 +97,29 @@ class _BudgetCategorySectionState extends State<BudgetCategorySection> {
 
   Future<void> _addSubcategory() async {
     final budgetProvider = Provider.of<BudgetProvider>(context, listen: false);
-    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    final expenses = budgetProvider.budget?.expenses[widget.categoryName] ?? {};
 
     final subcategory = _subcategoryController.text.trim();
-    if (subcategory.isEmpty) {
+    final error = _service.validateSubcategoryName(subcategory, expenses, null);
+
+    if (error != null) {
       setState(() {
-        _errorMessage = 'Syötä alakategorian nimi';
+        _errorMessage = error;
       });
       return;
     }
 
-    if (subcategory.length > 30) {
-      setState(() {
-        _errorMessage = 'Nimi voi olla enintään 30 merkkiä pitkä';
-      });
-      return;
-    }
-
-    final expenses = budgetProvider.budget?.expenses[widget.categoryName] ?? {};
-    if (expenses.containsKey(subcategory)) {
-      setState(() {
-        _errorMessage = 'Tämä alakategorian nimi on jo käytössä';
-      });
-      return;
-    }
-
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
     if (authProvider.user != null) {
       final now = DateTime.now();
-      await budgetProvider.addSubcategory(
-        authProvider.user!.uid,
-        now.year,
-        now.month,
-        widget.categoryName,
-        subcategory,
-        0.0,
+      await _service.addSubcategory(
+        context: context,
+        userId: authProvider.user!.uid,
+        year: now.year,
+        month: now.month,
+        categoryName: widget.categoryName,
+        subcategory: subcategory,
+        amount: 0.0,
       );
       setState(() {
         _isAdding = false;
@@ -136,72 +131,40 @@ class _BudgetCategorySectionState extends State<BudgetCategorySection> {
 
   Future<void> _updateSubcategory(String oldSubcategory) async {
     final budgetProvider = Provider.of<BudgetProvider>(context, listen: false);
-    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    final expenses = budgetProvider.budget?.expenses[widget.categoryName] ?? {};
 
     final newSubcategory = _nameControllers[oldSubcategory]!.text.trim();
     final amountText = _amountControllers[oldSubcategory]!.text.trim();
-    final amount = double.tryParse(amountText);
 
-    if (newSubcategory.isEmpty) {
+    final nameError = _service.validateSubcategoryName(newSubcategory, expenses, oldSubcategory);
+    final amountError = _service.validateAmount(amountText);
+
+    if (nameError != null) {
       setState(() {
-        _errorMessage = 'Syötä kelvollinen nimi';
+        _errorMessage = nameError;
+      });
+      return;
+    }
+    if (amountError != null) {
+      setState(() {
+        _errorMessage = amountError;
       });
       return;
     }
 
-    if (newSubcategory.length > 30) {
-      setState(() {
-        _errorMessage = 'Nimi voi olla enintään 30 merkkiä pitkä';
-      });
-      return;
-    }
-
-    final expenses = budgetProvider.budget?.expenses[widget.categoryName] ?? {};
-    if (newSubcategory != oldSubcategory && expenses.containsKey(newSubcategory)) {
-      setState(() {
-        _errorMessage = 'Tämä alakategorian nimi on jo käytössä';
-      });
-      return;
-    }
-
-    if (amount == null || amount < 0) {
-      setState(() {
-        _errorMessage = 'Syötä positiivinen numero';
-      });
-      return;
-    }
-
-    if (amount > 1000000) {
-      setState(() {
-        _errorMessage = 'Euromäärä voi olla enintään 1 000 000 €';
-      });
-      return;
-    }
-
-    final decimalPlaces = amountText.contains('.') ? amountText.split('.')[1].length : 0;
-    if (decimalPlaces > 2) {
-      setState(() {
-        _errorMessage = 'Euromäärä voi sisältää enintään 2 desimaalia';
-      });
-      return;
-    }
-
+    final amount = double.parse(amountText);
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
     if (authProvider.user != null) {
       final now = DateTime.now();
-      await budgetProvider.removeSubcategory(
-        authProvider.user!.uid,
-        now.year,
-        now.month,
-        widget.categoryName,
-        oldSubcategory,
-      );
-      await budgetProvider.addSubcategory(
-        authProvider.user!.uid,
-        now.year,
-        now.month,
-        widget.categoryName,
-        newSubcategory,
-        amount,
+      await _service.updateSubcategory(
+        context: context,
+        userId: authProvider.user!.uid,
+        year: now.year,
+        month: now.month,
+        categoryName: widget.categoryName,
+        oldSubcategory: oldSubcategory,
+        newSubcategory: newSubcategory,
+        amount: amount,
       );
       setState(() {
         _isEditing = false;
@@ -210,104 +173,6 @@ class _BudgetCategorySectionState extends State<BudgetCategorySection> {
         _nameControllers.remove(oldSubcategory);
         _amountControllers.remove(oldSubcategory);
       });
-    }
-  }
-
-  Future<bool> _confirmDeleteSubcategory(String subcategory) async {
-    // Ensin varmistetaan poisto
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Poista alakategoria'),
-        content: Text('Haluatko poistaa alakategorian "$subcategory"?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Peruuta'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Poista'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed != true) {
-      return false; // Peruutettu, ei jatketa
-    }
-
-    // Tarkistetaan, onko alakategorialla meno-tapahtumia
-    final authProvider = Provider.of<AuthProvider>(context, listen: false);
-    final expenseProvider = Provider.of<ExpenseProvider>(context, listen: false);
-    if (authProvider.user == null) {
-      return false;
-    }
-
-    final now = DateTime.now();
-    final hasEvents = await expenseProvider.hasSubcategoryEvents(
-      userId: authProvider.user!.uid,
-      year: now.year,
-      month: now.month,
-      category: widget.categoryName,
-      subcategory: subcategory,
-    );
-
-    if (hasEvents) {
-      // Jos meno-tapahtumia on, näytetään toinen dialogi
-      final deleteEvents = await showDialog<bool>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('Meno-tapahtumat löydetty'),
-          content: Text(
-              'Alakategoriassa "$subcategory" on meno-tapahtumia. Poistetaanko myös tapahtumat?'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Peruuta'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('Poista kaikki'),
-            ),
-          ],
-        ),
-      );
-      return deleteEvents ?? false;
-    }
-
-    // Jos meno-tapahtumia ei ole, jatketaan poistoa
-    return true;
-  }
-
-  IconData getCategoryIcon(String categoryName) {
-    switch (categoryName) {
-      case "Asuminen":
-        return Icons.home;
-      case "Liikkuminen":
-        return Icons.directions_car;
-      case "Kodin kulut":
-        return Icons.power;
-      case "Viihde":
-        return Icons.movie;
-      case "Harrastukset":
-        return Icons.sports;
-      case "Ruoka":
-        return Icons.fastfood;
-      case "Terveys":
-        return Icons.local_hospital;
-      case "Hygienia":
-        return Icons.cleaning_services;
-      case "Lemmikit":
-        return Icons.pets;
-      case "Sijoittaminen":
-        return Icons.savings;
-      case "Velat":
-        return Icons.money_off;
-      case "Muut":
-        return Icons.category;
-      default:
-        return Icons.category;
     }
   }
 
@@ -323,148 +188,9 @@ class _BudgetCategorySectionState extends State<BudgetCategorySection> {
       displayedExpenses[displaySubcategory] = value;
     });
 
-    final entries = displayedExpenses.entries.toList()..sort((a, b) => a.key.compareTo(b.key));
-    final List<Widget> subcategoryWidgets = entries.map((entry) {
-      final subcategory = entry.key;
-      final amount = entry.value;
-      return Container(
-        margin: const EdgeInsets.symmetric(vertical: 4.0),
-        padding: const EdgeInsets.all(8.0),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(8),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.05),
-              blurRadius: 4,
-              offset: const Offset(0, 2),
-            ),
-          ],
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Expanded(
-              child: _isEditing && _editingSubcategory == subcategory
-                  ? TextField(
-                      controller: _nameControllers[subcategory],
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.black87),
-                      decoration: InputDecoration(
-                        border: OutlineInputBorder(
-                          borderSide: BorderSide(color: Colors.grey.shade300),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        filled: true,
-                        fillColor: Colors.grey.shade100,
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      ),
-                      maxLength: 30,
-                      buildCounter: (context, {required currentLength, required isFocused, maxLength}) => null,
-                    )
-                  : Text(
-                      '  - $subcategory',
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.black54),
-                    ),
-            ),
-            Row(
-              children: [
-                _isEditing && _editingSubcategory == subcategory
-                    ? Row(
-                        children: [
-                          SizedBox(
-                            width: 80,
-                            child: TextField(
-                              controller: _amountControllers[subcategory],
-                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                              style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.black87),
-                              decoration: InputDecoration(
-                                border: OutlineInputBorder(
-                                  borderSide: BorderSide(color: Colors.grey.shade300),
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                                filled: true,
-                                fillColor: Colors.grey.shade100,
-                                contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                              ),
-                              inputFormatters: [
-                                FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          IconButton(
-                            icon: const Icon(Icons.check, color: Colors.green, size: 20),
-                            onPressed: () => _updateSubcategory(subcategory),
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.close, color: Colors.red, size: 20),
-                            onPressed: _cancelEditing,
-                          ),
-                        ],
-                      )
-                    : Row(
-                        children: [
-                          Text(
-                            '${amount.toStringAsFixed(2)} €',
-                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.black54),
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.edit, size: 20),
-                            onPressed: () => _startEditing(subcategory, amount),
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.delete, size: 20, color: Colors.red),
-                            onPressed: () async {
-                              final deleteEvents = await _confirmDeleteSubcategory(subcategory);
-                              if (!deleteEvents) {
-                                return; // Peruutettu, ei tehdä mitään
-                              }
-
-                              final authProvider = Provider.of<AuthProvider>(context, listen: false);
-                              final budgetProvider = Provider.of<BudgetProvider>(context, listen: false);
-                              final expenseProvider = Provider.of<ExpenseProvider>(context, listen: false);
-                              if (authProvider.user != null) {
-                                final now = DateTime.now();
-                                // Poistetaan meno-tapahtumat, jos käyttäjä valitsi "Poista kaikki"
-                                if (deleteEvents) {
-                                  await expenseProvider.deleteSubcategoryEvents(
-                                    userId: authProvider.user!.uid,
-                                    year: now.year,
-                                    month: now.month,
-                                    category: widget.categoryName,
-                                    subcategory: subcategory,
-                                  );
-                                }
-                                // Poistetaan alakategoria budjetista
-                                await budgetProvider.removeSubcategory(
-                                  authProvider.user!.uid,
-                                  now.year,
-                                  now.month,
-                                  widget.categoryName,
-                                  subcategory,
-                                );
-                                // Päivitetään tapahtumat yhteenvetosivulle
-                                await expenseProvider.loadExpenses(
-                                  authProvider.user!.uid,
-                                  now.year,
-                                  now.month,
-                                );
-                              }
-                            },
-                          ),
-                        ],
-                      ),
-              ],
-            ),
-          ],
-        ),
-      );
-    }).toList();
-
     return Container(
-      margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: Colors.white, // Säilytetään kortin taustaväri valkoisena
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
@@ -475,9 +201,7 @@ class _BudgetCategorySectionState extends State<BudgetCategorySection> {
         ],
       ),
       child: Theme(
-        data: Theme.of(context).copyWith(
-
-        ),
+        data: Theme.of(context).copyWith(),
         child: ExpansionTile(
           key: _expansionTileKey,
           controller: _expansionController,
@@ -505,39 +229,25 @@ class _BudgetCategorySectionState extends State<BudgetCategorySection> {
           ),
           children: [
             if (_isAdding)
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _subcategoryController,
-                      decoration: InputDecoration(
-                        labelText: 'Uusi alakategoria',
-                        border: const OutlineInputBorder(),
-                        errorText: _errorMessage,
-                      ),
-                      maxLength: 30,
-                      buildCounter: (context, {required currentLength, required isFocused, maxLength}) => null,
-                    ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.check, color: Colors.green),
-                    onPressed: _addSubcategory,
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.close, color: Colors.red),
-                    onPressed: _cancelAdding,
-                  ),
-                ],
+              AddSubcategoryForm(
+                controller: _subcategoryController,
+                errorMessage: _errorMessage,
+                onAdd: _addSubcategory,
+                onCancel: _cancelAdding,
               ),
-            ...subcategoryWidgets,
-            if (_errorMessage != null)
-              Padding(
-                padding: const EdgeInsets.only(top: 8.0),
-                child: Text(
-                  _errorMessage!,
-                  style: const TextStyle(color: Colors.red, fontSize: 12),
-                ),
-              ),
+            BudgetCategoryList(
+              categoryName: widget.categoryName,
+              displayedExpenses: displayedExpenses,
+              isEditing: _isEditing,
+              editingSubcategory: _editingSubcategory,
+              nameControllers: _nameControllers,
+              amountControllers: _amountControllers,
+              errorMessage: _errorMessage,
+              service: _service,
+              onCancelEditing: _cancelEditing,
+              onStartEditing: _startEditing,
+              onUpdateSubcategory: _updateSubcategory,
+            ),
           ],
         ),
       ),

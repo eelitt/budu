@@ -1,6 +1,6 @@
-// mainscreen/services/main_screen_actions_service.dart
 import 'package:budu/add_event_dialog.dart';
 import 'package:budu/core/app_router.dart';
+import 'package:budu/features/account/account_settings.dart';
 import 'package:budu/features/auth/providers/auth_provider.dart';
 import 'package:budu/features/budget/providers/budget_provider.dart';
 import 'package:budu/features/budget/screens/create_budget_screen.dart';
@@ -71,6 +71,13 @@ class MainScreenActionsService {
       );
     } else if (value == 'create_budget') {
       createBudgetForNextMonth(context, () {});
+    } else if (value == 'settings') { // Lisätty "settings"-valinta
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => const AccountSettings(),
+        ),
+      );
     } else if (value == 'logout') {
       final authProvider = Provider.of<AuthProvider>(context, listen: false);
       authProvider.signOut();
