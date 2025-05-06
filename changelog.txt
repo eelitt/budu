@@ -1,0 +1,9 @@
+## 1.0.1
+- Lisätty automaattipäivitysominaisuus
+- Parannettu budjetin muokkausnäkymää
+- Korjattu pieniä bugeja
+
+## 1.0.2
+- Lisätty tuki uusille budjettikategorioille
+- Parannettu suorituskykyä
+- Korjattu ongelma budjetin tallennuksessa

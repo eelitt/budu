@@ -26,20 +26,6 @@ class AuthProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> signIn(String email, String password) async {
-    _isLoading = true;
-    notifyListeners();
-    try {
-      _user = await _authRepo.signIn(email, password);
-    } catch (e) {
-      _user = null;
-      rethrow;
-    } finally {
-      _isLoading = false;
-      notifyListeners();
-    }
-  }
-
  Future<void> signInWithGoogle() async {
     _isLoading = true;
     notifyListeners();
@@ -49,21 +35,6 @@ class AuthProvider with ChangeNotifier {
     } catch (e) {
       _user = null;
       print('AuthProvider: Google-kirjautumisvirhe: $e');
-      rethrow;
-    } finally {
-      _isLoading = false;
-      notifyListeners();
-    }
-  }
-
-
-  Future<void> register(String email, String password) async {
-    _isLoading = true;
-    notifyListeners();
-    try {
-      _user = await _authRepo.register(email, password);
-    } catch (e) {
-      _user = null;
       rethrow;
     } finally {
       _isLoading = false;

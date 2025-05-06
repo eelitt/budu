@@ -76,7 +76,8 @@ class _AddEventDialogState extends State<AddEventDialog> {
       try {
         final event = ExpenseEvent(
           id: const Uuid().v4(),
-          category: _isExpense ? (_selectedSubcategory ?? _selectedCategory!) : 'Tulo',
+          category: _isExpense ? _selectedCategory! : 'Tulo',
+          subcategory: _isExpense ? _selectedSubcategory : null, // Tallennetaan subcategory
           amount: amount,
           createdAt: _selectedDate,
           type: _isExpense ? EventType.expense : EventType.income,
@@ -108,17 +109,16 @@ class _AddEventDialogState extends State<AddEventDialog> {
         : [];
 
     return AlertDialog(
-      backgroundColor: Colors.white, // Valkoinen tausta
+      backgroundColor: Colors.white,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12), // Pyöristetyt kulmat
+        borderRadius: BorderRadius.circular(12),
       ),
-      elevation: 8, // Varjostus
+      elevation: 8,
       title: const Text('Lisää tapahtuma'),
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Tulo/Meno-valinta
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
@@ -128,7 +128,7 @@ class _AddEventDialogState extends State<AddEventDialog> {
                   onSelected: (selected) {
                     setState(() {
                       _isExpense = !selected;
-                      _selectedSubcategory = null; // Nollataan alakategoria, jos vaihdetaan tuloon
+                      _selectedSubcategory = null;
                     });
                   },
                 ),
@@ -138,7 +138,7 @@ class _AddEventDialogState extends State<AddEventDialog> {
                   onSelected: (selected) {
                     setState(() {
                       _isExpense = selected;
-                      _selectedSubcategory = null; // Nollataan alakategoria, jos vaihdetaan menoon
+                      _selectedSubcategory = null;
                     });
                   },
                   selectedColor: Colors.red,
@@ -146,7 +146,6 @@ class _AddEventDialogState extends State<AddEventDialog> {
               ],
             ),
             const SizedBox(height: 16),
-            // Summa
             TextField(
               controller: _amountController,
               keyboardType: TextInputType.number,
@@ -167,7 +166,6 @@ class _AddEventDialogState extends State<AddEventDialog> {
               },
             ),
             const SizedBox(height: 16),
-            // Kategoria (vain menoille)
             if (_isExpense)
               DropdownButtonFormField<String>(
                 value: _selectedCategory,
@@ -185,12 +183,11 @@ class _AddEventDialogState extends State<AddEventDialog> {
                 onChanged: (value) {
                   setState(() {
                     _selectedCategory = value;
-                    _selectedSubcategory = null; // Nollataan alakategoria, kun kategoria vaihtuu
+                    _selectedSubcategory = null;
                   });
                 },
               ),
             if (_isExpense) const SizedBox(height: 16),
-            // Alakategoria (vain menoille, jos alakategorioita on)
             if (_isExpense && subCategories.isNotEmpty)
               DropdownButtonFormField<String>(
                 value: _selectedSubcategory,
@@ -218,7 +215,6 @@ class _AddEventDialogState extends State<AddEventDialog> {
                 },
               ),
             if (_isExpense && subCategories.isNotEmpty) const SizedBox(height: 16),
-            // Kuvaus (valinnainen, näytetään sekä tuloille että menoille)
             TextField(
               controller: _descriptionController,
               decoration: const InputDecoration(
@@ -228,7 +224,6 @@ class _AddEventDialogState extends State<AddEventDialog> {
               maxLines: 2,
             ),
             const SizedBox(height: 16),
-            // Päivämäärä
             Row(
               children: [
                 Expanded(

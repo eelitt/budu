@@ -2,6 +2,7 @@ import 'package:budu/core/utils.dart';
 import 'package:budu/features/auth/providers/auth_provider.dart';
 import 'package:budu/features/budget/providers/budget_provider.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 class BudgetSubcategoryItem extends StatefulWidget {
@@ -59,10 +60,27 @@ class _BudgetSubcategoryItemState extends State<BudgetSubcategoryItem> {
     final budgetProvider = Provider.of<BudgetProvider>(context, listen: false);
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
 
-    final amount = double.tryParse(_amountController.text);
+    final amountText = _amountController.text.trim();
+    final amount = double.tryParse(amountText);
+
     if (amount == null || amount < 0) {
       setState(() {
         _errorMessage = 'Syötä positiivinen numero';
+      });
+      return;
+    }
+
+    if (amount > 1000000) {
+      setState(() {
+        _errorMessage = 'Euromäärä voi olla enintään 1 000 000 €';
+      });
+      return;
+    }
+
+    final decimalPlaces = amountText.contains('.') ? amountText.split('.')[1].length : 0;
+    if (decimalPlaces > 2) {
+      setState(() {
+        _errorMessage = 'Euromäärä voi sisältää enintään 2 desimaalia';
       });
       return;
     }
@@ -82,11 +100,8 @@ class _BudgetSubcategoryItemState extends State<BudgetSubcategoryItem> {
     }
   }
 
-  void _deleteSubcategory() async {
-    final budgetProvider = Provider.of<BudgetProvider>(context, listen: false);
-    final authProvider = Provider.of<AuthProvider>(context, listen: false);
-
-    final confirm = await showDialog<bool>(
+  Future<bool> _confirmDeleteSubcategory() async {
+    final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Poista alakategoria'),
@@ -103,15 +118,7 @@ class _BudgetSubcategoryItemState extends State<BudgetSubcategoryItem> {
         ],
       ),
     );
-
-    if (confirm == true && authProvider.user != null) {
-      budgetProvider.deleteExpense(
-        userId: authProvider.user!.uid,
-        year: DateTime.now().year,
-        month: DateTime.now().month,
-        category: widget.subCategory,
-      );
-    }
+    return confirmed ?? false;
   }
 
   @override
@@ -135,11 +142,14 @@ class _BudgetSubcategoryItemState extends State<BudgetSubcategoryItem> {
                         width: 100,
                         child: TextField(
                           controller: _amountController,
-                          keyboardType: TextInputType.number,
+                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
                           decoration: const InputDecoration(
                             border: OutlineInputBorder(),
                             contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 0),
                           ),
+                          inputFormatters: [
+                            FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+                          ],
                         ),
                       ),
                       IconButton(
@@ -164,7 +174,21 @@ class _BudgetSubcategoryItemState extends State<BudgetSubcategoryItem> {
                       ),
                       IconButton(
                         icon: const Icon(Icons.delete, size: 20, color: Colors.red),
-                        onPressed: _deleteSubcategory,
+                        onPressed: () async {
+                          final confirmed = await _confirmDeleteSubcategory();
+                          if (confirmed) {
+                            final budgetProvider = Provider.of<BudgetProvider>(context, listen: false);
+                            final authProvider = Provider.of<AuthProvider>(context, listen: false);
+                            if (authProvider.user != null) {
+                              budgetProvider.deleteExpense(
+                                userId: authProvider.user!.uid,
+                                year: DateTime.now().year,
+                                month: DateTime.now().month,
+                                category: widget.subCategory,
+                              );
+                            }
+                          }
+                        },
                       ),
                     ],
                   ),

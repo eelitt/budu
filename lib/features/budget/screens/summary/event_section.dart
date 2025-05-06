@@ -1,10 +1,10 @@
 import 'package:budu/core/utils.dart';
 import 'package:budu/features/auth/providers/auth_provider.dart';
 import 'package:budu/features/budget/models/expense_event.dart';
+import 'package:budu/features/budget/providers/budget_provider.dart'; // Lisätty BudgetProvider-importti
 import 'package:budu/features/budget/providers/expense_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-
 
 class EventsSection extends StatelessWidget {
   const EventsSection({super.key});
@@ -12,6 +12,7 @@ class EventsSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final expenseProvider = Provider.of<ExpenseProvider>(context);
+    final budgetProvider = Provider.of<BudgetProvider>(context, listen: false); // Lisätty BudgetProvider
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
 
     return Container(
@@ -20,7 +21,7 @@ class EventsSection extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha:0.05),
             blurRadius: 8,
             offset: const Offset(0, 4),
           ),
@@ -59,7 +60,7 @@ class EventsSection extends StatelessWidget {
                           ),
                           boxShadow: [
                             BoxShadow(
-                              color: Colors.black.withOpacity(0.1),
+                              color: Colors.black.withValues(alpha:0.1),
                               blurRadius: 6,
                               spreadRadius: 1,
                               offset: const Offset(0, 3),
@@ -86,6 +87,7 @@ class EventsSection extends StatelessWidget {
                                             size: 16,
                                           ),
                                           const SizedBox(width: 4),
+                                          // Näytetään vain yläkategoria tässä
                                           Text(
                                             expense.category,
                                             style: Theme.of(context).textTheme.bodyLarge,
@@ -100,7 +102,19 @@ class EventsSection extends StatelessWidget {
                                                 color: Colors.black54,
                                               ),
                                         ),
-                                      const SizedBox(height: 4),
+                                      if (expense.description != null && expense.description!.isNotEmpty)
+                                        const SizedBox(height: 4),
+                                      // Näytetään alakategoria, jos se on olemassa
+                                      if (expense.subcategory != null && expense.subcategory!.isNotEmpty)
+                                        Text(
+                                          expense.subcategory!,
+                                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                                color: Colors.black54,
+                                              ),
+                                        ),
+                                      if (expense.subcategory != null && expense.subcategory!.isNotEmpty)
+                                        const SizedBox(height: 4),
+                                      // Näytetään päivämäärä
                                       Text(
                                         '${expense.createdAt.day}.${expense.createdAt.month}.${expense.createdAt.year} '
                                         '${expense.createdAt.hour}:${expense.createdAt.minute.toString().padLeft(2, '0')}',
@@ -136,7 +150,8 @@ class EventsSection extends StatelessWidget {
                                       context: context,
                                       builder: (context) => AlertDialog(
                                         title: const Text('Poista tapahtuma'),
-                                        content: Text('Haluatko varmasti poistaa tapahtuman "${expense.category}" (${formatCurrency(expense.amount)})?'),
+                                        content: Text(
+                                            'Haluatko varmasti poistaa tapahtuman "${expense.category}${expense.subcategory != null && expense.subcategory!.isNotEmpty ? ' (${expense.subcategory})' : ''}" (${formatCurrency(expense.amount)})?'),
                                         actions: [
                                           TextButton(
                                             onPressed: () => Navigator.pop(context, false),
@@ -151,7 +166,8 @@ class EventsSection extends StatelessWidget {
                                     );
                                     if (confirm == true) {
                                       try {
-                                        await expenseProvider.deleteExpense(authProvider.user!.uid, expense.id);
+                                        // Päivitetty: Lisätty budgetProvider-parametri deleteExpense-kutsuun
+                                        await expenseProvider.deleteExpense(authProvider.user!.uid, expense.id, budgetProvider);
                                       } catch (e) {
                                         ScaffoldMessenger.of(context).showSnackBar(
                                           SnackBar(content: Text('Virhe poistettaessa tapahtumaa: $e')),

@@ -1,6 +1,7 @@
 import 'package:budu/features/auth/providers/auth_provider.dart';
 import 'package:budu/features/budget/providers/budget_provider.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 class IncomeSection extends StatefulWidget {
@@ -47,10 +48,28 @@ class _IncomeSectionState extends State<IncomeSection> {
     final budgetProvider = Provider.of<BudgetProvider>(context, listen: false);
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
 
-    final amount = double.tryParse(_amountController.text);
+    final amountText = _amountController.text.trim();
+    final amount = double.tryParse(amountText);
+
+    // Validoinnit euromäärälle
     if (amount == null || amount < 0) {
       setState(() {
         _errorMessage = 'Syötä positiivinen numero';
+      });
+      return;
+    }
+
+    if (amount > 1000000) {
+      setState(() {
+        _errorMessage = 'Euromäärä voi olla enintään 1 000 000 €';
+      });
+      return;
+    }
+
+    final decimalPlaces = amountText.contains('.') ? amountText.split('.')[1].length : 0;
+    if (decimalPlaces > 2) {
+      setState(() {
+        _errorMessage = 'Euromäärä voi sisältää enintään 2 desimaalia';
       });
       return;
     }
@@ -116,11 +135,14 @@ class _IncomeSectionState extends State<IncomeSection> {
                           width: 100,
                           child: TextField(
                             controller: _amountController,
-                            keyboardType: TextInputType.number,
+                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
                             decoration: const InputDecoration(
                               border: OutlineInputBorder(),
                               contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 0),
                             ),
+                            inputFormatters: [
+                              FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+                            ],
                           ),
                         ),
                         IconButton(

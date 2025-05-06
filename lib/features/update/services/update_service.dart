@@ -40,9 +40,6 @@ class UpdateService {
         StackTrace.current,
         reason: 'Päivitystarkistus epäonnistui',
       );
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Päivitystarkistus epäonnistui: VERSION_URL puuttuu')),
-      );
       return {'isUpdateAvailable': false};
     }
 
@@ -62,9 +59,6 @@ class UpdateService {
         StackTrace.current,
         reason: 'GitHub-version tarkistus epäonnistui',
       );
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Päivitystarkistus epäonnistui: HTTP ${response.statusCode}')),
-      );
       return {'isUpdateAvailable': false};
     }
 
@@ -73,13 +67,14 @@ class UpdateService {
     String? apkUrl;
 
     if (isUpdateAvailable) {
-      apkUrl = await _fetchApkUrl(latestVersion, context);
+      apkUrl = await _fetchApkUrl(latestVersion);
     }
 
     return {
       'isUpdateAvailable': isUpdateAvailable,
       'latestVersion': latestVersion,
       'apkUrl': apkUrl,
+      'currentVersion': currentVersion,
     };
   }
 
@@ -104,19 +99,21 @@ class UpdateService {
   }
 
   // Haetaan APK-tiedoston URL GitHub Releases -osiosta
-  Future<String?> _fetchApkUrl(String latestVersion, BuildContext context) async {
+  Future<String?> _fetchApkUrl(String latestVersion) async {
     final repoOwner = dotenv.env['GITHUB_OWNER'];
     final repoName = dotenv.env['GITHUB_REPO'];
     final apiToken = dotenv.env['GITHUB_API_TOKEN'];
+
+    // Tulostetaan arvot debuggausta varten
+    print('GITHUB_OWNER: $repoOwner');
+    print('GITHUB_REPO: $repoName');
+    print('GITHUB_API_TOKEN: $apiToken');
 
     if (repoOwner == null || repoOwner.isEmpty || repoName == null || repoName.isEmpty) {
       FirebaseCrashlytics.instance.recordError(
         Exception('GITHUB_OWNER tai GITHUB_REPO puuttuu .env-tiedostosta'),
         StackTrace.current,
         reason: 'Päivitystiedon haku epäonnistui',
-      );
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Päivitystiedon haku epäonnistui: GITHUB_OWNER tai GITHUB_REPO puuttuu')),
       );
       return null;
     }
@@ -136,9 +133,6 @@ class UpdateService {
         StackTrace.current,
         reason: 'Päivitystiedon haku epäonnistui',
       );
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Päivitystiedon haku epäonnistui: HTTP ${releaseResponse.statusCode}')),
-      );
       return null;
     }
 
@@ -146,9 +140,6 @@ class UpdateService {
     final assets = releaseData['assets'] as List<dynamic>?;
 
     if (assets == null || assets.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Päivityksessä ei ole tiedostoja")),
-      );
       return null;
     }
 
@@ -160,122 +151,64 @@ class UpdateService {
         );
 
     if (apkAsset.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Päivityksessä ei ole APK-tiedostoa")),
-      );
       return null;
     }
 
     return apkAsset['url'] as String;
   }
 
-  // Ladataan ja avataan APK-tiedosto
-  Future<void> downloadAndOpenApk(BuildContext context, String apkUrl, String latestVersion) async {
+  // Ladataan ja avataan APK-tiedosto, palautetaan tulos ja päivitysprogression
+  Stream<Map<String, dynamic>> downloadAndOpenApk(
+    String apkUrl,
+    String latestVersion,
+  ) async* {
     final apiToken = dotenv.env['GITHUB_API_TOKEN'];
 
-    // Näytetään latausdialogi
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (dialogContext) => const AlertDialog(
-        content: Row(
-          children: [
-            CircularProgressIndicator(),
-            SizedBox(width: 16),
-            Text("Ladataan päivitystä...", style: TextStyle(color: Colors.white)),
-          ],
-        ),
-        backgroundColor: Colors.black87,
-      ),
-    );
-
     try {
-      final apkResponse = await http.get(
-        Uri.parse(apkUrl),
-        headers: {
-          if (apiToken != null && apiToken.isNotEmpty) 'Authorization': 'token $apiToken',
-          'Accept': 'application/octet-stream',
-        },
-      );
+      // Valmistellaan latauspyyntö
+      final request = http.Request('GET', Uri.parse(apkUrl));
+      if (apiToken != null && apiToken.isNotEmpty) {
+        request.headers['Authorization'] = 'token $apiToken';
+      }
+      request.headers['Accept'] = 'application/octet-stream';
 
-      if (apkResponse.statusCode != 200) {
-        Navigator.pop(context); // Sulje latausdialogi
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Päivityksen lataaminen epäonnistui: HTTP ${apkResponse.statusCode}')),
-        );
-        FirebaseCrashlytics.instance.recordError(
-          Exception('HTTP-virhe: ${apkResponse.statusCode}'),
-          StackTrace.current,
-          reason: 'APK:n lataaminen epäonnistui',
-        );
-        return;
+      // Suoritetaan lataus Stream-muodossa
+      final streamedResponse = await request.send();
+
+      if (streamedResponse.statusCode != 200) {
+        throw Exception('Päivityksen lataaminen epäonnistui: HTTP ${streamedResponse.statusCode}');
       }
 
+      final contentLength = streamedResponse.contentLength ?? 0;
+      int receivedBytes = 0;
       final tempDir = await getTemporaryDirectory();
       final apkFile = File('${tempDir.path}/budu_v$latestVersion.apk');
-      await apkFile.writeAsBytes(apkResponse.bodyBytes);
+      final sink = apkFile.openWrite();
 
-      Navigator.pop(context); // Sulje latausdialogi
+      // Kuunnellaan latausstreamia ja päivitetään progress
+      await for (var chunk in streamedResponse.stream) {
+        receivedBytes += chunk.length;
+        sink.add(chunk);
+
+        // Lasketaan latausprosentti ja lähetetään se streamiin
+        if (contentLength > 0) {
+          final progress = (receivedBytes / contentLength * 100).clamp(0, 100).toDouble();
+          yield {'progress': progress};
+        }
+      }
+
+      await sink.close();
 
       // Yritä avata APK
       final result = await OpenFile.open(apkFile.path);
-      if (result.type != ResultType.done) {
-        if (result.message.contains("REQUEST_INSTALL_PACKAGES")) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: const Text("Salli asennus tuntemattomista lähteistä"),
-              action: SnackBarAction(
-                label: 'Avaa asetukset',
-                onPressed: () async {
-                  try {
-                    // Android-asetusten avaaminen ei aina toimi samalla tavalla kaikissa laitteissa,
-                    // joten tämä on yksinkertaistettu versio
-                    final retryResult = await OpenFile.open(apkFile.path);
-                    if (retryResult.type != ResultType.done) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('APK:n avaaminen epäonnistui uudelleen: ${retryResult.message}')),
-                      );
-                      FirebaseCrashlytics.instance.recordError(
-                        Exception(retryResult.message),
-                        StackTrace.current,
-                        reason: 'APK:n avaaminen epäonnistui asetusten jälkeen',
-                      );
-                    }
-                  } catch (e) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text("Asetusten avaaminen epäonnistui: $e")),
-                    );
-                    FirebaseCrashlytics.instance.recordError(
-                      e,
-                      StackTrace.current,
-                      reason: 'Asetusten avaaminen epäonnistui',
-                    );
-                  }
-                },
-              ),
-            ),
-          );
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('APK:n avaaminen epäonnistui: ${result.message}')),
-          );
-          FirebaseCrashlytics.instance.recordError(
-            Exception(result.message),
-            StackTrace.current,
-            reason: 'APK:n avaaminen epäonnistui',
-          );
-        }
-      }
+      yield {'result': result};
     } catch (e) {
-      Navigator.pop(context); // Varmista, että latausdialogi sulkeutuu
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Virhe päivityksen lataamisessa: $e')),
-      );
       FirebaseCrashlytics.instance.recordError(
         e,
         StackTrace.current,
         reason: 'Päivityksen lataaminen epäonnistui',
       );
+      yield {'error': e.toString()};
     }
   }
 }

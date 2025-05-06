@@ -22,7 +22,7 @@ class BudgetRepository {
     final docRef = _budgetsCollection
         .doc(userId)
         .collection('monthly_budgets')
-        .doc('${year}_${month}');
+        .doc('${year}_$month');
     
     DocumentSnapshot doc = await docRef.get(const GetOptions(source: Source.server));
     if (!doc.exists) {
@@ -40,7 +40,7 @@ Stream<BudgetModel?> getBudgetStream(String userId, int year, int month) {
   return _budgetsCollection
       .doc(userId)
       .collection('monthly_budgets')
-      .doc('${year}_${month}')
+      .doc('${year}_$month')
       .snapshots()
       .map((doc) => doc.exists ? BudgetModel.fromMap(doc.data() as Map<String, dynamic>) : null);
 }

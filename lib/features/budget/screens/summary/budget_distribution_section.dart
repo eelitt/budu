@@ -129,7 +129,8 @@ class _BudgetDistributionSectionState extends State<BudgetDistributionSection> {
                   color: Colors.black87,
                 ),
           ),
-          const SizedBox(height: 16),
+          // Päivitetty: Lisätty enemmän tilaa otsikon ja diagrammin väliin
+          const SizedBox(height: 32),
           totalBudget > 0
               ? Column(
                   children: [
@@ -208,7 +209,8 @@ class _BudgetDistributionSectionState extends State<BudgetDistributionSection> {
                         ),
                       ),
                     ),
-                    const SizedBox(height: 16),
+                    // Päivitetty: Lisätty enemmän tilaa diagrammin ja legendan väliin
+                    const SizedBox(height: 32),
                     Wrap(
                       spacing: 16,
                       runSpacing: 8,

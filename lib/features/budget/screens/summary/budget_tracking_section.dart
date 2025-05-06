@@ -1,5 +1,6 @@
 import 'package:budu/core/constants.dart';
 import 'package:budu/core/utils.dart';
+import 'package:budu/features/budget/models/expense_event.dart';
 import 'package:budu/features/budget/providers/budget_provider.dart';
 import 'package:budu/features/budget/providers/expense_provider.dart';
 import 'package:flutter/material.dart';
@@ -82,14 +83,12 @@ class BudgetTrackingSection extends StatelessWidget {
       final categoryName = categoryEntry.key;
       final subCategories = categoryEntry.value;
 
-      // Haetaan yläkategorian budjetti ja kulutus
+      // Haetaan yläkategorian budjetti
       double directCategoryBudget = 0.0;
-      double directCategorySpent = 0.0;
 
       // Jos kategoria on suoraan expenses-kentässä (esim. "Harrastukset")
       if (budget.expenses.containsKey(categoryName)) {
         directCategoryBudget = budget.expenses[categoryName]!.values.fold(0.0, (sum, value) => sum + value);
-        directCategorySpent = categoryTotals[categoryName] ?? 0.0;
       }
 
       // Haetaan yläkategorian alakategoriat
@@ -104,11 +103,7 @@ class BudgetTrackingSection extends StatelessWidget {
       final categoryBudget = subCategories.isNotEmpty
           ? categoryExpenses.fold<double>(0.0, (sum, e) => sum + e.value)
           : directCategoryBudget;
-      final categorySpent = subCategories.isNotEmpty
-          ? categoryTotals.entries
-              .where((e) => subCategories.contains(e.key))
-              .fold<double>(0.0, (sum, e) => sum + e.value)
-          : directCategorySpent;
+      final categorySpent = categoryTotals[categoryName] ?? 0.0;
 
       // Piilotetaan vain, jos ei ole budjettia eikä kulutusta
       if (categoryBudget == 0.0 && categorySpent == 0.0) {
@@ -120,6 +115,9 @@ class BudgetTrackingSection extends StatelessWidget {
           ? ((categoryBudget - categorySpent) / categoryBudget * 100).clamp(0, 100)
           : 100.0;
 
+      // Lisätty: Tarkistetaan, onko budjetti ylittynyt
+      final isOverBudget = progress > 1;
+
       return Container(
         margin: const EdgeInsets.only(bottom: 16),
         decoration: BoxDecoration(
@@ -127,7 +125,7 @@ class BudgetTrackingSection extends StatelessWidget {
           borderRadius: BorderRadius.circular(12),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.05),
+              color: Colors.black.withValues(alpha: 0.05),
               blurRadius: 8,
               offset: const Offset(0, 4),
             ),
@@ -170,13 +168,26 @@ class BudgetTrackingSection extends StatelessWidget {
               mainAxisSize: MainAxisSize.max,
               children: [
                 Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.only(right: 8.0),
-                    child: Text(
-                      categoryName,
-                      style: Theme.of(context).textTheme.bodyLarge?.copyWith(fontSize: 16),
-                      overflow: TextOverflow.ellipsis,
-                    ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Padding(
+                          padding: const EdgeInsets.only(right: 8.0),
+                          child: Text(
+                            categoryName,
+                            style: Theme.of(context).textTheme.bodyLarge?.copyWith(fontSize: 16),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ),
+                      // Lisätty: Varoitusikoni, jos budjetti on ylittynyt
+                      if (isOverBudget)
+                        const Icon(
+                          Icons.warning,
+                          color: Colors.red,
+                          size: 20,
+                        ),
+                    ],
                   ),
                 ),
                 Text(
@@ -200,16 +211,35 @@ class BudgetTrackingSection extends StatelessWidget {
                   borderRadius: BorderRadius.circular(4),
                 ),
                 const SizedBox(height: 4),
-                Text(
-                  '${remainingPercentage.toStringAsFixed(0)}% jäljellä',
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.black54),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      '${remainingPercentage.toStringAsFixed(0)}% jäljellä',
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.black54),
+                    ),
+                    // Lisätty: Tekstuaalinen viesti, jos budjetti on ylittynyt
+                    if (isOverBudget)
+                      Text(
+                        'Budjetti ylittynyt!',
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                              color: Colors.red,
+                              fontSize: 12,
+                            ),
+                      ),
+                  ],
                 ),
               ],
             ),
             children: categoryExpenses.map((entry) {
               final subCategory = entry.key;
               final subCategoryBudget = entry.value;
-              final spentAmount = categoryTotals[subCategory] ?? 0.0;
+              final spentAmount = expenseProvider.expenses
+                  .where((expense) =>
+                      expense.type == EventType.expense &&
+                      expense.category == categoryName &&
+                      expense.subcategory == subCategory)
+                  .fold<double>(0.0, (sum, expense) => sum + expense.amount);
               final subProgress = subCategoryBudget > 0 ? spentAmount / subCategoryBudget : 0.0;
               final subRemainingPercentage = subCategoryBudget > 0
                   ? ((subCategoryBudget - spentAmount) / subCategoryBudget * 100).clamp(0, 100)
@@ -257,9 +287,9 @@ class BudgetTrackingSection extends StatelessWidget {
               );
             }).toList(),
           ),
-        ),
-      );
-    }).toList();
+      ),
+    );
+  }).toList();
 
     return Container(
       decoration: BoxDecoration(
@@ -267,7 +297,7 @@ class BudgetTrackingSection extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 8,
             offset: const Offset(0, 4),
           ),
@@ -294,7 +324,7 @@ class BudgetTrackingSection extends StatelessWidget {
                 borderRadius: BorderRadius.circular(12),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.05),
+                    color: Colors.black.withValues(alpha: 0.05),
                     blurRadius: 8,
                     offset: const Offset(0, 4),
                   ),

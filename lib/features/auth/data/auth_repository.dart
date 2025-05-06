@@ -7,18 +7,6 @@ class AuthRepository {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final GoogleSignIn _googleSignIn = GoogleSignIn();
 
-  // Sähköposti ja salasana -kirjautuminen
-  Future<UserModel?> signIn(String email, String password) async {
-    try {
-      UserCredential result = await _auth.signInWithEmailAndPassword(
-        email: email,
-        password: password,
-      );
-      return UserModel(uid: result.user!.uid, email: result.user!.email!);
-    } catch (e) {
-      rethrow; // Heitetään virhe eteenpäin käsittelyä varten
-    }
-  }
 
   // Google Sign-In
   Future<UserModel?> signInWithGoogle() async {
@@ -33,31 +21,20 @@ class AuthRepository {
       );
 
       UserCredential result = await _auth.signInWithCredential(credential);
-      return UserModel(uid: result.user!.uid, email: result.user!.email!);
+      return UserModel(uid: result.user!.uid, email: result.user!.email!, user: _auth.currentUser);
     } catch (e) {
       rethrow;
     }
   }
 
-  // Rekisteröityminen sähköpostilla ja salasanalla
-  Future<UserModel?> register(String email, String password) async {
-    try {
-      UserCredential result = await _auth.createUserWithEmailAndPassword(
-        email: email,
-        password: password,
-      );
-      return UserModel(uid: result.user!.uid, email: result.user!.email!);
-    } catch (e) {
-      rethrow;
-    }
-  }
+ 
 
   // Hae nykyinen käyttäjä
   Future<UserModel?> getCurrentUser() async {
     try {
       final user = _auth.currentUser;
       if (user != null) {
-        return UserModel(uid: user.uid, email: user.email!);
+        return UserModel(uid: user.uid, email: user.email!, user: user);
       }
       return null;
     } catch (e) {

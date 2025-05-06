@@ -15,7 +15,7 @@ class BudgetProvider with ChangeNotifier {
     try {
       _budget = await _budgetRepository.getBudget(userId, year, month);
       // Varmistetaan, että budjetti asetetaan vain, jos se on varsinainen budjetti
-      if (_budget != null && _budget!.income != null && _budget!.expenses != null && !_budget!.isPlaceholder) {
+      if (_budget != null && !_budget!.isPlaceholder) {
         _listenToBudget(userId, year, month);
       } else {
         _budget = null;
@@ -31,7 +31,7 @@ class BudgetProvider with ChangeNotifier {
     try {
       final budget = await _budgetRepository.getBudget(userId, year, month);
       // Budjetti katsotaan olevan olemassa vain, jos se on varsinainen budjetti ja ei ole placeholder
-      return budget != null && budget.income != null && budget.expenses != null && !budget.isPlaceholder;
+      return budget != null && !budget.isPlaceholder;
     } catch (e) {
       print('Error checking budget existence: $e');
       return false;
@@ -115,7 +115,7 @@ class BudgetProvider with ChangeNotifier {
           .collection('budgets')
           .doc(userId)
           .collection('monthly_budgets')
-          .doc('${year}_${month}')
+          .doc('${year}_$month')
           .delete();
       _budget = null;
       notifyListeners();
@@ -163,7 +163,7 @@ class BudgetProvider with ChangeNotifier {
         .collection('budgets')
         .doc(userId)
         .collection('monthly_budgets')
-        .doc('${year}_${month}')
+        .doc('${year}_$month')
         .snapshots()
         .listen((doc) {
       if (doc.exists && doc.data() != null && doc.data()!.containsKey('income')) {
@@ -279,12 +279,12 @@ class BudgetProvider with ChangeNotifier {
       }
 
       // Päivitetään income-arvo Firestoressa
-      final updatedIncome = (budget.income ?? 0.0) + amount;
+      final updatedIncome = (budget.income) + amount;
       await FirebaseFirestore.instance
           .collection('budgets')
           .doc(userId)
           .collection('monthly_budgets')
-          .doc('${year}_${month}')
+          .doc('${year}_$month')
           .update({'income': updatedIncome});
 
       // Päivitetään paikallinen _budget, jos se vastaa tapahtuman kuukautta

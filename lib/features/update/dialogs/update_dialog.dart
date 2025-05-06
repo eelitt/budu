@@ -6,7 +6,7 @@ class UpdateDialog extends StatelessWidget {
   final String currentVersion;
   final String latestVersion;
   final String apkUrl;
-  final BuildContext scaffoldContext;
+  final Function(String, String) onUpdate; // Callback päivityksen suorittamiseen
 
   const UpdateDialog({
     super.key,
@@ -14,7 +14,7 @@ class UpdateDialog extends StatelessWidget {
     required this.currentVersion,
     required this.latestVersion,
     required this.apkUrl,
-    required this.scaffoldContext,
+    required this.onUpdate,
   });
 
   @override
@@ -30,9 +30,10 @@ class UpdateDialog extends StatelessWidget {
           child: const Text('Ei'),
         ),
         TextButton(
-          onPressed: () async {
+          onPressed: () {
+            // Suljetaan dialogi ja kutsutaan päivitystä
             Navigator.pop(context);
-            await updateService.downloadAndOpenApk(scaffoldContext, apkUrl, latestVersion);
+            onUpdate(apkUrl, latestVersion); // Suoritetaan päivitys LoginScreen-kontekstissa
           },
           child: const Text('Kyllä'),
         ),
