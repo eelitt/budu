@@ -2,7 +2,7 @@ import 'package:budu/features/auth/providers/auth_provider.dart';
 import 'package:budu/features/budget/providers/budget_provider.dart';
 import 'package:budu/features/budget/providers/expense_provider.dart';
 import 'package:budu/features/budget/screens/summary/budget_distribution_section.dart';
-import 'package:budu/features/budget/screens/summary/budget_tracking_section.dart';
+import 'package:budu/features/budget/screens/summary/budget_tracking/budget_tracking_section.dart';
 import 'package:budu/features/budget/screens/summary/event_section.dart';
 import 'package:budu/features/budget/screens/summary/summary_section.dart';
 import 'package:flutter/material.dart';
@@ -28,7 +28,6 @@ class _SummaryScreenState extends State<SummaryScreen> {
   @override
   void initState() {
     super.initState();
-    // Alustetaan _loadDataFuture oletusarvolla
     _loadDataFuture = Future.value();
     final now = DateTime.now();
     currentYear = now.year;
@@ -51,19 +50,16 @@ class _SummaryScreenState extends State<SummaryScreen> {
     if (authProvider.user != null) {
       availableMonths = await budgetProvider.getAvailableBudgetMonths(authProvider.user!.uid);
       if (availableMonths.isNotEmpty) {
-        // Aseta viimeisin kuukausi oletukseksi
         selectedMonth = availableMonths.first;
         currentYear = selectedMonth!['year']!;
         currentMonth = selectedMonth!['month']!;
         await _loadData();
       } else {
-        // Jos budjetteja ei ole, alustetaan _loadDataFuture tyhjällä Future-arvolla
         _loadDataFuture = Future.value();
       }
       _isDataLoaded = true;
       setState(() {});
     } else {
-      // Jos käyttäjä ei ole kirjautunut, alustetaan _loadDataFuture virheellä
       _loadDataFuture = Future.error('Käyttäjä ei ole kirjautunut');
       _isDataLoaded = true;
       setState(() {});
@@ -74,7 +70,7 @@ class _SummaryScreenState extends State<SummaryScreen> {
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     if (authProvider.user != null) {
       _loadDataFuture = Future.wait([
-        budgetProvider.loadBudget(authProvider.user!.uid, currentYear, currentMonth),
+        // Poistettu budgetProvider.loadBudget, koska budjettidata on jo haettu LoginScreenissä
         expenseProvider.loadExpenses(authProvider.user!.uid, currentYear, currentMonth),
       ]);
       await _loadDataFuture;
@@ -120,14 +116,19 @@ class _SummaryScreenState extends State<SummaryScreen> {
                                 ),
                               );
                             }).toList(),
-                            onChanged: (value) {
+                            onChanged: (value) async {
                               if (value != null) {
                                 setState(() {
                                   selectedMonth = value;
                                   currentYear = value['year']!;
                                   currentMonth = value['month']!;
-                                  _loadData();
                                 });
+                                final authProvider = Provider.of<AuthProvider>(context, listen: false);
+                                if (authProvider.user != null) {
+                                  // Ladataan budjettidata vain, kun kuukausi vaihtuu
+                                  await budgetProvider.loadBudget(authProvider.user!.uid, currentYear, currentMonth);
+                                  await _loadData();
+                                }
                               }
                             },
                           ),

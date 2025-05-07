@@ -49,7 +49,7 @@ class BudgetCategoryList extends StatelessWidget {
           borderRadius: BorderRadius.circular(8),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.05),
+              color: Colors.black.withValues(alpha: 0.15),
               blurRadius: 4,
               offset: const Offset(0, 2),
             ),
@@ -70,7 +70,7 @@ class BudgetCategoryList extends StatelessWidget {
                       padding: const EdgeInsets.only(left: 8.0), // Sisennys viivan korvaamiseksi
                       child: Text(
                         subcategory, // Poistettu viiva ("  - $subcategory" -> "subcategory")
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.black54),
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.black54, fontSize: 14),
                       ),
                     ),
             ),
@@ -79,7 +79,7 @@ class BudgetCategoryList extends StatelessWidget {
                 if (!(isEditing && editingSubcategory == subcategory)) ...[
                   Text(
                     '${amount.toStringAsFixed(2)} €',
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.black54),
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.black54,fontSize: 12),
                   ),
                   IconButton(
                     icon: const Icon(Icons.edit, size: 20),

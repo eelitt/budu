@@ -1,4 +1,3 @@
-// lib/features/budget/screens/budget/budget_screen.dart
 import 'package:budu/core/app_router.dart';
 import 'package:budu/core/constants.dart';
 import 'package:budu/features/auth/providers/auth_provider.dart';
@@ -49,7 +48,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
         selectedMonth = availableMonths.first;
         currentYear = selectedMonth!['year']!;
         currentMonth = selectedMonth!['month']!;
-        await _loadBudget();
+        // Poistettu _loadBudget-kutsu, koska budjettidata on jo haettu LoginScreenissä
       }
       setState(() {});
     }
@@ -138,7 +137,6 @@ class _BudgetScreenState extends State<BudgetScreen> {
               return const Center(child: Text('Luo budjetti ensin!'));
             }
 
-            // Järjestä kategoriat aakkosjärjestykseen ja muunna tulos Widget-listoiksi
             final List<String> sortedCategories = categoryMapping.keys.toList()..sort();
 
             final List<Widget> categoryWidgets = [];
@@ -152,7 +150,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
 
             return SingleChildScrollView(
               child: Container(
-                color: Theme.of(context).scaffoldBackgroundColor, // Asetetaan taustaväri helmenvalkoiseksi
+                color: Theme.of(context).scaffoldBackgroundColor,
                 child: Padding(
                   padding: const EdgeInsets.all(16.0),
                   child: Column(

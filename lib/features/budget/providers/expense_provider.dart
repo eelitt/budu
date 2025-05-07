@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:budu/core/constants.dart';
 import 'package:budu/features/budget/providers/budget_provider.dart';
 import 'package:flutter/material.dart';
@@ -8,6 +9,7 @@ class ExpenseProvider with ChangeNotifier {
   List<ExpenseEvent> _expenses = [];
   bool _isLoadingMore = false;
   DocumentSnapshot? _lastDoc;
+  StreamSubscription? _expenseSubscription; // Lisätään kuuntelija tapahtumille
 
   List<ExpenseEvent> get expenses => _expenses;
   bool get isLoadingMore => _isLoadingMore;
@@ -27,22 +29,19 @@ class ExpenseProvider with ChangeNotifier {
   Map<String, double> getCategoryTotals() {
     final Map<String, double> totals = {};
 
-    // Haetaan yläkategoriat ja niiden alakategoriat categoryMapping-vakiosta
     final Map<String, String> reverseMapping = {};
     categoryMapping.forEach((mainCategory, subCategories) {
       for (var subCategory in subCategories) {
-        reverseMapping[subCategory] = mainCategory; // Alakategoria -> Yläkategoria
+        reverseMapping[subCategory] = mainCategory;
       }
     });
 
     for (var expense in _expenses.where((e) => e.type == EventType.expense)) {
       String categoryKey;
 
-      // Jos tapahtumalla on alakategoria ja se kuuluu yläkategoriaan
       if (expense.subcategory != null && reverseMapping.containsKey(expense.subcategory)) {
-        categoryKey = reverseMapping[expense.subcategory]!; // Yläkategoria (String)
+        categoryKey = reverseMapping[expense.subcategory]!;
       } else {
-        // Muuten käytetään tapahtuman yläkategoriaa
         categoryKey = expense.category;
       }
 
@@ -105,10 +104,48 @@ class ExpenseProvider with ChangeNotifier {
 
       _expenses.sort((a, b) => b.createdAt.compareTo(a.createdAt));
       notifyListeners();
+
+      // Asetetaan Firestore-kuuntelija reaaliaikaiseen päivitykseen
+      _listenToExpenses(userId);
     } catch (e) {
       print('Error loading all expenses: $e');
       rethrow;
     }
+  }
+
+  void _listenToExpenses(String userId) {
+    _expenseSubscription?.cancel();
+    _expenseSubscription = FirebaseFirestore.instance
+        .collection('budgets')
+        .doc(userId)
+        .collection('monthly_budgets')
+        .snapshots()
+        .listen((monthlyBudgetsSnapshot) async {
+      try {
+        _expenses.clear();
+        for (var monthlyBudgetDoc in monthlyBudgetsSnapshot.docs) {
+          final expensesSnapshot = await monthlyBudgetDoc.reference
+              .collection('expenses')
+              .orderBy('createdAt', descending: true)
+              .get(const GetOptions(source: Source.serverAndCache));
+          
+          final monthlyExpenses = expensesSnapshot.docs.map((doc) {
+            final data = doc.data();
+            data['id'] = doc.id;
+            return ExpenseEvent.fromMap(data);
+          }).toList();
+
+          _expenses.addAll(monthlyExpenses);
+        }
+
+        _expenses.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+        notifyListeners();
+      } catch (e) {
+        print('Error listening to expenses: $e');
+      }
+    }, onError: (e) {
+      print('Error listening to expenses: $e');
+    });
   }
 
   Future<void> loadMoreExpenses(String userId, int year, int month) async {
@@ -175,9 +212,7 @@ class ExpenseProvider with ChangeNotifier {
     try {
       final expense = _expenses.firstWhere((e) => e.id == expenseId);
       
-      // Jos tapahtuma on tulo-tapahtuma, vähennetään summa budjetin income-arvosta
       if (expense.type == EventType.income) {
-        // Haetaan budjetti Firestoresta
         final budgetDoc = await FirebaseFirestore.instance
             .collection('budgets')
             .doc(userId)
@@ -187,9 +222,8 @@ class ExpenseProvider with ChangeNotifier {
 
         if (budgetDoc.exists) {
           final currentIncome = (budgetDoc.data()!['income'] as num?)?.toDouble() ?? 0.0;
-          final updatedIncome = (currentIncome - expense.amount).clamp(0.0, double.infinity); // Varmistetaan, että income ei mene negatiiviseksi
+          final updatedIncome = (currentIncome - expense.amount).clamp(0.0, double.infinity);
 
-          // Päivitetään Firestore
           await FirebaseFirestore.instance
               .collection('budgets')
               .doc(userId)
@@ -197,7 +231,6 @@ class ExpenseProvider with ChangeNotifier {
               .doc('${expense.year}_${expense.month}')
               .update({'income': updatedIncome});
 
-          // Päivitetään BudgetProviderin paikallinen _budget-arvo
           if (budgetProvider.budget != null &&
               budgetProvider.budget!.year == expense.year &&
               budgetProvider.budget!.month == expense.month) {
@@ -207,7 +240,6 @@ class ExpenseProvider with ChangeNotifier {
         }
       }
 
-      // Poistetaan tapahtuma Firestoresta
       await FirebaseFirestore.instance
           .collection('budgets')
           .doc(userId)
@@ -217,7 +249,6 @@ class ExpenseProvider with ChangeNotifier {
           .doc(expenseId)
           .delete();
 
-      // Poistetaan tapahtuma paikallisesta listasta
       _expenses.removeWhere((expense) => expense.id == expenseId);
       notifyListeners();
     } catch (e) {
@@ -281,5 +312,11 @@ class ExpenseProvider with ChangeNotifier {
       print('Error deleting subcategory events: $e');
       throw Exception('Meno-tapahtumien poistaminen epäonnistui: $e');
     }
+  }
+
+  @override
+  void dispose() {
+    _expenseSubscription?.cancel();
+    super.dispose();
   }
 }

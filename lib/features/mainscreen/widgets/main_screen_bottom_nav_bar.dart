@@ -14,8 +14,8 @@ class MainScreenBottomNavigationBar extends StatelessWidget {
   Widget build(BuildContext context) {
     return BottomNavigationBar(
       type: BottomNavigationBarType.fixed,
-      selectedLabelStyle: const TextStyle(fontSize: 14),
-      unselectedLabelStyle: const TextStyle(fontSize: 14),
+      selectedLabelStyle: const TextStyle(fontSize: 12),
+      unselectedLabelStyle: const TextStyle(fontSize: 12),
       items: const [
         BottomNavigationBarItem(
           icon: Icon(Icons.edit),

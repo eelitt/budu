@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
 
-import 'package:flutter/material.dart';
-
 class MainScreenAppBar extends StatelessWidget implements PreferredSizeWidget {
   final String userFirstName;
   final bool nextMonthBudgetExists;
@@ -32,7 +30,7 @@ class MainScreenAppBar extends StatelessWidget implements PreferredSizeWidget {
           child: Center(
             child: Text(
               userFirstName,
-              style: const TextStyle(color: Colors.black), // Käyttäjän nimi mustaksi
+              style: const TextStyle(color: Colors.black, fontSize: 14), // Käyttäjän nimi mustaksi
             ),
           ),
         ),

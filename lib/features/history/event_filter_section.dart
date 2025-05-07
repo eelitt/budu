@@ -1,6 +1,6 @@
+import 'package:budu/features/budget/providers/budget_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:budu/features/budget/providers/budget_provider.dart';
 
 class EventFilterSection extends StatefulWidget {
   final List<String> availableMonths;
@@ -44,13 +44,13 @@ class _EventFilterSectionState extends State<EventFilterSection> {
       child: Card(
         elevation: 4,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        color: Colors.white, // Varmistetaan kortin taustaväri valkoiseksi
+        color: Colors.white,
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Lisätään "Historia"-otsikko kortin sisälle
+              // "Historia"-otsikko
               Text(
                 'Historia',
                 style: Theme.of(context).textTheme.headlineSmall?.copyWith(
@@ -63,14 +63,20 @@ class _EventFilterSectionState extends State<EventFilterSection> {
               DropdownButtonFormField<String>(
                 value: _selectedCategory,
                 isExpanded: true,
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   labelText: 'Kategoria',
-                  border: OutlineInputBorder(),
+                  labelStyle: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                        color: Theme.of(context).textTheme.bodyMedium?.color,
+                      ),
+                  border: const OutlineInputBorder(),
                 ),
                 items: categories.map((category) {
                   return DropdownMenuItem<String>(
                     value: category,
-                    child: Text(category),
+                    child: Text(
+                      category,
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
                   );
                 }).toList(),
                 onChanged: (value) {
@@ -85,14 +91,20 @@ class _EventFilterSectionState extends State<EventFilterSection> {
               DropdownButtonFormField<String>(
                 value: _selectedMonth,
                 isExpanded: true,
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   labelText: 'Kuukausi',
-                  border: OutlineInputBorder(),
+                  labelStyle: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                        color: Theme.of(context).textTheme.bodyMedium?.color,
+                      ),
+                  border: const OutlineInputBorder(),
                 ),
                 items: widget.availableMonths.map((month) {
                   return DropdownMenuItem<String>(
                     value: month,
-                    child: Text(month),
+                    child: Text(
+                      month,
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
                   );
                 }).toList(),
                 onChanged: (value) {
@@ -108,7 +120,10 @@ class _EventFilterSectionState extends State<EventFilterSection> {
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: [
                   ChoiceChip(
-                    label: const Text('Kaikki'),
+                    label: Text(
+                      'Kaikki',
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
                     selected: _selectedType == 'Kaikki',
                     onSelected: (selected) {
                       setState(() {
@@ -118,7 +133,10 @@ class _EventFilterSectionState extends State<EventFilterSection> {
                     },
                   ),
                   ChoiceChip(
-                    label: const Text('Tulot'),
+                    label: Text(
+                      'Tulot',
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
                     selected: _selectedType == 'Tulot',
                     onSelected: (selected) {
                       setState(() {
@@ -128,7 +146,10 @@ class _EventFilterSectionState extends State<EventFilterSection> {
                     },
                   ),
                   ChoiceChip(
-                    label: const Text('Menot'),
+                    label: Text(
+                      'Menot',
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
                     selected: _selectedType == 'Menot',
                     onSelected: (selected) {
                       setState(() {
@@ -144,10 +165,13 @@ class _EventFilterSectionState extends State<EventFilterSection> {
               // Hakukenttä
               TextField(
                 controller: _searchController,
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   labelText: 'Hae kuvauksesta',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.search),
+                  labelStyle: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                        color: Theme.of(context).textTheme.bodyMedium?.color,
+                      ),
+                  border: const OutlineInputBorder(),
+                  prefixIcon: const Icon(Icons.search),
                 ),
                 onChanged: (value) {
                   widget.onSearchQueryChanged(value);

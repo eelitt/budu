@@ -1,4 +1,4 @@
-import 'package:budu/add_event_dialog.dart';
+import 'package:budu/features/budget/event_dialog/add_event_dialog.dart';
 import 'package:budu/core/app_router.dart';
 import 'package:budu/features/account/account_settings.dart';
 import 'package:budu/features/auth/providers/auth_provider.dart';
