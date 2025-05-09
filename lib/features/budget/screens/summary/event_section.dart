@@ -47,7 +47,7 @@ class _EventsSectionState extends State<EventsSection> {
           tilePadding: EdgeInsets.zero,
           leading: const Padding(
             padding: EdgeInsets.only(left: 1),
-            child: Icon(Icons.event, color: Colors.blueGrey),
+            child: Icon(Icons.attach_money, color: Colors.blueGrey),
           ),
           title: Padding(
             padding: const EdgeInsets.only(left: 8),

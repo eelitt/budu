@@ -1,4 +1,4 @@
-import 'package:budu/core/app_router.dart';
+import 'package:budu/core/app_router/app_router.dart';
 import 'package:flutter/material.dart';
 
 class SkipButton extends StatelessWidget {

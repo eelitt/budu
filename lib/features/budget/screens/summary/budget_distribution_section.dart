@@ -132,7 +132,7 @@ class _BudgetDistributionSectionState extends State<BudgetDistributionSection> {
           tilePadding: EdgeInsets.zero,
           leading: const Padding(
             padding: EdgeInsets.only(left: 2),
-            child: Icon(Icons.bar_chart, color: Colors.blueGrey),
+            child: Icon(Icons.pie_chart_sharp, color: Colors.blueGrey),
           ),
           title: Padding(
             padding: const EdgeInsets.only(left: 8),

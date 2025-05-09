@@ -1,3 +1,4 @@
+import 'package:budu/core/app_router/app_router.dart';
 import 'package:budu/features/chatbot/providers/chatbot_provider.dart';
 import 'package:budu/features/chatbot/screens/chatbot/multiple_choice_buttons.dart';
 import 'package:budu/features/chatbot/screens/chatbot/skip_button.dart';
@@ -35,43 +36,43 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
     final chatbotProvider = Provider.of<ChatbotProvider>(context);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Budu - Chatbot')),
-      body: Material(
-        child: Column(
-          children: [
-            Expanded(
-              child: chat_ui.Chat(
-                messages: chatbotProvider.messages.reversed.map((msg) {
-                  return types.TextMessage(
-                    author: types.User(id: msg.isUser ? 'user' : 'bot'),
-                    id: UniqueKey().toString(),
-                    text: msg.text,
-                    createdAt: msg.createdAt.millisecondsSinceEpoch,
-                  );
-                }).toList(),
-                onSendPressed: (types.PartialText partialText) {
-                  print('ChatbotScreen: Käyttäjä vastasi: ${partialText.text}');
-                  chatbotProvider.handleUserResponse(partialText.text);
-                },
-                user: const types.User(id: 'user'),
-                theme: const chat_ui.DefaultChatTheme(
-                  inputBackgroundColor: Colors.grey,
-                  primaryColor: Colors.blueGrey,
-                ),
-                customBottomWidget: chatbotProvider.isMultipleChoice
-                    ? MultipleChoiceButtons(chatbotProvider: chatbotProvider)
-                    : Material(
-                        color: Colors.grey[200],
-                        child: TextFieldWithNumberKeyboard(
-                          key: ValueKey(chatbotProvider.step),
+        appBar: AppBar(title: const Text('Budu - Chatbot')),
+        body: Material(
+          child: Column(
+            children: [
+              Expanded(
+                child: chat_ui.Chat(
+                  messages: chatbotProvider.messages.reversed.map((msg) {
+                    return types.TextMessage(
+                      author: types.User(id: msg.isUser ? 'user' : 'bot'),
+                      id: UniqueKey().toString(),
+                      text: msg.text,
+                      createdAt: msg.createdAt.millisecondsSinceEpoch,
+                    );
+                  }).toList(),
+                  onSendPressed: (types.PartialText partialText) {
+                    print('ChatbotScreen: Käyttäjä vastasi: ${partialText.text}');
+                    chatbotProvider.handleUserResponse(partialText.text);
+                  },
+                  user: const types.User(id: 'user'),
+                  theme: const chat_ui.DefaultChatTheme(
+                    inputBackgroundColor: Colors.grey,
+                    primaryColor: Colors.blueGrey,
+                  ),
+                  customBottomWidget: chatbotProvider.isMultipleChoice
+                      ? MultipleChoiceButtons(chatbotProvider: chatbotProvider)
+                      : Material(
+                          color: Colors.grey[200],
+                          child: TextFieldWithNumberKeyboard(
+                            key: ValueKey(chatbotProvider.step),
+                          ),
                         ),
-                      ),
+                ),
               ),
-            ),
-            SkipButton(isCompleted: chatbotProvider.isCompleted),
-          ],
+              SkipButton(isCompleted: chatbotProvider.isCompleted),
+            ],
+          ),
         ),
-      ),
-    );
+      );
   }
 }

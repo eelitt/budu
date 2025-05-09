@@ -21,7 +21,9 @@ class BudgetCategorySection extends StatefulWidget {
 class _BudgetCategorySectionState extends State<BudgetCategorySection> {
   bool _isAdding = false;
   bool _isEditing = false;
+  bool _isSaving = false; // Uusi tilamuuttuja tallennuksen tilan seuraamiseen
   String? _editingSubcategory;
+  String? _newlyAddedSubcategory; // Uusi muuttuja juuri lisätyn alakategorian seuraamiseen
   final TextEditingController _subcategoryController = TextEditingController();
   final Map<String, TextEditingController> _nameControllers = {};
   final Map<String, TextEditingController> _amountControllers = {};
@@ -29,16 +31,44 @@ class _BudgetCategorySectionState extends State<BudgetCategorySection> {
   final ExpansionTileController _expansionController = ExpansionTileController();
   final GlobalKey _expansionTileKey = GlobalKey();
   final BudgetCategoryService _service = BudgetCategoryService();
+  ValueNotifier<bool> _isExpanded = ValueNotifier<bool>(false);
+
+  @override
+  void initState() {
+    super.initState();
+    _loadExpansionState();
+  }
 
   @override
   void dispose() {
     _subcategoryController.dispose();
     _nameControllers.values.forEach((controller) => controller.dispose());
     _amountControllers.values.forEach((controller) => controller.dispose());
+    _isExpanded.dispose();
     super.dispose();
   }
 
+  Future<void> _loadExpansionState() async {
+    final prefs = await SharedPreferences.getInstance();
+    final isExpanded = prefs.getBool('expansion_${widget.categoryName}') ?? false;
+    _isExpanded.value = isExpanded;
+    if (isExpanded) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _expansionController.expand();
+        }
+      });
+    }
+  }
+
+  Future<void> _saveExpansionState(bool expanded) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('expansion_${widget.categoryName}', expanded);
+  }
+
   void _startAdding() {
+    if (_isAdding) return; // Estetään useiden alakategorioiden samanaikainen lisääminen
+
     final budgetProvider = Provider.of<BudgetProvider>(context, listen: false);
     final expenses = budgetProvider.budget?.expenses[widget.categoryName] ?? {};
     final error = _service.checkSubcategoryLimit(expenses);
@@ -53,9 +83,14 @@ class _BudgetCategorySectionState extends State<BudgetCategorySection> {
     setState(() {
       _isAdding = true;
     });
+    _isExpanded.value = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
-        _expansionController.expand();
+        Future.delayed(const Duration(milliseconds: 100), () {
+          if (mounted) {
+            _expansionController.expand();
+          }
+        });
       }
     });
   }
@@ -69,6 +104,8 @@ class _BudgetCategorySectionState extends State<BudgetCategorySection> {
   }
 
   void _startEditing(String subcategory) {
+    if (_isEditing) return; // Estetään useiden muokkausten samanaikainen käynnistäminen
+
     final budgetProvider = Provider.of<BudgetProvider>(context, listen: false);
     final expenses = budgetProvider.budget?.expenses[widget.categoryName] ?? {};
     final amount = expenses[subcategory] ?? 0.0;
@@ -79,9 +116,14 @@ class _BudgetCategorySectionState extends State<BudgetCategorySection> {
       _nameControllers[subcategory] = TextEditingController(text: subcategory);
       _amountControllers[subcategory] = TextEditingController(text: amount.toStringAsFixed(2));
     });
+    _isExpanded.value = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
-        _expansionController.expand();
+        Future.delayed(const Duration(milliseconds: 100), () {
+          if (mounted) {
+            _expansionController.expand();
+          }
+        });
       }
     });
   }
@@ -112,6 +154,9 @@ class _BudgetCategorySectionState extends State<BudgetCategorySection> {
 
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     if (authProvider.user != null) {
+      setState(() {
+        _isSaving = true; // Asetetaan tallennustila
+      });
       final now = DateTime.now();
       await _service.addSubcategory(
         context: context,
@@ -124,9 +169,28 @@ class _BudgetCategorySectionState extends State<BudgetCategorySection> {
       );
       setState(() {
         _isAdding = false;
+        _isSaving = false; // Poistetaan tallennustila
         _errorMessage = null;
         _subcategoryController.clear();
+        _newlyAddedSubcategory = subcategory; // Tallennetaan juuri lisätty alakategoria
       });
+      _isExpanded.value = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          Future.delayed(const Duration(milliseconds: 100), () {
+            if (mounted) {
+              _expansionController.expand();
+            }
+          });
+        }
+      });
+      // Näytä vahvistusviesti
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Alakategoria "$subcategory" lisätty onnistuneesti!'),
+          duration: const Duration(seconds: 2),
+        ),
+      );
     }
   }
 
@@ -156,6 +220,9 @@ class _BudgetCategorySectionState extends State<BudgetCategorySection> {
     final amount = double.parse(amountText);
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     if (authProvider.user != null) {
+      setState(() {
+        _isSaving = true; // Asetetaan tallennustila
+      });
       final now = DateTime.now();
       await _service.updateSubcategory(
         context: context,
@@ -169,10 +236,21 @@ class _BudgetCategorySectionState extends State<BudgetCategorySection> {
       );
       setState(() {
         _isEditing = false;
+        _isSaving = false; // Poistetaan tallennustila
         _editingSubcategory = null;
         _errorMessage = null;
         _nameControllers.remove(oldSubcategory);
         _amountControllers.remove(oldSubcategory);
+      });
+      _isExpanded.value = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          Future.delayed(const Duration(milliseconds: 100), () {
+            if (mounted) {
+              _expansionController.expand();
+            }
+          });
+        }
       });
     }
   }
@@ -204,7 +282,7 @@ class _BudgetCategorySectionState extends State<BudgetCategorySection> {
 
   @override
   Widget build(BuildContext context) {
-    final budgetProvider = Provider.of<BudgetProvider>(context);
+    final budgetProvider = Provider.of<BudgetProvider>(context, listen: false);
     final budget = budgetProvider.budget;
 
     final expenses = budget?.expenses[widget.categoryName] ?? {};
@@ -228,95 +306,107 @@ class _BudgetCategorySectionState extends State<BudgetCategorySection> {
       ),
       child: Theme(
         data: Theme.of(context).copyWith(),
-        child: ExpansionTile(
-          key: _expansionTileKey,
-          controller: _expansionController,
-          tilePadding: const EdgeInsets.only(left: 8, right: 16, top: 8, bottom: 8), // Vähennetty vasen marginaali (16 -> 8)
-          childrenPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          shape: const Border(),
-          collapsedShape: const Border(),
-          title: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Row(
-                mainAxisSize: MainAxisSize.min,
+        child: ValueListenableBuilder<bool>(
+          valueListenable: _isExpanded,
+          builder: (context, isExpanded, child) {
+            return ExpansionTile(
+              key: _expansionTileKey,
+              controller: _expansionController,
+              initiallyExpanded: isExpanded,
+              onExpansionChanged: (expanded) {
+                _isExpanded.value = expanded;
+                _saveExpansionState(expanded);
+              },
+              tilePadding: const EdgeInsets.only(left: 8, right: 16, top: 8, bottom: 8),
+              childrenPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              shape: const Border(),
+              collapsedShape: const Border(),
+              title: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Icon(
-                    getCategoryIcon(widget.categoryName),
-                    color: Colors.blueGrey,
-                    size: 20,
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        getCategoryIcon(widget.categoryName),
+                        color: Colors.blueGrey,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 8),
+                      Flexible(
+                        child: Text(
+                          widget.categoryName,
+                          style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(width: 8),
-                  Flexible(
-                    child: Text(
-                      widget.categoryName,
-                      style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ],
-              ),
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.add, size: 18),
-                    onPressed: _startAdding,
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.delete, color: Colors.red, size: 16),
-                    onPressed: () async {
-                      final shouldShowDialog = await _shouldShowDeleteDialog();
-                      if (!shouldShowDialog) {
-                        await _deleteCategory();
-                        return;
-                      }
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.add, size: 18),
+                        onPressed: _startAdding,
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.delete, color: Colors.red, size: 16),
+                        onPressed: () async {
+                          final shouldShowDialog = await _shouldShowDeleteDialog();
+                          if (!shouldShowDialog) {
+                            await _deleteCategory();
+                            return;
+                          }
 
-                      final result = await showDeleteConfirmationDialog(
-                        context: context,
-                        isLastBudget: false,
-                        customMessage: 'Haluatko varmasti poistaa kategorian "${widget.categoryName}" ja kaikki sen alakategoriat? Kategoria poistetaan budjetistasi, mutta voit lisätä sen takaisin myöhemmin.',
-                        onDontShowAgainChanged: (dontShowAgain) async {
-                          await _setShowDeleteDialog(!dontShowAgain);
+                          final result = await showDeleteConfirmationDialog(
+                            context: context,
+                            isLastBudget: false,
+                            customMessage: 'Haluatko varmasti poistaa kategorian "${widget.categoryName}" ja kaikki sen alakategoriat? Kategoria poistetaan budjetistasi, mutta voit lisätä sen takaisin myöhemmin.',
+                            onDontShowAgainChanged: (dontShowAgain) async {
+                              await _setShowDeleteDialog(!dontShowAgain);
+                            },
+                          );
+
+                          if (result == true) {
+                            await _deleteCategory();
+                          }
                         },
-                      );
-
-                      if (result == true) {
-                        await _deleteCategory();
-                      }
-                    },
-                    tooltip: 'Poista kategoria',
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
+                        tooltip: 'Poista kategoria',
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                      ),
+                    ],
                   ),
                 ],
               ),
-            ],
-          ),
-          children: [
-            if (_isAdding)
-              AddSubcategoryForm(
-                controller: _subcategoryController,
-                errorMessage: _errorMessage,
-                onAdd: _addSubcategory,
-                onCancel: _cancelAdding,
-              ),
-            BudgetCategoryList(
-              categoryName: widget.categoryName,
-              displayedExpenses: displayedExpenses,
-              isEditing: _isEditing,
-              editingSubcategory: _editingSubcategory,
-              nameControllers: _nameControllers,
-              amountControllers: _amountControllers,
-              errorMessage: _errorMessage,
-              service: _service,
-              onCancelEditing: _cancelEditing,
-              onStartEditing: _startEditing,
-              onUpdateSubcategory: _updateSubcategory,
-            ),
-          ],
+              children: [
+                if (_isAdding)
+                  AddSubcategoryForm(
+                    controller: _subcategoryController,
+                    errorMessage: _errorMessage,
+                    onAdd: _addSubcategory,
+                    onCancel: _cancelAdding,
+                  ),
+                BudgetCategoryList(
+                  categoryName: widget.categoryName,
+                  displayedExpenses: displayedExpenses,
+                  isEditing: _isEditing,
+                  isSaving: _isSaving, // Välitetään tallennustila
+                  editingSubcategory: _editingSubcategory,
+                  newlyAddedSubcategory: _newlyAddedSubcategory,
+                  nameControllers: _nameControllers,
+                  amountControllers: _amountControllers,
+                  errorMessage: _errorMessage,
+                  service: _service,
+                  onCancelEditing: _cancelEditing,
+                  onStartEditing: _startEditing,
+                  onUpdateSubcategory: _updateSubcategory,
+                ),
+              ],
+            );
+          },
         ),
       ),
     );

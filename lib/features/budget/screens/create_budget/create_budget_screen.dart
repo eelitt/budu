@@ -1,3 +1,4 @@
+import 'package:budu/core/app_router/app_router.dart';
 import 'package:budu/features/auth/providers/auth_provider.dart';
 import 'package:budu/features/budget/models/budget_model.dart';
 import 'package:budu/features/budget/providers/budget_provider.dart';
@@ -75,85 +76,82 @@ class _CreateBudgetScreenState extends State<CreateBudgetScreen> {
     final userId = authProvider.user?.uid;
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text('Luo budjetti (${widget.newMonth}/${widget.newYear})'),
-        leading: userId != null
-            ? FutureBuilder<List<Map<String, int>>>(
-                future: budgetProvider.getAvailableBudgetMonths(userId),
-                builder: (context, snapshot) {
-                  if (snapshot.connectionState == ConnectionState.waiting) {
-                    return const Material(
-                      child: Center(child: CircularProgressIndicator()),
+        appBar: AppBar(
+          title: Text('Luo budjetti (${widget.newMonth}/${widget.newYear})'),
+          leading: userId != null
+              ? FutureBuilder<List<Map<String, int>>>(
+                  future: budgetProvider.getAvailableBudgetMonths(userId),
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return const Material(
+                        child: Center(child: CircularProgressIndicator()),
+                      );
+                    }
+                    final hasBudgets = snapshot.hasData && snapshot.data!.isNotEmpty;
+                    return IconButton(
+                      icon: const Icon(Icons.arrow_back),
+                      onPressed: () {
+                        if (hasBudgets) {
+                          Navigator.pushNamed(
+                            context,
+                            AppRouter.mainRoute,
+                            arguments: {'index': 0},
+                          );
+                        } else {
+                          Navigator.pushNamed(
+                            context,
+                            AppRouter.chatbotRoute,
+                          );
+                        }
+                      },
                     );
-                  }
-                  final hasBudgets = snapshot.hasData && snapshot.data!.isNotEmpty;
-                  return IconButton(
-                    icon: const Icon(Icons.arrow_back),
-                    onPressed: () {
-                      if (hasBudgets) {
-                        Navigator.pushNamedAndRemoveUntil(
-                          context,
-                          '/main',
-                          (route) => false,
-                          arguments: {'index': 0}, // Asetetaan MainScreen-näkymän initialIndex arvoon 0 (BudgetScreen)
-                        );
-                      } else {
-                        Navigator.pushNamedAndRemoveUntil(
-                          context,
-                          '/chatbot',
-                          (route) => false,
-                        );
-                      }
-                    },
-                  );
-                },
-              )
-            : IconButton(
-                icon: const Icon(Icons.arrow_back),
-                onPressed: () {
-                  Navigator.pushNamedAndRemoveUntil(
-                    context,
-                    '/chatbot',
-                    (route) => false,
-                  );
-                },
+                  },
+                )
+              : IconButton(
+                  icon: const Icon(Icons.arrow_back),
+                  onPressed: () {
+                    Navigator.pushNamed(
+                      context,
+                      AppRouter.chatbotRoute,
+                    );
+                  },
+                ),
+        ),
+        body: SingleChildScrollView(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              IncomeSection(incomeController: _incomeController),
+              const SizedBox(height: 24),
+              ExpensesSection(
+                expenseControllers: _expenseControllers,
+                onUpdate: () => setState(() {}),
               ),
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            IncomeSection(incomeController: _incomeController),
-            const SizedBox(height: 24),
-            ExpensesSection(
-              expenseControllers: _expenseControllers,
-              onUpdate: () => setState(() {}),
-            ),
-            if (_errorMessage != null) ...[
-              const SizedBox(height: 16),
-              Text(
-                _errorMessage!,
-                style: const TextStyle(color: Colors.red, fontSize: 14),
+              if (_errorMessage != null) ...[
+                const SizedBox(height: 16),
+                Text(
+                  _errorMessage!,
+                  style: const TextStyle(color: Colors.red, fontSize: 14),
+                ),
+              ],
+              const SizedBox(height: 24),
+              SummarySection(
+                totalIncome: _calculator.totalIncome,
+                totalExpenses: _calculator.totalExpenses,
+              ),
+              const SizedBox(height: 24),
+              SaveButton(
+                onPressed: () async {
+                  await _saver.createBudget();
+                  setState(() {
+                    _errorMessage = _saver.errorMessage;
+                  });
+                },
               ),
             ],
-            const SizedBox(height: 24),
-            SummarySection(
-              totalIncome: _calculator.totalIncome,
-              totalExpenses: _calculator.totalExpenses,
-            ),
-            const SizedBox(height: 24),
-            SaveButton(
-              onPressed: () async {
-                await _saver.createBudget();
-                setState(() {
-                  _errorMessage = _saver.errorMessage;
-                });
-              },
-            ),
-          ],
+          ),
         ),
-      ),
-    );
+      );
   }
 }

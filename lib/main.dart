@@ -1,3 +1,4 @@
+import 'package:budu/core/app_router/app_router.dart';
 import 'package:budu/core/theme.dart';
 import 'package:budu/features/budget/providers/expense_provider.dart';
 import 'package:budu/features/update/providers/update_provider.dart';
@@ -5,7 +6,6 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'core/app_router.dart';
 import 'features/auth/providers/auth_provider.dart';
 import 'features/budget/providers/budget_provider.dart';
 import 'features/notification/providers/notification_provider.dart';
@@ -38,7 +38,7 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => AuthProvider()..initialize()),
         ChangeNotifierProvider(create: (_) => BudgetProvider()),
         ChangeNotifierProvider(create: (_) => ExpenseProvider()),
-        ChangeNotifierProvider(create: (_) => NotificationProvider()), 
+        ChangeNotifierProvider(create: (_) => NotificationProvider()),
         ChangeNotifierProvider(create: (_) => UpdateProvider()),
       ],
       child: MaterialApp(
@@ -46,7 +46,14 @@ class MyApp extends StatelessWidget {
         theme: AppTheme.lightTheme,
         initialRoute: AppRouter.loginRoute,
         onGenerateRoute: AppRouter.generateRoute,
-        routes: AppRouter.routes,
+        onUnknownRoute: (settings) => MaterialPageRoute(
+          builder: (_) => const Scaffold(
+            body: Center(child: Text('404 - Sivua ei löydy')),
+          ),
+        ),
+        navigatorObservers: [
+          AppRouter.routeObserver,
+        ],
       ),
     );
   }

@@ -65,10 +65,6 @@ class _BudgetTrackingSectionState extends State<BudgetTrackingSection> {
           : directCategoryBudget;
       final categorySpent = categoryTotals[categoryName] ?? 0.0;
 
-      if (categoryBudget == 0.0 && categorySpent == 0.0) {
-        return const SizedBox.shrink();
-      }
-
       return CategoryExpansionTile(
         categoryName: categoryName,
         categoryBudget: categoryBudget,
@@ -76,6 +72,9 @@ class _BudgetTrackingSectionState extends State<BudgetTrackingSection> {
         categoryExpenses: categoryExpenses,
       );
     }).toList();
+
+    // Lasketaan kategorioiden kokonaismäärä (mapped + unmapped)
+    final totalCategories = categoryWidgets.length + (unmappedExpenses.isNotEmpty ? 1 : 0);
 
     return Container(
       decoration: BoxDecoration(
@@ -99,29 +98,44 @@ class _BudgetTrackingSectionState extends State<BudgetTrackingSection> {
               _isExpanded = expanded;
             });
           },
-          tilePadding: EdgeInsets.zero, // Poistetaan oletusmarginaalit
+          tilePadding: EdgeInsets.zero,
           leading: const Padding(
-            padding: EdgeInsets.only(left: 4), // Siirretään ikonia lähemmäs vasenta reunaa
-            child: Icon(Icons.pie_chart, color: Colors.blueGrey),
+            padding: EdgeInsets.only(left: 4),
+            child: Icon(Icons.assignment_outlined, color: Colors.blueGrey),
           ),
           title: Padding(
-            padding: const EdgeInsets.only(left: 8), // Lisätään pieni marginaali otsikon vasempaan reunaan
-            child: Text(
-              'Budjettiseuranta',
-              style: Theme.of(context).textTheme.headlineSmall,
+            padding: const EdgeInsets.only(left: 8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Budjettiseuranta',
+                  style: Theme.of(context).textTheme.headlineSmall,
+                ),
+                if (totalCategories > 0) // Näytetään vain, jos kategorioita on
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: Text(
+                      '$totalCategories kategoria${totalCategories == 1 ? '' : 'a'}',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: Colors.black54,
+                            fontSize: 12,
+                          ),
+                    ),
+                  ),
+              ],
             ),
           ),
           trailing: const Padding(
-            padding: EdgeInsets.only(right: 10), // Siirretään laajennus/supistus-ikonia lähemmäs oikeaa reunaa
-            child: Icon(Icons.expand_more), // Flutter lisää tämän automaattisesti, mutta varmistetaan oikea ikoni
+            padding: EdgeInsets.only(right: 10),
+            child: Icon(Icons.expand_more),
           ),
           children: [
             Padding(
-              padding: const EdgeInsets.all(10), // Siirretään padding tänne, jotta se vaikuttaa vain laajennettuun sisältöön
+              padding: const EdgeInsets.all(10),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                 
                   ...categoryWidgets,
                   if (unmappedExpenses.isNotEmpty)
                     CategoryExpansionTile(

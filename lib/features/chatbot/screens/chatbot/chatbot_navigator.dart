@@ -1,4 +1,4 @@
-import 'package:budu/core/app_router.dart';
+import 'package:budu/core/app_router/app_router.dart';
 import 'package:budu/features/auth/providers/auth_provider.dart';
 import 'package:budu/features/chatbot/providers/chatbot_provider.dart';
 import 'package:flutter/material.dart';

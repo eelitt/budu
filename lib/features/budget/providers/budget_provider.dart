@@ -6,20 +6,20 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 class BudgetProvider with ChangeNotifier {
   BudgetModel? _budget;
-  BudgetModel? _lastSavedBudget; // Tallennetaan viimeisin Firestoreen tallennettu budjetti
+  BudgetModel? _lastSavedBudget;
   final BudgetRepository _budgetRepository = BudgetRepository();
   StreamSubscription? _budgetSubscription;
   Timer? _debounceTimer;
   bool _hasPendingChanges = false;
+  bool _shouldNotifyListeners = true; // Uusi muuttuja notifyListeners-kutsujen hallintaan
 
   BudgetModel? get budget => _budget;
 
   Future<void> loadBudget(String userId, int year, int month) async {
     try {
       _budget = await _budgetRepository.getBudget(userId, year, month);
-      // Varmistetaan, että budjetti asetetaan vain, jos se on varsinainen budjetti
       if (_budget != null && !_budget!.isPlaceholder) {
-        _lastSavedBudget = _budget?.copy(); // Tallennetaan kopio ladatusta budjetista
+        _lastSavedBudget = _budget?.copy();
         _listenToBudget(userId, year, month);
       } else {
         _budget = null;
@@ -35,7 +35,6 @@ class BudgetProvider with ChangeNotifier {
   Future<bool> budgetExists(String userId, int year, int month) async {
     try {
       final budget = await _budgetRepository.getBudget(userId, year, month);
-      // Budjetti katsotaan olevan olemassa vain, jos se on varsinainen budjetti ja ei ole placeholder
       return budget != null && !budget.isPlaceholder;
     } catch (e) {
       print('Error checking budget existence: $e');
@@ -54,9 +53,8 @@ class BudgetProvider with ChangeNotifier {
       final List<Map<String, int>> months = [];
       for (var doc in snapshot.docs) {
         final data = doc.data();
-        // Tarkistetaan, että dokumentti on varsinainen budjetti ja ei ole placeholder
-        if (data.containsKey('income') && 
-            data.containsKey('expenses') && 
+        if (data.containsKey('income') &&
+            data.containsKey('expenses') &&
             (data['isPlaceholder'] == null || data['isPlaceholder'] == false)) {
           final parts = doc.id.split('_');
           months.add({
@@ -65,7 +63,6 @@ class BudgetProvider with ChangeNotifier {
           });
         }
       }
-      // Järjestä kuukaudet laskevaan järjestykseen (uusin ensin)
       months.sort((a, b) {
         int yearCompare = b['year']!.compareTo(a['year']!);
         if (yearCompare != 0) return yearCompare;
@@ -86,7 +83,7 @@ class BudgetProvider with ChangeNotifier {
         createdAt: DateTime.now(),
         year: newYear,
         month: newMonth,
-        isPlaceholder: false, // Käyttäjän luoma budjetti
+        isPlaceholder: false,
       );
       await _budgetRepository.saveBudget(userId, newBudget);
       print('New budget created for $newYear/$newMonth');
@@ -150,8 +147,7 @@ class BudgetProvider with ChangeNotifier {
         _budget!.expenses[category] = {};
       }
       _budget!.expenses[category]![subcategory] = amount;
-      _scheduleSave(userId);
-      notifyListeners();
+      _scheduleSave(userId, notify: false); // Estetään notifyListeners tässä vaiheessa
     } catch (e) {
       print('Error adding subcategory: $e');
       rethrow;
@@ -186,10 +182,9 @@ class BudgetProvider with ChangeNotifier {
         .listen((doc) {
       if (doc.exists && doc.data() != null && doc.data()!.containsKey('income')) {
         final budget = BudgetModel.fromMap(doc.data() as Map<String, dynamic>);
-        // Päivitetään _budget vain, jos budjetti ei ole placeholder ja se eroaa nykyisestä budjetista
         if (!budget.isPlaceholder && budget.toString() != _budget?.toString()) {
           _budget = budget;
-          _lastSavedBudget = budget.copy(); // Päivitetään viimeisin tallennettu budjetti
+          _lastSavedBudget = budget.copy();
           print('Budget updated from Firestore: ${_budget!.income}');
           notifyListeners();
         }
@@ -206,13 +201,14 @@ class BudgetProvider with ChangeNotifier {
     });
   }
 
-  void _scheduleSave(String userId) {
+  void _scheduleSave(String userId, {bool notify = true}) {
     _hasPendingChanges = true;
     _debounceTimer?.cancel();
+    _shouldNotifyListeners = notify; // Asetetaan, halutaanko notifyListeners
     _debounceTimer = Timer(const Duration(seconds: 1), () async {
       if (_hasPendingChanges && _budget != null && _budget.toString() != _lastSavedBudget?.toString()) {
         await saveBudget(userId, _budget!);
-        _lastSavedBudget = _budget!.copy(); // Päivitetään viimeisin tallennettu budjetti
+        _lastSavedBudget = _budget!.copy();
         _hasPendingChanges = false;
       }
     });
@@ -220,19 +216,20 @@ class BudgetProvider with ChangeNotifier {
 
   Future<void> saveBudget(String userId, BudgetModel budget) async {
     try {
-      // Varmistetaan, että tallennettava budjetti ei ole placeholder
       final updatedBudget = BudgetModel(
         income: budget.income,
         expenses: budget.expenses,
         createdAt: budget.createdAt,
         year: budget.year,
         month: budget.month,
-        isPlaceholder: false, // Käyttäjän luoma budjetti
+        isPlaceholder: false,
       );
       await _budgetRepository.saveBudget(userId, updatedBudget);
       _budget = updatedBudget;
       print('Budget saved: ${_budget!.income}');
-      notifyListeners();
+      if (_shouldNotifyListeners) {
+        notifyListeners();
+      }
     } catch (e) {
       print('Error saving budget: $e');
       rethrow;
@@ -245,7 +242,7 @@ class BudgetProvider with ChangeNotifier {
       if (!_budget!.expenses.containsKey(category)) {
         _budget!.expenses[category] = {};
       }
-      _budget!.expenses[category]!['default'] = amount; // Oletus-alakategoria
+      _budget!.expenses[category]!['default'] = amount;
       _scheduleSave(userId);
     } catch (e) {
       print('Error updating expense: $e');
@@ -289,29 +286,25 @@ class BudgetProvider with ChangeNotifier {
     required double amount,
   }) async {
     try {
-      // Tarkistetaan, onko budjettia olemassa tapahtuman määrittämälle kuukaudelle
       final exists = await budgetExists(userId, year, month);
       if (!exists) {
-        // Jos budjettia ei ole, luodaan placeholder-budjetti
         final newBudget = BudgetModel(
           income: 0.0,
           expenses: {},
           createdAt: DateTime.now(),
           year: year,
           month: month,
-          isPlaceholder: true, // Merkitään placeholderiksi
+          isPlaceholder: true,
         );
         await _budgetRepository.saveBudget(userId, newBudget);
       }
 
-      // Ladataan budjetti tapahtuman määrittämälle kuukaudelle
       final budget = await _budgetRepository.getBudget(userId, year, month);
       if (budget == null) {
         print('Cannot add to income: Failed to load budget for $year/$month');
         return;
       }
 
-      // Päivitetään income-arvo Firestoressa
       final updatedIncome = (budget.income) + amount;
       await FirebaseFirestore.instance
           .collection('budgets')
@@ -320,7 +313,6 @@ class BudgetProvider with ChangeNotifier {
           .doc('${year}_$month')
           .update({'income': updatedIncome});
 
-      // Päivitetään paikallinen _budget, jos se vastaa tapahtuman kuukautta
       if (_budget != null && _budget!.year == year && _budget!.month == month) {
         _budget!.income = updatedIncome;
       }

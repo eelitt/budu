@@ -1,4 +1,3 @@
-// lib/features/budget/screens/budget/widgets/budget_category_list.dart
 import 'package:budu/features/auth/providers/auth_provider.dart';
 import 'package:budu/features/budget/screens/budget/services/budget_category_service.dart';
 import 'package:budu/features/budget/screens/budget/utils/budget_category_dialogs.dart';
@@ -11,7 +10,9 @@ class BudgetCategoryList extends StatelessWidget {
   final String categoryName;
   final Map<String, double> displayedExpenses;
   final bool isEditing;
+  final bool isSaving; // Uusi parametri tallennustilan seuraamiseen
   final String? editingSubcategory;
+  final String? newlyAddedSubcategory;
   final Map<String, TextEditingController> nameControllers;
   final Map<String, TextEditingController> amountControllers;
   final String? errorMessage;
@@ -25,7 +26,9 @@ class BudgetCategoryList extends StatelessWidget {
     required this.categoryName,
     required this.displayedExpenses,
     required this.isEditing,
+    required this.isSaving,
     required this.editingSubcategory,
+    required this.newlyAddedSubcategory,
     required this.nameControllers,
     required this.amountControllers,
     required this.errorMessage,
@@ -41,11 +44,15 @@ class BudgetCategoryList extends StatelessWidget {
     final List<Widget> subcategoryWidgets = entries.map((entry) {
       final subcategory = entry.key;
       final amount = entry.value;
-      return Container(
+      final isNewlyAdded = subcategory == newlyAddedSubcategory;
+      final isCurrentlySaving = isSaving && (subcategory == newlyAddedSubcategory || subcategory == editingSubcategory);
+
+      return AnimatedContainer(
+        duration: const Duration(seconds: 2),
         margin: const EdgeInsets.symmetric(vertical: 4.0),
         padding: const EdgeInsets.all(8.0),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: isNewlyAdded ? Colors.blueGrey[50] : Colors.white,
           borderRadius: BorderRadius.circular(8),
           boxShadow: [
             BoxShadow(
@@ -67,9 +74,9 @@ class BudgetCategoryList extends StatelessWidget {
                       onCancel: onCancelEditing,
                     )
                   : Padding(
-                      padding: const EdgeInsets.only(left: 8.0), // Sisennys viivan korvaamiseksi
+                      padding: const EdgeInsets.only(left: 8.0),
                       child: Text(
-                        subcategory, // Poistettu viiva ("  - $subcategory" -> "subcategory")
+                        subcategory,
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.black54, fontSize: 14),
                       ),
                     ),
@@ -77,10 +84,20 @@ class BudgetCategoryList extends StatelessWidget {
             Row(
               children: [
                 if (!(isEditing && editingSubcategory == subcategory)) ...[
-                  Text(
-                    '${amount.toStringAsFixed(2)} €',
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.black54,fontSize: 12),
-                  ),
+                  if (isCurrentlySaving)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 8.0),
+                      child: SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                    )
+                  else
+                    Text(
+                      '${amount.toStringAsFixed(2)} €',
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.black54, fontSize: 12),
+                    ),
                   IconButton(
                     icon: const Icon(Icons.edit, size: 20),
                     onPressed: () => onStartEditing(subcategory),

@@ -1,3 +1,4 @@
+import 'package:budu/core/app_router/app_router.dart';
 import 'package:budu/features/budget/models/expense_event.dart';
 import 'package:budu/features/budget/providers/expense_provider.dart';
 import 'package:budu/features/history/event_filter_section.dart';
@@ -22,7 +23,6 @@ class _HistoryScreenState extends State<HistoryScreen> {
   void initState() {
     super.initState();
     _selectedMonth = 'Kaikki kuukaudet';
-
   }
 
   @override
@@ -56,42 +56,42 @@ class _HistoryScreenState extends State<HistoryScreen> {
     }).toList();
 
     return Column(
-      children: [
-        EventFilterSection(
-          availableMonths: monthOptions,
-          onCategoryChanged: (category) {
-            setState(() {
-              _selectedCategory = category;
-            });
-          },
-          onTypeChanged: (type) {
-            setState(() {
-              _selectedType = type;
-            });
-          },
-          onMonthChanged: (month) {
-            setState(() {
-              _selectedMonth = month;
-            });
-          },
-          onSearchQueryChanged: (query) {
-            setState(() {
-              _searchQuery = query;
-            });
-          },
-        ),
-        Expanded(
-          child: filteredEvents.isEmpty
-              ? const Center(child: Text('Ei tapahtumia'))
-              : ListView.builder(
-                  padding: const EdgeInsets.all(16),
-                  itemCount: filteredEvents.length,
-                  itemBuilder: (context, index) {
-                    return EventListItem(event: filteredEvents[index]);
-                  },
-                ),
-        ),
-      ],
-    );
+        children: [
+          EventFilterSection(
+            availableMonths: monthOptions,
+            onCategoryChanged: (category) {
+              setState(() {
+                _selectedCategory = category;
+              });
+            },
+            onTypeChanged: (type) {
+              setState(() {
+                _selectedType = type;
+              });
+            },
+            onMonthChanged: (month) {
+              setState(() {
+                _selectedMonth = month;
+              });
+            },
+            onSearchQueryChanged: (query) {
+              setState(() {
+                _searchQuery = query;
+              });
+            },
+          ),
+          Expanded(
+            child: filteredEvents.isEmpty
+                ? const Center(child: Text('Ei tapahtumia'))
+                : ListView.builder(
+                    padding: const EdgeInsets.all(16),
+                    itemCount: filteredEvents.length,
+                    itemBuilder: (context, index) {
+                      return EventListItem(event: filteredEvents[index]);
+                    },
+                  ),
+          ),
+        ],
+      );
   }
 }

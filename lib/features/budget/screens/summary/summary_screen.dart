@@ -1,6 +1,7 @@
 import 'package:budu/features/auth/providers/auth_provider.dart';
 import 'package:budu/features/budget/providers/budget_provider.dart';
 import 'package:budu/features/budget/providers/expense_provider.dart';
+import 'package:budu/features/budget/screens/budget/widgets/budget_month_selector.dart';
 import 'package:budu/features/budget/screens/summary/budget_distribution_section.dart';
 import 'package:budu/features/budget/screens/summary/budget_tracking/budget_tracking_section.dart';
 import 'package:budu/features/budget/screens/summary/event_section.dart';
@@ -70,7 +71,6 @@ class _SummaryScreenState extends State<SummaryScreen> {
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     if (authProvider.user != null) {
       _loadDataFuture = Future.wait([
-        // Poistettu budgetProvider.loadBudget, koska budjettidata on jo haettu LoginScreenissä
         expenseProvider.loadExpenses(authProvider.user!.uid, currentYear, currentMonth),
       ]);
       await _loadDataFuture;
@@ -99,41 +99,23 @@ class _SummaryScreenState extends State<SummaryScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   if (availableMonths.isNotEmpty) ...[
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Container(
-                          constraints: const BoxConstraints(maxWidth: 150),
-                          child: DropdownButton<Map<String, int>>(
-                            isExpanded: true,
-                            value: selectedMonth,
-                            items: availableMonths.map((monthData) {
-                              return DropdownMenuItem<Map<String, int>>(
-                                value: monthData,
-                                child: Text(
-                                  '${monthData['month']}/${monthData['year']}',
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              );
-                            }).toList(),
-                            onChanged: (value) async {
-                              if (value != null) {
-                                setState(() {
-                                  selectedMonth = value;
-                                  currentYear = value['year']!;
-                                  currentMonth = value['month']!;
-                                });
-                                final authProvider = Provider.of<AuthProvider>(context, listen: false);
-                                if (authProvider.user != null) {
-                                  // Ladataan budjettidata vain, kun kuukausi vaihtuu
-                                  await budgetProvider.loadBudget(authProvider.user!.uid, currentYear, currentMonth);
-                                  await _loadData();
-                                }
-                              }
-                            },
-                          ),
-                        ),
-                      ],
+                    BudgetMonthSelector(
+                      availableMonths: availableMonths,
+                      selectedMonth: selectedMonth,
+                      onMonthSelected: (value) async {
+                        if (value != null) {
+                          setState(() {
+                            selectedMonth = value;
+                            currentYear = value['year']!;
+                            currentMonth = value['month']!;
+                          });
+                          final authProvider = Provider.of<AuthProvider>(context, listen: false);
+                          if (authProvider.user != null) {
+                            await budgetProvider.loadBudget(authProvider.user!.uid, currentYear, currentMonth);
+                            await _loadData();
+                          }
+                        }
+                      },
                     ),
                     const SizedBox(height: 16),
                   ],
@@ -146,7 +128,9 @@ class _SummaryScreenState extends State<SummaryScreen> {
                       return Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          SummarySection(),
+                          SummarySection(
+                            selectedMonth: selectedMonth,
+                          ),
                           const SizedBox(height: 24),
                           BudgetTrackingSection(),
                           const SizedBox(height: 24),

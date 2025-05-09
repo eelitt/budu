@@ -1,12 +1,13 @@
+import 'package:budu/core/app_router/app_router.dart';
 import 'package:budu/features/auth/providers/auth_provider.dart';
 import 'package:budu/features/budget/providers/budget_provider.dart';
-import 'package:budu/features/budget/screens/budget/budget_category_section.dart';
 import 'package:budu/features/budget/screens/budget/controllers/budget_screen_controller.dart';
 import 'package:budu/features/budget/screens/budget/income_section.dart';
 import 'package:budu/features/budget/screens/budget/widgets/budget_confirmation_dialogs.dart';
 import 'package:budu/features/budget/screens/budget/widgets/budget_header.dart';
 import 'package:budu/features/budget/screens/budget/widgets/budget_month_selector.dart';
 import 'package:budu/features/budget/screens/budget/widgets/category_dialog.dart';
+import 'package:budu/features/budget/screens/budget/widgets/category_list_wrapper.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -100,7 +101,13 @@ class _BudgetScreenState extends State<BudgetScreen> {
         return Consumer<BudgetProvider>(
           builder: (context, budgetProvider, child) {
             final budget = budgetProvider.budget;
-            if (budget == null) {
+            // Jos budjetti on null ja budjetteja ei ole jäljellä, ohjataan ChatbotScreen-näkymään
+            if (budget == null && _availableMonths.isEmpty) {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (context.mounted) {
+                  Navigator.pushNamed(context, AppRouter.chatbotRoute);
+                }
+              });
               return const Center(child: Text('Luo budjetti ensin!'));
             }
 
@@ -173,7 +180,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
                                     context: context,
                                     isLastBudget: _availableMonths.length == 1,
                                     customMessage: _availableMonths.length == 1
-                                        ? 'Haluatko varmasti poistaa tämän budjetin? Tämä on viimeinen budjettisi, joten sinut ohjataan luomaan uusi budjetti.'
+                                        ? 'Haluatko varmasti poistaa tämän budjetin? Tämä on viimeinen budjettisi, joten sinut ohjataan luomaan uutta budjettia.'
                                         : 'Haluatko varmasti poistaa tämän budjetin? Näet seuraavan budjettisi poiston jälkeen.',
                                   );
                                   if (confirmed) {
@@ -240,7 +247,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
                                   onPressed: () async {
                                     final selectedCategory = await showAddCategoryDialog(
                                       context: context,
-                                      currentExpenses: budget.expenses,
+                                      currentExpenses: budget!.expenses,
                                     );
                                     if (selectedCategory != null) {
                                       await _addCategory(selectedCategory);
@@ -271,7 +278,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
                               ],
                             ),
                             const SizedBox(height: 8),
-                            ..._buildCategoryWidgets(),
+                            CategoryListWrapper(budget: budget!),
                           ],
                         ),
                       ),
@@ -284,21 +291,5 @@ class _BudgetScreenState extends State<BudgetScreen> {
         );
       },
     );
-  }
-
-  List<Widget> _buildCategoryWidgets() {
-    final budgetProvider = Provider.of<BudgetProvider>(context);
-    final budget = budgetProvider.budget;
-    final expenses = budget?.expenses ?? {};
-    final sortedCategories = expenses.keys.toList()..sort();
-    final List<Widget> categoryWidgets = [];
-    for (int i = 0; i < sortedCategories.length; i++) {
-      final categoryName = sortedCategories[i];
-      categoryWidgets.add(BudgetCategorySection(categoryName: categoryName));
-      if (i < sortedCategories.length - 1) {
-        categoryWidgets.add(const SizedBox(height: 16));
-      }
-    }
-    return categoryWidgets;
   }
 }

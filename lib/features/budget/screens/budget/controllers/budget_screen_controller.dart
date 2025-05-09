@@ -1,4 +1,4 @@
-import 'package:budu/core/app_router.dart';
+import 'package:budu/core/app_router/app_router.dart';
 import 'package:budu/features/budget/providers/budget_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -73,8 +73,11 @@ class BudgetScreenController {
     );
     // Jos budjetteja ei ole jäljellä, ohjataan ChatbotScreen-näkymään
     if (updatedMonths.isEmpty && context.mounted) {
-      Navigator.pushReplacementNamed(context, AppRouter.chatbotRoute);
+      Navigator.pushNamed(context, AppRouter.chatbotRoute);
     }
     return updatedMonths;
+  }
+  void dispose() {
+    // Tässä ei ole resursseja, jotka vaatisivat vapauttamista, mutta metodi on lisätty yhteensopivuuden vuoksi
   }
 }

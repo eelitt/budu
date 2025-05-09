@@ -1,11 +1,14 @@
 import 'package:budu/core/utils.dart';
 import 'package:budu/features/budget/providers/budget_provider.dart';
 import 'package:budu/features/budget/providers/expense_provider.dart';
+import 'package:budu/features/budget/screens/budget/utils/month_utils.dart'; // Lisätty tuonti
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 class SummarySection extends StatelessWidget {
-  const SummarySection({super.key});
+  final Map<String, int>? selectedMonth; // Parametri valitulle kuukaudelle
+
+  const SummarySection({super.key, this.selectedMonth});
 
   @override
   Widget build(BuildContext context) {
@@ -51,7 +54,7 @@ class SummarySection extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha:0.15),
+            color: Colors.black.withValues(alpha: 0.15),
             blurRadius: 8,
             offset: const Offset(0, 4),
           ),
@@ -65,16 +68,40 @@ class SummarySection extends StatelessWidget {
             children: [
               const Icon(Icons.account_balance_wallet, color: Colors.blueGrey),
               const SizedBox(width: 8),
-              Text('Yhteenveto', style: Theme.of(context).textTheme.headlineSmall),
-              // Päivitetty: Näytetään varoitusikoni myös, jos budjetti on alijäämäinen
-              if (showWarning) ...[
-                const SizedBox(width: 8),
-                const Icon(
-                  Icons.warning,
-                  color: Colors.red,
-                  size: 20,
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Text(
+                          'Yhteenveto',
+                          style: Theme.of(context).textTheme.headlineSmall,
+                        ),
+                        if (showWarning) ...[
+                          const SizedBox(width: 8),
+                          const Icon(
+                            Icons.warning,
+                            color: Colors.red,
+                            size: 20,
+                          ),
+                        ],
+                      ],
+                    ),
+                    if (selectedMonth != null) // Näytetään vain, jos selectedMonth on määritelty
+                      Padding(
+                        padding: const EdgeInsets.only(top: 2),
+                        child: Text(
+                          '${getMonthName(selectedMonth!['month']!)} ${selectedMonth!['year']} budjetti',
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                color: Colors.black54,
+                                fontSize: 12,
+                              ),
+                        ),
+                      ),
+                  ],
                 ),
-              ],
+              ),
             ],
           ),
           const SizedBox(height: 16),
@@ -128,7 +155,6 @@ class SummarySection extends StatelessWidget {
                   formatCurrency(totalBudget),
                   style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                         fontWeight: FontWeight.bold,
-                        // Päivitetty: Euromäärä punaisella, jos budjetti on alijäämäinen
                         color: isBudgetDeficit ? Colors.red : Colors.black87,
                       ),
                   overflow: TextOverflow.ellipsis,
@@ -136,7 +162,6 @@ class SummarySection extends StatelessWidget {
               ),
             ],
           ),
-          // Lisätty: Varoitusteksti, jos budjetti on alijäämäinen
           if (isBudgetDeficit) ...[
             const SizedBox(height: 4),
             Text(
@@ -175,7 +200,6 @@ class SummarySection extends StatelessWidget {
               ),
             ],
           ),
-          // Varoitusteksti, jos kokonaisbudjetti on ylittynyt
           if (isBudgetExceeded) ...[
             const SizedBox(height: 4),
             Text(
@@ -185,7 +209,6 @@ class SummarySection extends StatelessWidget {
                   ),
             ),
           ],
-          // Ylittyneiden kategorioiden yhteenveto (tiivistetty)
           if (overBudgetCategories.isNotEmpty) ...[
             const SizedBox(height: 8),
             Text(
@@ -199,7 +222,7 @@ class SummarySection extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('Saldo (budjetoitu)'), // Päivitetty otsikko
+              const Text('Saldo (budjetoitu)'),
               Text(
                 formatCurrency(balance),
                 style: Theme.of(context).textTheme.bodyLarge?.copyWith(

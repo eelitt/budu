@@ -1,8 +1,6 @@
+import 'package:budu/core/app_router/app_router.dart';
 import 'package:budu/features/auth/providers/auth_provider.dart';
 import 'package:budu/features/budget/providers/budget_provider.dart';
-import 'package:budu/features/budget/screens/budget/budget_screen.dart';
-import 'package:budu/features/budget/screens/summary/summary_screen.dart';
-import 'package:budu/features/history/history_screen.dart';
 import 'package:budu/features/mainscreen/services/main_screen_actions_service.dart';
 import 'package:budu/features/mainscreen/services/main_screen_budget_service.dart';
 import 'package:budu/features/mainscreen/services/main_screen_budget_status_service.dart';
@@ -33,11 +31,8 @@ class _MainScreenState extends State<MainScreen> {
   final MainScreenUpdateDialogService _updateDialogService = MainScreenUpdateDialogService();
   final MainScreenActionsService _mainScreenActions = MainScreenActionsService();
 
-  final List<Widget> _screens = [
-    const BudgetScreen(),
-    const SummaryScreen(),
-    const HistoryScreen(),
-  ];
+  // Lisätty GlobalKey sisäisen Navigator-instanssin hallintaan
+  final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
 
   @override
   void initState() {
@@ -53,16 +48,20 @@ class _MainScreenState extends State<MainScreen> {
       _loadBudgetFuture = _budgetService.loadBudget(context);
       await _loadBudgetFuture;
     } catch (e) {
-      setState(() {
-        _hasBudgetLoadError = true;
-      });
+      if (mounted) {
+        setState(() {
+          _hasBudgetLoadError = true;
+        });
+      }
     }
   }
 
   Future<void> _retryLoadBudget() async {
-    setState(() {
-      _hasBudgetLoadError = false;
-    });
+    if (mounted) {
+      setState(() {
+        _hasBudgetLoadError = false;
+      });
+    }
     await _loadBudget();
     await _checkBudgetStatus();
   }
@@ -70,7 +69,11 @@ class _MainScreenState extends State<MainScreen> {
   Future<void> _checkBudgetStatus() async {
     await _budgetStatusService.checkBudgetStatus(
       context,
-      (exists) => setState(() => _nextMonthBudgetExists = exists),
+      (exists) {
+        if (mounted) {
+          setState(() => _nextMonthBudgetExists = exists);
+        }
+      },
       () => _mainScreenActions.createBudgetForNextMonth(
         context,
         () => _checkBudgetStatus(),
@@ -82,7 +85,26 @@ class _MainScreenState extends State<MainScreen> {
     setState(() {
       _selectedIndex = index;
     });
+    String routeName;
+    switch (index) {
+      case 0:
+        routeName = AppRouter.budgetRoute;
+        break;
+      case 1:
+        routeName = AppRouter.summaryRoute;
+        break;
+      case 2:
+        routeName = AppRouter.historyRoute;
+        break;
+      default:
+        routeName = AppRouter.budgetRoute;
+    }
+    // Suorita _checkBudgetStatus ennen navigointia
     await _checkBudgetStatus();
+    // Navigoi valittuun reittiin sisäisen Navigator-instanssin kautta
+    if (mounted) {
+      _navigatorKey.currentState?.pushReplacementNamed(routeName);
+    }
   }
 
   @override
@@ -124,9 +146,11 @@ class _MainScreenState extends State<MainScreen> {
                 children: [
                   const NotificationBanner(),
                   Expanded(
-                    child: _selectedIndex < _screens.length
-                        ? _screens[_selectedIndex]
-                        : const SizedBox.shrink(),
+                    child: Navigator(
+                      key: _navigatorKey, // Käytetään GlobalKey:tä
+                      initialRoute: AppRouter.budgetRoute,
+                      onGenerateRoute: AppRouter.generateRoute,
+                    ),
                   ),
                 ],
               ),
@@ -137,12 +161,12 @@ class _MainScreenState extends State<MainScreen> {
                     end: Alignment.topCenter,
                     colors: [
                       Color.fromARGB(255, 253, 228, 190), // Aloitetaan taustaväristä (alhaalta)
-                     Color(0xFFFFFCF5) , // Päättyy keskivaaleaan oranssiin (ylhäällä)
+                      Color(0xFFFFFCF5), // Päättyy keskivaaleaan oranssiin (ylhäällä)
                     ],
                   ),
                 ),
                 child: MainScreenBottomNavigationBar(
-                  selectedIndex: _selectedIndex < _screens.length ? _selectedIndex : 0,
+                  selectedIndex: _selectedIndex < 3 ? _selectedIndex : 0,
                   onItemTapped: _onItemTapped,
                 ),
               ),
