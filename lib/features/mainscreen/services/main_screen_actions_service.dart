@@ -2,8 +2,9 @@ import 'package:budu/features/budget/event_dialog/add_event_dialog.dart';
 import 'package:budu/core/app_router.dart';
 import 'package:budu/features/account/account_settings.dart';
 import 'package:budu/features/auth/providers/auth_provider.dart';
+import 'package:budu/features/budget/models/budget_model.dart';
 import 'package:budu/features/budget/providers/budget_provider.dart';
-import 'package:budu/features/budget/screens/create_budget_screen.dart';
+import 'package:budu/features/budget/screens/create_budget/create_budget_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -43,24 +44,26 @@ class MainScreenActionsService {
     }
 
     final latestBudget = budgetProvider.budget;
-    if (latestBudget != null) {
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => CreateBudgetScreen(
-            sourceBudget: latestBudget,
-            newYear: targetYear,
-            newMonth: targetMonth,
-          ),
+    final sourceBudget = latestBudget ?? BudgetModel(
+      income: 0.0,
+      expenses: {},
+      createdAt: now,
+      year: targetYear,
+      month: targetMonth,
+    );
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => CreateBudgetScreen(
+          sourceBudget: sourceBudget,
+          newYear: targetYear,
+          newMonth: targetMonth,
         ),
-      ).then((_) {
-        onBudgetCreated();
-      });
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Luo ensin budjetti kuluvalle kuulle!')),
-      );
-    }
+      ),
+    ).then((_) {
+      onBudgetCreated();
+    });
   }
 
   void handleMenuSelection(String value, BuildContext context) {
@@ -71,7 +74,7 @@ class MainScreenActionsService {
       );
     } else if (value == 'create_budget') {
       createBudgetForNextMonth(context, () {});
-    } else if (value == 'settings') { // Lisätty "settings"-valinta
+    } else if (value == 'settings') {
       Navigator.push(
         context,
         MaterialPageRoute(

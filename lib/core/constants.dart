@@ -4,7 +4,6 @@ const Map<String, List<String>> categoryMapping = {
     "Vesimaksu",
     "Kotivakuutus",
     "Asuntolaina",
-    "Lämmitys",
     "Kiinteistövero",
     "Jätehuolto",
   ],
@@ -33,5 +32,5 @@ const Map<String, List<String>> categoryMapping = {
   "Hygienia": ["Hygienia"],
   "Lemmikit": ["Lemmikit"],
   "Sijoittaminen": ["Säästäminen", "Sijoittaminen"],
-  "Velat":["Velat"], // Uusi kategoria säästämiselle ja sijoittamiselle
+  "Velat":["Velat"], 
 };

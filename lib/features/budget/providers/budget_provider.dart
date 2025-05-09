@@ -6,8 +6,11 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 class BudgetProvider with ChangeNotifier {
   BudgetModel? _budget;
+  BudgetModel? _lastSavedBudget; // Tallennetaan viimeisin Firestoreen tallennettu budjetti
   final BudgetRepository _budgetRepository = BudgetRepository();
   StreamSubscription? _budgetSubscription;
+  Timer? _debounceTimer;
+  bool _hasPendingChanges = false;
 
   BudgetModel? get budget => _budget;
 
@@ -16,9 +19,11 @@ class BudgetProvider with ChangeNotifier {
       _budget = await _budgetRepository.getBudget(userId, year, month);
       // Varmistetaan, että budjetti asetetaan vain, jos se on varsinainen budjetti
       if (_budget != null && !_budget!.isPlaceholder) {
+        _lastSavedBudget = _budget?.copy(); // Tallennetaan kopio ladatusta budjetista
         _listenToBudget(userId, year, month);
       } else {
         _budget = null;
+        _lastSavedBudget = null;
       }
       notifyListeners();
     } catch (e) {
@@ -101,7 +106,7 @@ class BudgetProvider with ChangeNotifier {
               Map.fromEntries(entry.value.keys.map((subKey) => MapEntry(subKey, 0.0))),
             )),
       );
-      await _budgetRepository.saveBudget(userId, _budget!);
+      _scheduleSave(userId);
       notifyListeners();
     } catch (e) {
       print('Error resetting budget expenses: $e');
@@ -118,9 +123,22 @@ class BudgetProvider with ChangeNotifier {
           .doc('${year}_$month')
           .delete();
       _budget = null;
+      _lastSavedBudget = null;
       notifyListeners();
     } catch (e) {
       print('Error deleting budget: $e');
+      rethrow;
+    }
+  }
+
+  Future<void> addCategory({required String userId, required int year, required int month, required String category}) async {
+    if (_budget == null) return;
+    try {
+      _budget!.expenses[category] = {};
+      _scheduleSave(userId);
+      notifyListeners();
+    } catch (e) {
+      print('Error adding category: $e');
       rethrow;
     }
   }
@@ -132,7 +150,7 @@ class BudgetProvider with ChangeNotifier {
         _budget!.expenses[category] = {};
       }
       _budget!.expenses[category]![subcategory] = amount;
-      await _budgetRepository.saveBudget(userId, _budget!);
+      _scheduleSave(userId);
       notifyListeners();
     } catch (e) {
       print('Error adding subcategory: $e');
@@ -148,7 +166,7 @@ class BudgetProvider with ChangeNotifier {
         if (_budget!.expenses[category]!.isEmpty) {
           _budget!.expenses.remove(category);
         }
-        await _budgetRepository.saveBudget(userId, _budget!);
+        _scheduleSave(userId);
         notifyListeners();
       }
     } catch (e) {
@@ -168,20 +186,35 @@ class BudgetProvider with ChangeNotifier {
         .listen((doc) {
       if (doc.exists && doc.data() != null && doc.data()!.containsKey('income')) {
         final budget = BudgetModel.fromMap(doc.data() as Map<String, dynamic>);
-        // Päivitetään _budget vain, jos budjetti ei ole placeholder
-        if (!budget.isPlaceholder) {
+        // Päivitetään _budget vain, jos budjetti ei ole placeholder ja se eroaa nykyisestä budjetista
+        if (!budget.isPlaceholder && budget.toString() != _budget?.toString()) {
           _budget = budget;
+          _lastSavedBudget = budget.copy(); // Päivitetään viimeisin tallennettu budjetti
           print('Budget updated from Firestore: ${_budget!.income}');
-        } else {
-          _budget = null;
+          notifyListeners();
         }
       } else {
         print('Budget document does not exist in Firestore or is not a valid budget');
-        _budget = null;
+        if (_budget != null) {
+          _budget = null;
+          _lastSavedBudget = null;
+          notifyListeners();
+        }
       }
-      notifyListeners();
     }, onError: (e) {
       print('Error listening to budget: $e');
+    });
+  }
+
+  void _scheduleSave(String userId) {
+    _hasPendingChanges = true;
+    _debounceTimer?.cancel();
+    _debounceTimer = Timer(const Duration(seconds: 1), () async {
+      if (_hasPendingChanges && _budget != null && _budget.toString() != _lastSavedBudget?.toString()) {
+        await saveBudget(userId, _budget!);
+        _lastSavedBudget = _budget!.copy(); // Päivitetään viimeisin tallennettu budjetti
+        _hasPendingChanges = false;
+      }
     });
   }
 
@@ -213,7 +246,7 @@ class BudgetProvider with ChangeNotifier {
         _budget!.expenses[category] = {};
       }
       _budget!.expenses[category]!['default'] = amount; // Oletus-alakategoria
-      await _budgetRepository.saveBudget(userId, _budget!);
+      _scheduleSave(userId);
     } catch (e) {
       print('Error updating expense: $e');
       rethrow;
@@ -224,7 +257,7 @@ class BudgetProvider with ChangeNotifier {
     if (_budget == null) return;
     try {
       _budget!.expenses.remove(category);
-      await _budgetRepository.saveBudget(userId, _budget!);
+      _scheduleSave(userId);
     } catch (e) {
       print('Error deleting expense: $e');
       rethrow;
@@ -240,7 +273,7 @@ class BudgetProvider with ChangeNotifier {
     if (_budget == null) return;
     try {
       _budget!.income = income;
-      await _budgetRepository.saveBudget(userId, _budget!);
+      _scheduleSave(userId);
       print('Income updated: ${_budget!.income}');
       notifyListeners();
     } catch (e) {
@@ -301,6 +334,7 @@ class BudgetProvider with ChangeNotifier {
 
   @override
   void dispose() {
+    _debounceTimer?.cancel();
     _budgetSubscription?.cancel();
     super.dispose();
   }

@@ -1,9 +1,12 @@
-import 'package:budu/core/app_router.dart';
-import 'package:budu/core/constants.dart';
 import 'package:budu/features/auth/providers/auth_provider.dart';
 import 'package:budu/features/budget/providers/budget_provider.dart';
 import 'package:budu/features/budget/screens/budget/budget_category_section.dart';
+import 'package:budu/features/budget/screens/budget/controllers/budget_screen_controller.dart';
 import 'package:budu/features/budget/screens/budget/income_section.dart';
+import 'package:budu/features/budget/screens/budget/widgets/budget_confirmation_dialogs.dart';
+import 'package:budu/features/budget/screens/budget/widgets/budget_header.dart';
+import 'package:budu/features/budget/screens/budget/widgets/budget_month_selector.dart';
+import 'package:budu/features/budget/screens/budget/widgets/category_dialog.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -15,137 +18,90 @@ class BudgetScreen extends StatefulWidget {
 }
 
 class _BudgetScreenState extends State<BudgetScreen> {
-  Future<void> _loadBudgetFuture = Future.value();
-  late BudgetProvider budgetProvider;
-  int currentYear = DateTime.now().year;
-  int currentMonth = DateTime.now().month;
-  List<Map<String, int>> availableMonths = [];
-  Map<String, int>? selectedMonth;
+  BudgetScreenController? _controller;
+  final ValueNotifier<int> _currentYear = ValueNotifier(DateTime.now().year);
+  final ValueNotifier<int> _currentMonth = ValueNotifier(DateTime.now().month);
+  List<Map<String, int>> _availableMonths = [];
+  final ValueNotifier<Map<String, int>?> _selectedMonth = ValueNotifier(null);
 
   @override
   void initState() {
     super.initState();
-    budgetProvider = Provider.of<BudgetProvider>(context, listen: false);
-    _loadAvailableMonths();
-  }
-
-  Future<void> _loadBudget() async {
-    final authProvider = Provider.of<AuthProvider>(context, listen: false);
-    if (authProvider.user != null) {
-      _loadBudgetFuture = budgetProvider.loadBudget(authProvider.user!.uid, currentYear, currentMonth);
-      await _loadBudgetFuture;
-    } else {
-      _loadBudgetFuture = Future.error('Käyttäjä ei ole kirjautunut');
-    }
+    _controller = BudgetScreenController(
+      context: context,
+      onStateChanged: () => setState(() {}),
+    );
   }
 
   Future<void> _loadAvailableMonths() async {
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     if (authProvider.user != null) {
-      final months = await budgetProvider.getAvailableBudgetMonths(authProvider.user!.uid);
-      availableMonths = months.toSet().toList();
-      if (availableMonths.isNotEmpty) {
-        selectedMonth = availableMonths.first;
-        currentYear = selectedMonth!['year']!;
-        currentMonth = selectedMonth!['month']!;
-        // Poistettu _loadBudget-kutsu, koska budjettidata on jo haettu LoginScreenissä
-      }
-      setState(() {});
+      _availableMonths = await _controller!.loadAvailableMonths(
+        userId: authProvider.user!.uid,
+        selectedMonth: _selectedMonth,
+        currentYear: _currentYear,
+        currentMonth: _currentMonth,
+      );
     }
   }
 
   Future<void> _resetBudgetExpenses() async {
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     if (authProvider.user != null) {
-      await budgetProvider.resetBudgetExpenses(authProvider.user!.uid, currentYear, currentMonth);
+      await _controller!.resetBudgetExpenses(
+        userId: authProvider.user!.uid,
+        year: _currentYear.value,
+        month: _currentMonth.value,
+      );
     }
   }
 
   Future<void> _deleteBudget() async {
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     if (authProvider.user != null) {
-      await budgetProvider.deleteBudget(authProvider.user!.uid, currentYear, currentMonth);
-      if (mounted) {
-        Navigator.pushReplacementNamed(context, AppRouter.chatbotRoute);
-      }
+      _availableMonths = await _controller!.deleteBudget(
+        userId: authProvider.user!.uid,
+        year: _currentYear.value,
+        month: _currentMonth.value,
+        availableMonths: _availableMonths,
+        selectedMonth: _selectedMonth,
+        currentYear: _currentYear,
+        currentMonth: _currentMonth,
+      );
     }
   }
 
-  Future<void> _showResetConfirmationDialog() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Nollaa budjetin menot'),
-        content: const Text('Haluatko varmasti nollata kaikki budjetin menot? Tämä asettaa kaikkien kategorioiden arvot nollaan.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Peruuta'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Nollaa'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed == true) {
-      await _resetBudgetExpenses();
-    }
-  }
-
-  Future<void> _showDeleteConfirmationDialog() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Poista budjetti'),
-        content: const Text('Haluatko varmasti poistaa tämän budjetin? Sinut ohjataan luomaan uusi budjetti.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Peruuta'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Poista'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed == true) {
-      await _deleteBudget();
+  Future<void> _addCategory(String categoryName) async {
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    if (authProvider.user != null) {
+      final budgetProvider = Provider.of<BudgetProvider>(context, listen: false);
+      final now = DateTime.now();
+      await budgetProvider.addCategory(
+        userId: authProvider.user!.uid,
+        year: now.year,
+        month: now.month,
+        category: categoryName,
+      );
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<BudgetProvider>(
-      builder: (context, budgetProvider, child) {
-        return FutureBuilder(
-          future: _loadBudgetFuture,
-          builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) {
-              return const Center(child: CircularProgressIndicator());
-            }
-            if (snapshot.hasError) {
-              return Center(child: Text('Virhe latauksessa: ${snapshot.error}'));
-            }
+    return FutureBuilder<void>(
+      future: _loadAvailableMonths(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        if (snapshot.hasError) {
+          return Center(child: Text('Virhe latauksessa: ${snapshot.error}'));
+        }
+
+        return Consumer<BudgetProvider>(
+          builder: (context, budgetProvider, child) {
             final budget = budgetProvider.budget;
             if (budget == null) {
               return const Center(child: Text('Luo budjetti ensin!'));
-            }
-
-            final List<String> sortedCategories = categoryMapping.keys.toList()..sort();
-
-            final List<Widget> categoryWidgets = [];
-            for (int i = 0; i < sortedCategories.length; i++) {
-              final categoryName = sortedCategories[i];
-              categoryWidgets.add(BudgetCategorySection(categoryName: categoryName));
-              if (i < sortedCategories.length - 1) {
-                categoryWidgets.add(const SizedBox(height: 16));
-              }
             }
 
             return SingleChildScrollView(
@@ -156,65 +112,169 @@ class _BudgetScreenState extends State<BudgetScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Wrap(
-                        spacing: 8.0,
-                        runSpacing: 8.0,
-                        crossAxisAlignment: WrapCrossAlignment.center,
+                      BudgetHeader(selectedMonth: _selectedMonth.value),
+                      const SizedBox(height: 16),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
-                          availableMonths.isNotEmpty
-                              ? Container(
-                                  constraints: const BoxConstraints(maxWidth: 150),
-                                  child: DropdownButton<Map<String, int>>(
-                                    isExpanded: true,
-                                    value: selectedMonth,
-                                    items: availableMonths.map((monthData) {
-                                      return DropdownMenuItem<Map<String, int>>(
-                                        value: monthData,
-                                        child: Text(
-                                          '${monthData['month']}/${monthData['year']}',
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                      );
-                                    }).toList(),
-                                    onChanged: (value) {
-                                      if (value != null) {
-                                        setState(() {
-                                          selectedMonth = value;
-                                          currentYear = value['year']!;
-                                          currentMonth = value['month']!;
-                                        });
-                                        _loadBudget();
-                                      }
-                                    },
-                                  ),
-                                )
-                              : const Text('Ei saatavilla olevia budjetteja'),
-                          ElevatedButton(
-                            onPressed: _showResetConfirmationDialog,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.orange,
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                              textStyle: const TextStyle(fontSize: 14),
-                            ),
-                            child: const Text('Nollaa'),
+                          BudgetMonthSelector(
+                            availableMonths: _availableMonths,
+                            selectedMonth: _selectedMonth.value,
+                            onMonthSelected: (value) {
+                              if (value != null) {
+                                _selectedMonth.value = value;
+                                _currentYear.value = value['year']!;
+                                _currentMonth.value = value['month']!;
+                                _controller!.loadBudget(
+                                  userId: Provider.of<AuthProvider>(context, listen: false).user!.uid,
+                                  year: _currentYear.value,
+                                  month: _currentMonth.value,
+                                );
+                              }
+                            },
                           ),
-                          ElevatedButton(
-                            onPressed: _showDeleteConfirmationDialog,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.red,
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                              textStyle: const TextStyle(fontSize: 14),
-                            ),
-                            child: const Text('Poista'),
+                          const SizedBox(height: 8),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              ElevatedButton(
+                                onPressed: () async {
+                                  final confirmed = await showResetConfirmationDialog(context);
+                                  if (confirmed) {
+                                    await _resetBudgetExpenses();
+                                  }
+                                },
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.blueGrey[700],
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                  textStyle: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                                        color: Colors.white,
+                                        fontSize: 14,
+                                      ),
+                                  elevation: 2,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                ),
+                                child: const Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.refresh, size: 16),
+                                    SizedBox(width: 4),
+                                    Text('Nollaa'),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              ElevatedButton(
+                                onPressed: () async {
+                                  final confirmed = await showDeleteConfirmationDialog(
+                                    context: context,
+                                    isLastBudget: _availableMonths.length == 1,
+                                    customMessage: _availableMonths.length == 1
+                                        ? 'Haluatko varmasti poistaa tämän budjetin? Tämä on viimeinen budjettisi, joten sinut ohjataan luomaan uusi budjetti.'
+                                        : 'Haluatko varmasti poistaa tämän budjetin? Näet seuraavan budjettisi poiston jälkeen.',
+                                  );
+                                  if (confirmed) {
+                                    await _deleteBudget();
+                                  }
+                                },
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.blueGrey[900],
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                  textStyle: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                                        color: Colors.white,
+                                        fontSize: 14,
+                                      ),
+                                  elevation: 2,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                ),
+                                child: const Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.delete, size: 16),
+                                    SizedBox(width: 4),
+                                    Text('Poista'),
+                                  ],
+                                ),
+                              ),
+                            ],
                           ),
                         ],
                       ),
                       const SizedBox(height: 16),
                       const IncomeSection(),
                       const SizedBox(height: 16),
-                      ...categoryWidgets,
+                      Container(
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(12),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.15),
+                              blurRadius: 8,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
+                        ),
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  'Kategoriat',
+                                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.black87,
+                                      ),
+                                ),
+                                ElevatedButton(
+                                  onPressed: () async {
+                                    final selectedCategory = await showAddCategoryDialog(
+                                      context: context,
+                                      currentExpenses: budget.expenses,
+                                    );
+                                    if (selectedCategory != null) {
+                                      await _addCategory(selectedCategory);
+                                    }
+                                  },
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.blueGrey[800],
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                    textStyle: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                                          color: Colors.white,
+                                          fontSize: 14,
+                                        ),
+                                    elevation: 2,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                  ),
+                                  child: const Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.add, size: 16),
+                                      SizedBox(width: 4),
+                                      Text('Lisää kategoria'),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            ..._buildCategoryWidgets(),
+                          ],
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -224,5 +284,21 @@ class _BudgetScreenState extends State<BudgetScreen> {
         );
       },
     );
+  }
+
+  List<Widget> _buildCategoryWidgets() {
+    final budgetProvider = Provider.of<BudgetProvider>(context);
+    final budget = budgetProvider.budget;
+    final expenses = budget?.expenses ?? {};
+    final sortedCategories = expenses.keys.toList()..sort();
+    final List<Widget> categoryWidgets = [];
+    for (int i = 0; i < sortedCategories.length; i++) {
+      final categoryName = sortedCategories[i];
+      categoryWidgets.add(BudgetCategorySection(categoryName: categoryName));
+      if (i < sortedCategories.length - 1) {
+        categoryWidgets.add(const SizedBox(height: 16));
+      }
+    }
+    return categoryWidgets;
   }
 }

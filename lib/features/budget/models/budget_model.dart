@@ -52,4 +52,24 @@ class BudgetModel {
   }
 
   double get remaining => income - totalExpenses;
+  // Luodaan syvä kopio BudgetModel-oliosta
+  BudgetModel copy() {
+    return BudgetModel(
+      income: income,
+      expenses: expenses.map((category, subcategories) => MapEntry(
+        category,
+        Map<String, double>.from(subcategories),
+      )),
+      createdAt: createdAt,
+      year: year,
+      month: month,
+      isPlaceholder: isPlaceholder,
+    );
+  }
+
+  @override
+  String toString() {
+    return 'BudgetModel(income: $income, expenses: $expenses, createdAt: $createdAt, year: $year, month: $month, isPlaceholder: $isPlaceholder)';
+  }
 }
+

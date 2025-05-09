@@ -1,12 +1,13 @@
-// lib/features/budget/screens/budget/budget_category_section.dart
 import 'package:budu/features/auth/providers/auth_provider.dart';
+import 'package:budu/features/budget/providers/budget_provider.dart';
 import 'package:budu/features/budget/screens/budget/services/budget_category_service.dart';
 import 'package:budu/features/budget/screens/budget/utils/category_icon_utils.dart';
 import 'package:budu/features/budget/screens/budget/widgets/add_subcategory_form.dart';
 import 'package:budu/features/budget/screens/budget/widgets/budget_category_list.dart';
-import 'package:budu/features/budget/providers/budget_provider.dart';
+import 'package:budu/features/budget/screens/budget/widgets/budget_confirmation_dialogs.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class BudgetCategorySection extends StatefulWidget {
   final String categoryName;
@@ -176,6 +177,31 @@ class _BudgetCategorySectionState extends State<BudgetCategorySection> {
     }
   }
 
+  Future<bool> _shouldShowDeleteDialog() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool('showDeleteCategoryDialog') ?? true;
+  }
+
+  Future<void> _setShowDeleteDialog(bool show) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('showDeleteCategoryDialog', show);
+  }
+
+  Future<void> _deleteCategory() async {
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    if (authProvider.user != null) {
+      final budgetProvider = Provider.of<BudgetProvider>(context, listen: false);
+      final now = DateTime.now();
+      // Poistaa kategorian ja kaikki sen alakategoriat budjetista
+      await budgetProvider.deleteExpense(
+        userId: authProvider.user!.uid,
+        year: now.year,
+        month: now.month,
+        category: widget.categoryName,
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final budgetProvider = Provider.of<BudgetProvider>(context);
@@ -190,11 +216,11 @@ class _BudgetCategorySectionState extends State<BudgetCategorySection> {
 
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white, // Säilytetään kortin taustaväri valkoisena
+        color: Colors.white,
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha:0.15),
+            color: Colors.black.withValues(alpha: 0.15),
             blurRadius: 8,
             offset: const Offset(0, 4),
           ),
@@ -205,25 +231,67 @@ class _BudgetCategorySectionState extends State<BudgetCategorySection> {
         child: ExpansionTile(
           key: _expansionTileKey,
           controller: _expansionController,
-          tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          tilePadding: const EdgeInsets.only(left: 8, right: 16, top: 8, bottom: 8), // Vähennetty vasen marginaali (16 -> 8)
           childrenPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           shape: const Border(),
           collapsedShape: const Border(),
-          leading: Icon(
-            getCategoryIcon(widget.categoryName),
-            color: Colors.blueGrey,
-            size: 24,
-          ),
           title: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                widget.categoryName,
-                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w500),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    getCategoryIcon(widget.categoryName),
+                    color: Colors.blueGrey,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 8),
+                  Flexible(
+                    child: Text(
+                      widget.categoryName,
+                      style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
               ),
-              IconButton(
-                icon: const Icon(Icons.add, size: 20),
-                onPressed: _startAdding,
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.add, size: 18),
+                    onPressed: _startAdding,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.delete, color: Colors.red, size: 16),
+                    onPressed: () async {
+                      final shouldShowDialog = await _shouldShowDeleteDialog();
+                      if (!shouldShowDialog) {
+                        await _deleteCategory();
+                        return;
+                      }
+
+                      final result = await showDeleteConfirmationDialog(
+                        context: context,
+                        isLastBudget: false,
+                        customMessage: 'Haluatko varmasti poistaa kategorian "${widget.categoryName}" ja kaikki sen alakategoriat? Kategoria poistetaan budjetistasi, mutta voit lisätä sen takaisin myöhemmin.',
+                        onDontShowAgainChanged: (dontShowAgain) async {
+                          await _setShowDeleteDialog(!dontShowAgain);
+                        },
+                      );
+
+                      if (result == true) {
+                        await _deleteCategory();
+                      }
+                    },
+                    tooltip: 'Poista kategoria',
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                  ),
+                ],
               ),
             ],
           ),
