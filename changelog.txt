@@ -11,3 +11,6 @@
 ## 1.0.3
 - Paranneltu ylä- ja alakategorioiden käsittelyä
 - Parannettu suorituskykyä
+
+## 1.0.4
+- Paranneltu uix:ia
