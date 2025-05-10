@@ -1,27 +1,26 @@
 import 'package:budu/features/auth/providers/auth_provider.dart';
-import 'package:budu/features/budget/screens/budget/services/budget_category_service.dart';
-import 'package:budu/features/budget/screens/budget/utils/budget_category_dialogs.dart';
+import 'package:budu/features/budget/screens/budget/controllers/budget_category_controller.dart';
+import 'package:budu/features/budget/screens/budget/widgets/budget_sub_category_dialogs.dart';
 import 'package:budu/features/budget/screens/budget/widgets/edit_subcategory_form.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
-class BudgetCategoryList extends StatelessWidget {
+class BudgetSubCategoryList extends StatelessWidget {
   final String categoryName;
   final Map<String, double> displayedExpenses;
   final bool isEditing;
-  final bool isSaving; // Uusi parametri tallennustilan seuraamiseen
+  final bool isSaving;
   final String? editingSubcategory;
   final String? newlyAddedSubcategory;
   final Map<String, TextEditingController> nameControllers;
   final Map<String, TextEditingController> amountControllers;
   final String? errorMessage;
-  final BudgetCategoryService service;
+  final BudgetCategoryController service;
   final VoidCallback onCancelEditing;
-  final Function(String) onStartEditing;
+  final Function(String, BuildContext) onStartEditing; // Päivitetty tyyppi
   final Function(String) onUpdateSubcategory;
 
-  const BudgetCategoryList({
+  const BudgetSubCategoryList({
     super.key,
     required this.categoryName,
     required this.displayedExpenses,
@@ -100,7 +99,7 @@ class BudgetCategoryList extends StatelessWidget {
                     ),
                   IconButton(
                     icon: const Icon(Icons.edit, size: 20),
-                    onPressed: () => onStartEditing(subcategory),
+                    onPressed: () => onStartEditing(subcategory, context), // Välitetään context
                   ),
                   IconButton(
                     icon: const Icon(Icons.delete, size: 20, color: Colors.red),

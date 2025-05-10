@@ -3,7 +3,7 @@ import 'package:budu/features/budget/providers/expense_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-class BudgetCategoryService {
+class BudgetSubCategoryService {
   // Lisää alakategoria
   Future<void> addSubcategory({
     required BuildContext context,

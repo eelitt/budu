@@ -24,7 +24,7 @@ class BudgetMonthSelector extends StatelessWidget {
       borderRadius: BorderRadius.circular(8),
       elevation: 2,
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -34,28 +34,41 @@ class BudgetMonthSelector extends StatelessWidget {
               color: Colors.blueGrey,
             ),
             const SizedBox(width: 8),
-            DropdownButton<Map<String, int>>(
-              value: selectedMonth,
-              hint: Text(
-                'Valitse budjetti',
-                style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                      color: Colors.black87,
+            PopupMenuButton<Map<String, int>>(
+              onSelected: onMonthSelected,
+              itemBuilder: (BuildContext context) {
+                return availableMonths.map((monthData) {
+                  return PopupMenuItem<Map<String, int>>(
+                    value: monthData,
+                    child: Text(
+                      '${getMonthName(monthData['month']!)} ${monthData['year']}',
+                      style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                            color: Colors.black87,
+                          ),
                     ),
-              ),
-              isExpanded: false,
-              underline: const SizedBox(),
-              items: availableMonths.map((monthData) {
-                return DropdownMenuItem<Map<String, int>>(
-                  value: monthData,
-                  child: Text(
-                    '${getMonthName(monthData['month']!)} ${monthData['year']}',
+                  );
+                }).toList();
+              },
+              color: Colors.white, // Asetetaan valikon taustaväri valkoiseksi
+              position: PopupMenuPosition.under, // Pakotetaan valikko avautumaan alaspäin
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    selectedMonth != null
+                        ? '${getMonthName(selectedMonth!['month']!)} ${selectedMonth!['year']}'
+                        : 'Valitse budjetti',
                     style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                           color: Colors.black87,
                         ),
                   ),
-                );
-              }).toList(),
-              onChanged: onMonthSelected,
+                  const SizedBox(width: 8),
+                  const Icon(
+                    Icons.arrow_drop_down,
+                    color: Colors.black87,
+                  ),
+                ],
+              ),
             ),
           ],
         ),

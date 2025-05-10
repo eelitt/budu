@@ -1,6 +1,8 @@
 import 'package:budu/features/budget/models/budget_model.dart';
+import 'package:budu/features/budget/providers/budget_provider.dart';
 import 'package:budu/features/budget/screens/budget/budget_category_section.dart';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 class CategoryListWrapper extends StatefulWidget {
   final BudgetModel budget;
@@ -22,15 +24,25 @@ class _CategoryListWrapperState extends State<CategoryListWrapper> {
 
   @override
   Widget build(BuildContext context) {
-    final sortedCategories = expenses.keys.toList()..sort();
-    final List<Widget> categoryWidgets = [];
-    for (int i = 0; i < sortedCategories.length; i++) {
-      final categoryName = sortedCategories[i];
-      categoryWidgets.add(BudgetCategorySection(categoryName: categoryName));
-      if (i < sortedCategories.length - 1) {
-        categoryWidgets.add(const SizedBox(height: 16));
-      }
-    }
-    return Column(children: categoryWidgets);
+    return Consumer<BudgetProvider>(
+      builder: (context, budgetProvider, child) {
+        final budget = budgetProvider.budget;
+        if (budget != null) {
+          // Päivitetään expenses-arvo reaaliajassa BudgetProvider-tilasta
+          expenses = Map.from(budget.expenses);
+        }
+
+        final sortedCategories = expenses.keys.toList()..sort();
+        final List<Widget> categoryWidgets = [];
+        for (int i = 0; i < sortedCategories.length; i++) {
+          final categoryName = sortedCategories[i];
+          categoryWidgets.add(BudgetCategorySection(categoryName: categoryName));
+          if (i < sortedCategories.length - 1) {
+            categoryWidgets.add(const SizedBox(height: 16));
+          }
+        }
+        return Column(children: categoryWidgets);
+      },
+    );
   }
 }

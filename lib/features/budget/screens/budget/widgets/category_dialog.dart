@@ -1,4 +1,6 @@
+import 'package:budu/core/app_router/app_router.dart';
 import 'package:budu/core/constants.dart';
+import 'package:budu/core/utils.dart';
 import 'package:flutter/material.dart';
 
 Future<String?> showAddCategoryDialog({
@@ -10,15 +12,23 @@ Future<String?> showAddCategoryDialog({
       .toList();
 
   if (availableCategories.isEmpty) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Ei lisättäviä kategorioita')),
+    showSnackBar(
+      context,
+      'Ilmaisversiossa on 11 kategoriaa - Investoi tulevaisuuteesi täällä!',
+      duration: const Duration(seconds: 3),
+      action: SnackBarAction(
+        label: 'investoi nyt',
+        onPressed: () {
+         // Navigator.pushNamed(context, AppRouter.upgradeRoute);
+        },
+      ),
     );
     return null;
   }
 
   String? selectedCategory;
 
-  return showDialog<String>(
+  final result = await showDialog<String>(
     context: context,
     builder: (context) {
       return AlertDialog(
@@ -44,34 +54,47 @@ Future<String?> showAddCategoryDialog({
                   Material(
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(8),
+                    elevation: 2,
+                    shadowColor: Colors.black.withValues(alpha: 0.75),
                     child: Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                      child: DropdownButton<String>(
-                        value: selectedCategory,
-                        hint: Text(
-                          'Valitse kategoria',
-                          style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                                color: Colors.black87,
-                              ),
-                        ),
-                        isExpanded: true,
-                        underline: const SizedBox(),
-                        items: availableCategories.map((category) {
-                          return DropdownMenuItem<String>(
-                            value: category,
-                            child: Text(
-                              category,
-                              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                                    color: Colors.black87,
-                                  ),
-                            ),
-                          );
-                        }).toList(),
-                        onChanged: (value) {
+                      child: PopupMenuButton<String>(
+                        onSelected: (value) {
                           setState(() {
                             selectedCategory = value;
                           });
                         },
+                        itemBuilder: (BuildContext context) {
+                          return availableCategories.map((category) {
+                            return PopupMenuItem<String>(
+                              value: category,
+                              child: Text(
+                                category,
+                                style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                                      color: Colors.black87,
+                                    ),
+                              ),
+                            );
+                          }).toList();
+                        },
+                        color: Colors.white,
+                        position: PopupMenuPosition.under,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              selectedCategory ?? 'Valitse kategoria',
+                              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                                    color: Colors.black87,
+                                  ),
+                            ),
+                            const SizedBox(width: 8),
+                            const Icon(
+                              Icons.arrow_drop_down,
+                              color: Colors.black87,
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ),
@@ -112,4 +135,15 @@ Future<String?> showAddCategoryDialog({
       );
     },
   );
-}
+
+  // Näytetään Snackbar, jos kategoria lisättiin
+  if (result != null) {
+    showSnackBar(
+      context,
+      'Kategoria "$result" lisätty!',
+      duration: const Duration(seconds: 2),
+    );
+  }
+
+  return result;
+} 
