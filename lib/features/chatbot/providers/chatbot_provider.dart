@@ -16,10 +16,7 @@ class ChatbotProvider with ChangeNotifier {
   String? _housingType;
   String? _carOwnership;
   bool _rentsParkingSpace = false;
-  bool _hasTireService = false;
-  bool _useAverageCarMaintenance = false;
   bool _hasPets = false;
-  bool _hasOtherExpenses = false;
   bool _hasCarLoan = false;
   bool _hasOtherDebts = false;
   double _debtAmount = 0.0;
@@ -36,7 +33,7 @@ class ChatbotProvider with ChangeNotifier {
 
   void _startChat() {
     _messages.add(ChatMessage(
-      text: "Hei! Autan sinua luomaan budjetin. Paljonko saat tuloja kuukaudessa (esim. palkka, tuet)?",
+      text: "Paljonko saat tuloja kuukaudessa (esim. palkka, tuet, pääomatulot)?",
       isUser: false,
       createdAt: DateTime.now(),
     ));
@@ -49,6 +46,7 @@ class ChatbotProvider with ChangeNotifier {
       isUser: true,
       createdAt: DateTime.now(),
     ));
+    notifyListeners(); // Ilmoitetaan viestin lisäyksestä
 
     final questions = _getQuestions();
     final currentQuestion = questions[_step];
@@ -63,7 +61,7 @@ class ChatbotProvider with ChangeNotifier {
           isUser: false,
           createdAt: DateTime.now(),
         ));
-        notifyListeners();
+        notifyListeners(); // Ilmoitetaan virheilmoituksen lisäyksestä
         return;
       }
       _processResponse(response);
@@ -73,15 +71,10 @@ class ChatbotProvider with ChangeNotifier {
     final updatedQuestions = _getQuestions();
     if (_step < updatedQuestions.length) {
       _askNextQuestion();
-    } else {
-      if (_hasOtherExpenses && _expenses.containsKey('Muut') && _expenses['Muut']!['Muut']! >= 0) {
-        _isCompleted = true;
-      } else if (!_hasOtherExpenses) {
-        _isCompleted = true;
-      }
+    } else if (_step == updatedQuestions.length) {
+      _isCompleted = true;
+      notifyListeners(); // Ilmoitetaan, että chatbot on valmis
     }
-
-    notifyListeners();
   }
 
   List<String> _getQuestions() {
@@ -89,10 +82,10 @@ class ChatbotProvider with ChangeNotifier {
       housingType: _housingType,
       carOwnership: _carOwnership,
       rentsParkingSpace: _rentsParkingSpace,
-      hasTireService: _hasTireService,
-      useAverageCarMaintenance: _useAverageCarMaintenance,
+      hasTireService: false,
+      useAverageCarMaintenance: false,
       hasPets: _hasPets,
-      hasOtherExpenses: _hasOtherExpenses,
+      hasOtherExpenses: false,
       hasCarLoan: _hasCarLoan,
       hasOtherDebts: _hasOtherDebts,
       expenses: _expenses,
@@ -108,10 +101,10 @@ class ChatbotProvider with ChangeNotifier {
       housingType: _housingType,
       carOwnership: _carOwnership,
       rentsParkingSpace: _rentsParkingSpace,
-      hasTireService: _hasTireService,
-      useAverageCarMaintenance: _useAverageCarMaintenance,
+      hasTireService: false,
+      useAverageCarMaintenance: false,
       hasPets: _hasPets,
-      hasOtherExpenses: _hasOtherExpenses,
+      hasOtherExpenses: false,
       hasCarLoan: _hasCarLoan,
       hasOtherDebts: _hasOtherDebts,
       debtAmount: _debtAmount,
@@ -121,10 +114,7 @@ class ChatbotProvider with ChangeNotifier {
     _housingType = processor.housingType;
     _carOwnership = processor.carOwnership;
     _rentsParkingSpace = processor.rentsParkingSpace;
-    _hasTireService = processor.hasTireService;
-    _useAverageCarMaintenance = processor.useAverageCarMaintenance;
     _hasPets = processor.hasPets;
-    _hasOtherExpenses = processor.hasOtherExpenses;
     _hasCarLoan = processor.hasCarLoan;
     _hasOtherDebts = processor.hasOtherDebts;
     _debtAmount = processor.debtAmount;
@@ -133,27 +123,22 @@ class ChatbotProvider with ChangeNotifier {
   void _askNextQuestion() {
     final questions = _getQuestions();
     if (_step < questions.length) {
-      _isMultipleChoice = questions[_step] == "Asutko vuokralla, omakotitalossa vai ilman asuntokuluja?" ||
+      _isMultipleChoice = questions[_step] == "Mikä seuraavista kuvaa parhaiten asumistasi?" ||
           questions[_step] == "Onko sinulla autoa?" ||
-          questions[_step] == "Onko sinulla kuukausimaksullisia palveluita, esimerkiksi Netflix tai Spotify?" ||
-          questions[_step] == "Onko muita säännöllisiä menoja?" ||
           questions[_step] == "Onko autosi oma vai maksatko siitä rahoitusta?" ||
-          questions[_step] == "Vuokraatko autopaikkaa, esimerkiksi pihapaikkaa tai autotallia?" ||
-          questions[_step] == "Onko sinulla renkaiden vaihto- ja säilytyspalvelua?" ||
-          questions[_step] == "Haluatko syöttää auton huolto- ja korjauskulut itse vai käyttää suomalaisten keskimääräisiä kuluja?" ||
-          questions[_step] == "Onko sinulla lemmikkejä?" ||
+          questions[_step] == "Vuokraatko autopaikkaa?" ||
+          questions[_step] == "Onko sinulla lemmikki/lemmikkejä?" ||
+          questions[_step] == "Maksatko muita kuukausittaisia velkoja autorahoituksen ja asuntolainan lisäksi?" ||
+          questions[_step] == "Maksatko asuntolainan lisäksi muita velkoja?" ||
           questions[_step] == "Maksatko muita kuukausittaisia velkoja autorahoituksen lisäksi?" ||
-          questions[_step] == "Maksatko kuukausittain velkoja, esimerkiksi osamaksuja?" ||
-          questions[_step] == "Maksatko kuukausittain omakotitalovelan lisäksi muita velkoja (Esim. osamaksuja)?";
+          questions[_step] == "Onko sinulla velkoja?";
       _currentOptions = ChatbotOptions(questions: questions, step: _step).getOptionsForStep();
-      Future.delayed(const Duration(milliseconds: 500), () {
-        _messages.add(ChatMessage(
-          text: questions[_step],
-          isUser: false,
-          createdAt: DateTime.now(),
-        ));
-        notifyListeners();
-      });
+      _messages.add(ChatMessage(
+        text: questions[_step],
+        isUser: false,
+        createdAt: DateTime.now(),
+      ));
+      notifyListeners(); // Ilmoitetaan uuden kysymyksen lisäyksestä
     }
   }
 

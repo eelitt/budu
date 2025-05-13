@@ -9,29 +9,26 @@ class ChatbotOptions {
 
   List<String> getOptionsForStep() {
     if (step < questions.length) {
-      if (questions[step] == "Maksatko muita kuukausittaisia velkoja autorahoituksen lisäksi?" ||
-          questions[step] == "Maksatko kuukausittain velkoja, esimerkiksi osamaksuja?" ||
-          questions[step] == "Maksatko kuukausittain muita velkoja, esimerkiksi osamaksuja, kuin omakotitalovelkaa?") {
+      if (questions[step] == "Maksatko muita kuukausittaisia velkoja autorahoituksen ja asuntolainan lisäksi?" ||
+          questions[step] == "Maksatko asuntolainan lisäksi muita velkoja?" ||
+          questions[step] == "Maksatko muita kuukausittaisia velkoja autorahoituksen lisäksi?" ||
+          questions[step] == "Onko sinulla velkoja?" ||
+          questions[step] == "Vuokraatko autopaikkaa?") {
         return ["Kyllä", "Ei"];
       }
       switch (questions[step]) {
-        case "Asutko vuokralla, omakotitalossa vai ilman asuntokuluja?":
-          return ["Vuokralla", "Omakotitalossa", "Ilman asuntokuluja"];
+        case "Mikä seuraavista kuvaa parhaiten asumistasi?":
+          return [
+            "Vuokra-asunto",
+            "Omistusasunto kerros-/rivitalossa (esim. yhtiövastiketta maksava)",
+            "Omistusasunto omakotitalossa",
+            "Asun ilman asuntokuluja (esim. vanhempien luona tai ilmaiseksi)",
+          ];
         case "Onko sinulla autoa?":
           return ["Kyllä", "Ei"];
         case "Onko autosi oma vai maksatko siitä rahoitusta?":
-          return ["Oma", "Rahoitettu"];
-        case "Onko sinulla kuukausimaksullisia palveluita, esimerkiksi Netflix tai Spotify?":
-          return ["Kyllä", "Ei"];
-        case "Onko muita säännöllisiä menoja?":
-          return ["Kyllä", "Ei"];
-        case "Vuokraatko autopaikkaa, esimerkiksi pihapaikkaa tai autotallia?":
-          return ["Kyllä", "Ei"];
-        case "Onko sinulla renkaiden vaihto- ja säilytyspalvelua?":
-          return ["Kyllä", "Ei"];
-        case "Haluatko syöttää auton huolto- ja korjauskulut itse vai käyttää suomalaisten keskimääräisiä kuluja?":
-          return ["Lisää summa", "Käytä suomalaisten keskim. huolto- ja korjauskustannuksia (1070 € vuodessa)"];
-        case "Onko sinulla lemmikkejä?":
+          return ["Oma auto", "Rahoitettu"];
+        case "Onko sinulla lemmikki/lemmikkejä?":
           return ["Kyllä", "Ei"];
       }
     }

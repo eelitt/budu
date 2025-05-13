@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import '../../providers/chatbot_provider.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 class TextFieldWithNumberKeyboard extends StatefulWidget {
-  const TextFieldWithNumberKeyboard({super.key});
+  final Function(String) onSubmitted;
+
+  const TextFieldWithNumberKeyboard({
+    super.key,
+    required this.onSubmitted,
+  });
 
   @override
   State<TextFieldWithNumberKeyboard> createState() => _TextFieldWithNumberKeyboardState();
@@ -20,24 +24,37 @@ class _TextFieldWithNumberKeyboardState extends State<TextFieldWithNumberKeyboar
 
   @override
   Widget build(BuildContext context) {
-    final chatbotProvider = Provider.of<ChatbotProvider>(context);
     return Padding(
-      padding: const EdgeInsets.all(8.0),
+      padding: const EdgeInsets.all(16.0),
       child: TextField(
         controller: _controller,
         autofocus: true,
         keyboardType: TextInputType.number,
-        decoration: const InputDecoration(
+        decoration: InputDecoration(
           hintText: 'Syötä summa...',
-          border: OutlineInputBorder(),
+          hintStyle: GoogleFonts.montserrat(
+            fontSize: 14,
+            color: Colors.grey[500],
+          ),
           filled: true,
-          fillColor: Colors.grey,
+          fillColor: Colors.white,
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: BorderSide(color: Colors.grey[400]!),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: BorderSide(color: Colors.blueGrey[800]!, width: 2),
+          ),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        ),
+        style: GoogleFonts.montserrat(
+          fontSize: 14,
+          color: Colors.black87,
         ),
         onSubmitted: (value) {
-          if (value.isNotEmpty) {
-            chatbotProvider.handleUserResponse(value);
-            _controller.clear();
-          }
+          widget.onSubmitted(value);
+          _controller.clear();
         },
       ),
     );

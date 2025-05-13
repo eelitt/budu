@@ -1,4 +1,3 @@
-import 'package:budu/core/app_router/app_router.dart';
 import 'package:budu/features/auth/providers/auth_provider.dart';
 import 'package:budu/features/chatbot/providers/chatbot_provider.dart';
 import 'package:flutter/material.dart';
@@ -11,32 +10,22 @@ class ChatbotNavigator {
 
   ChatbotNavigator(this._context) {
     _chatbotProvider = Provider.of<ChatbotProvider>(_context, listen: false);
-    _chatbotProvider!.addListener(_onChatbotCompleted);
   }
 
-  void _onChatbotCompleted() {
-    final authProvider = Provider.of<AuthProvider>(_context, listen: false);
-
+  Future<void> saveBudget() async {
     if (_chatbotProvider!.isCompleted && !_hasNavigated) {
       _hasNavigated = true;
+      final authProvider = Provider.of<AuthProvider>(_context, listen: false);
       print('ChatbotScreen: Chatbot valmis, tallennetaan budjetti');
-      _chatbotProvider!.saveBudget(_context, authProvider.user!.uid).then((_) {
-        print('ChatbotScreen: Budjetti tallennettu, navigoidaan MainScreeniin (SummaryScreen)');
-        Future.delayed(const Duration(milliseconds: 500), () {
-          Navigator.pushReplacementNamed(
-            _context,
-            AppRouter.mainRoute,
-            arguments: {'index': 1},
-          );
-        });
-      }).catchError((e) {
+      await _chatbotProvider!.saveBudget(_context, authProvider.user!.uid).catchError((e) {
         print('ChatbotScreen: Virhe budjetin tallennuksessa: $e');
         _hasNavigated = false;
+        throw e; // Heitetään virhe eteenpäin, jotta ChatbotScreen voi käsitellä sen
       });
     }
   }
 
   void dispose() {
-    _chatbotProvider?.removeListener(_onChatbotCompleted);
+    // Ei enää kuuntelijaa, joten ei tarvetta poistaa
   }
 }

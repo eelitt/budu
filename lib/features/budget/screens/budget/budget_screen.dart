@@ -1,4 +1,5 @@
 import 'package:budu/core/app_router/app_router.dart';
+import 'package:budu/core/constants.dart';
 import 'package:budu/features/auth/providers/auth_provider.dart';
 import 'package:budu/features/budget/providers/budget_provider.dart';
 import 'package:budu/features/budget/screens/budget/controllers/budget_screen_controller.dart';
@@ -20,10 +21,11 @@ class BudgetScreen extends StatefulWidget {
 
 class _BudgetScreenState extends State<BudgetScreen> {
   BudgetScreenController? _controller;
-  final ValueNotifier<int> _currentYear = ValueNotifier(DateTime.now().year);
-  final ValueNotifier<int> _currentMonth = ValueNotifier(DateTime.now().month);
+  late ValueNotifier<int> _currentYear;
+  late ValueNotifier<int> _currentMonth;
   List<Map<String, int>> _availableMonths = [];
   final ValueNotifier<Map<String, int>?> _selectedMonth = ValueNotifier(null);
+  bool _isLoadingBudget = true;
 
   @override
   void initState() {
@@ -32,6 +34,35 @@ class _BudgetScreenState extends State<BudgetScreen> {
       context: context,
       onStateChanged: () => setState(() {}),
     );
+    _initializeBudget();
+  }
+
+  Future<void> _initializeBudget() async {
+    final budgetProvider = Provider.of<BudgetProvider>(context, listen: false);
+
+    // Asetetaan _currentYear ja _currentMonth BudgetProviderin budjetin perusteella
+    if (budgetProvider.budget != null) {
+      _currentYear = ValueNotifier(budgetProvider.budget!.year);
+      _currentMonth = ValueNotifier(budgetProvider.budget!.month);
+    } else {
+      _currentYear = ValueNotifier(DateTime.now().year);
+      _currentMonth = ValueNotifier(DateTime.now().month);
+      // Jos budjettia ei ole, ladataan oletuskuukauden budjetti
+      final authProvider = Provider.of<AuthProvider>(context, listen: false);
+      if (authProvider.user != null) {
+        await _controller!.loadBudget(
+          userId: authProvider.user!.uid,
+          year: _currentYear.value,
+          month: _currentMonth.value,
+        );
+      }
+    }
+
+    if (mounted) {
+      setState(() {
+        _isLoadingBudget = false;
+      });
+    }
   }
 
   Future<void> _loadAvailableMonths() async {
@@ -69,6 +100,22 @@ class _BudgetScreenState extends State<BudgetScreen> {
         currentYear: _currentYear,
         currentMonth: _currentMonth,
       );
+
+      if (_availableMonths.isNotEmpty) {
+        final nextMonth = _availableMonths.first;
+        _selectedMonth.value = nextMonth;
+        _currentYear.value = nextMonth['year']!;
+        _currentMonth.value = nextMonth['month']!;
+        await _controller!.loadBudget(
+          userId: authProvider.user!.uid,
+          year: _currentYear.value,
+          month: _currentMonth.value,
+        );
+      } else {
+        if (context.mounted) {
+          Navigator.pushNamed(context, AppRouter.chatbotRoute);
+        }
+      }
     }
   }
 
@@ -91,7 +138,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
     return FutureBuilder<void>(
       future: _loadAvailableMonths(),
       builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
+        if (snapshot.connectionState == ConnectionState.waiting || _isLoadingBudget) {
           return const Center(child: CircularProgressIndicator());
         }
         if (snapshot.hasError) {
@@ -101,15 +148,18 @@ class _BudgetScreenState extends State<BudgetScreen> {
         return Consumer<BudgetProvider>(
           builder: (context, budgetProvider, child) {
             final budget = budgetProvider.budget;
-            // Jos budjetti on null ja budjetteja ei ole jäljellä, ohjataan ChatbotScreen-näkymään
-            if (budget == null && _availableMonths.isEmpty) {
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                if (context.mounted) {
-                  Navigator.pushNamed(context, AppRouter.chatbotRoute);
-                }
-              });
-              return const Center(child: Text('Luo budjetti ensin!'));
+
+            if (budget == null) {
+              if (_availableMonths.isEmpty) {
+                return const Center(child: Text('Luo budjetti ensin!'));
+              } else {
+                return const Center(child: CircularProgressIndicator());
+              }
             }
+
+            final availableCategories = categoryMapping.keys
+                .where((category) => !budget.expenses.containsKey(category))
+                .toList();
 
             return SingleChildScrollView(
               child: Container(
@@ -247,14 +297,14 @@ class _BudgetScreenState extends State<BudgetScreen> {
                                   onPressed: () async {
                                     final selectedCategory = await showAddCategoryDialog(
                                       context: context,
-                                      currentExpenses: budget!.expenses,
+                                      currentExpenses: budget.expenses,
                                     );
                                     if (selectedCategory != null) {
                                       await _addCategory(selectedCategory);
                                     }
                                   },
                                   style: ElevatedButton.styleFrom(
-                                    backgroundColor: Colors.blueGrey[800],
+                                    backgroundColor: availableCategories.isEmpty ? Colors.grey[400] : Colors.blueGrey[800],
                                     foregroundColor: Colors.white,
                                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                                     textStyle: Theme.of(context).textTheme.bodyLarge?.copyWith(
@@ -278,7 +328,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
                               ],
                             ),
                             const SizedBox(height: 8),
-                            CategoryListWrapper(budget: budget!),
+                            CategoryListWrapper(budget: budget),
                           ],
                         ),
                       ),

@@ -11,9 +11,16 @@ class BudgetProvider with ChangeNotifier {
   StreamSubscription? _budgetSubscription;
   Timer? _debounceTimer;
   bool _hasPendingChanges = false;
-  bool _shouldNotifyListeners = true; // Uusi muuttuja notifyListeners-kutsujen hallintaan
+  bool _shouldNotifyListeners = true;
 
   BudgetModel? get budget => _budget;
+
+  // Uusi metodi budjetin asettamiseen ja notifyListeners-kutsuun
+  void setBudget(BudgetModel? newBudget) {
+    _budget = newBudget;
+    _lastSavedBudget = newBudget?.copy();
+    notifyListeners();
+  }
 
   Future<void> loadBudget(String userId, int year, int month) async {
     try {
@@ -147,7 +154,7 @@ class BudgetProvider with ChangeNotifier {
         _budget!.expenses[category] = {};
       }
       _budget!.expenses[category]![subcategory] = amount;
-      _scheduleSave(userId, notify: false); // Estetään notifyListeners tässä vaiheessa
+      _scheduleSave(userId, notify: false);
     } catch (e) {
       print('Error adding subcategory: $e');
       rethrow;
@@ -204,7 +211,7 @@ class BudgetProvider with ChangeNotifier {
   void _scheduleSave(String userId, {bool notify = true}) {
     _hasPendingChanges = true;
     _debounceTimer?.cancel();
-    _shouldNotifyListeners = notify; // Asetetaan, halutaanko notifyListeners
+    _shouldNotifyListeners = notify;
     _debounceTimer = Timer(const Duration(seconds: 1), () async {
       if (_hasPendingChanges && _budget != null && _budget.toString() != _lastSavedBudget?.toString()) {
         await saveBudget(userId, _budget!);

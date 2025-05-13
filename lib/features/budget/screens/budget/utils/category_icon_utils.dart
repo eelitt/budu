@@ -6,8 +6,8 @@ IconData getCategoryIcon(String categoryName) {
       return Icons.home;
     case "Liikkuminen":
       return Icons.directions_car;
-    case "Kodin kulut":
-      return Icons.power;
+    case "Laskut ja palvelut":
+      return Icons.receipt_long;
     case "Viihde":
       return Icons.movie;
     case "Harrastukset":
@@ -20,10 +20,12 @@ IconData getCategoryIcon(String categoryName) {
       return Icons.cleaning_services;
     case "Lemmikit":
       return Icons.pets;
-    case "Sijoittaminen":
+    case "Sijoittaminen ja säästäminen":
       return Icons.savings;
     case "Velat":
       return Icons.money_off;
+    case "Vakuutukset":
+    return Icons.description;
     case "Muut":
       return Icons.category;
     default:

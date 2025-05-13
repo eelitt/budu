@@ -1,8 +1,8 @@
 import 'package:budu/core/app_router/app_router.dart';
 import 'package:budu/features/auth/providers/auth_provider.dart';
+import 'package:budu/features/budget/models/budget_model.dart';
 import 'package:budu/features/budget/providers/budget_provider.dart';
 import 'package:budu/features/mainscreen/services/main_screen_actions_service.dart';
-import 'package:budu/features/mainscreen/services/main_screen_budget_service.dart';
 import 'package:budu/features/mainscreen/services/main_screen_budget_status_service.dart';
 import 'package:budu/features/mainscreen/services/main_screen_update_dialog_service.dart';
 import 'package:budu/features/mainscreen/widgets/main_screen_app_bar.dart';
@@ -14,46 +14,61 @@ import 'package:provider/provider.dart';
 class MainScreen extends StatefulWidget {
   final int initialIndex;
 
-  const MainScreen({super.key, this.initialIndex = 0});
+  const MainScreen({
+    super.key,
+    this.initialIndex = 0,
+  });
 
   @override
   State<MainScreen> createState() => _MainScreenState();
 }
 
-class _MainScreenState extends State<MainScreen> {
+class _MainScreenState extends State<MainScreen> with RouteAware {
   late int _selectedIndex;
-  Future<void> _loadBudgetFuture = Future.value();
   bool _hasBudgetLoadError = false;
   bool _nextMonthBudgetExists = false;
+  BudgetModel? _lastBudget;
 
-  final MainScreenBudgetService _budgetService = MainScreenBudgetService();
   final MainScreenBudgetStatusService _budgetStatusService = MainScreenBudgetStatusService();
   final MainScreenUpdateDialogService _updateDialogService = MainScreenUpdateDialogService();
   final MainScreenActionsService _mainScreenActions = MainScreenActionsService();
 
-  // Lisätty GlobalKey sisäisen Navigator-instanssin hallintaan
   final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
 
   @override
   void initState() {
     super.initState();
     _selectedIndex = widget.initialIndex;
-    _loadBudget();
+    print('MainScreen: initState - _selectedIndex asetettu arvoon $_selectedIndex');
     _checkBudgetStatus();
     _updateDialogService.checkForUpdateDialog(context);
   }
 
-  Future<void> _loadBudget() async {
-    try {
-      _loadBudgetFuture = _budgetService.loadBudget(context);
-      await _loadBudgetFuture;
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _hasBudgetLoadError = true;
-        });
-      }
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final ModalRoute? route = ModalRoute.of(context);
+    if (route != null) {
+      AppRouter.routeObserver.subscribe(this, route as PageRoute);
     }
+  }
+
+  @override
+  void dispose() {
+    AppRouter.routeObserver.unsubscribe(this);
+    super.dispose();
+  }
+
+  @override
+  void didPopNext() {
+    print('MainScreen: didPopNext - Päivitetaan budjetin tila');
+    _checkBudgetStatus();
+  }
+
+  @override
+  void didPush() {
+    print('MainScreen: didPush - Päivitetaan budjetin tila');
+    _checkBudgetStatus();
   }
 
   Future<void> _retryLoadBudget() async {
@@ -62,7 +77,6 @@ class _MainScreenState extends State<MainScreen> {
         _hasBudgetLoadError = false;
       });
     }
-    await _loadBudget();
     await _checkBudgetStatus();
   }
 
@@ -70,7 +84,8 @@ class _MainScreenState extends State<MainScreen> {
     await _budgetStatusService.checkBudgetStatus(
       context,
       (exists) {
-        if (mounted) {
+        if (mounted && _nextMonthBudgetExists != exists) {
+          print('MainScreen: _checkBudgetStatus - _nextMonthBudgetExists asetettu arvoon $exists');
           setState(() => _nextMonthBudgetExists = exists);
         }
       },
@@ -99,11 +114,23 @@ class _MainScreenState extends State<MainScreen> {
       default:
         routeName = AppRouter.budgetRoute;
     }
-    // Suorita _checkBudgetStatus ennen navigointia
+    print('MainScreen: _onItemTapped - Navigoidaan reittiin: $routeName (index: $index)');
     await _checkBudgetStatus();
-    // Navigoi valittuun reittiin sisäisen Navigator-instanssin kautta
     if (mounted) {
       _navigatorKey.currentState?.pushReplacementNamed(routeName);
+    }
+  }
+
+  String _getInitialRoute() {
+    switch (_selectedIndex) {
+      case 0:
+        return AppRouter.budgetRoute;
+      case 1:
+        return AppRouter.summaryRoute;
+      case 2:
+        return AppRouter.historyRoute;
+      default:
+        return AppRouter.budgetRoute;
     }
   }
 
@@ -114,64 +141,64 @@ class _MainScreenState extends State<MainScreen> {
 
     return Consumer<BudgetProvider>(
       builder: (context, budgetProvider, child) {
-        return FutureBuilder(
-          future: _loadBudgetFuture,
-          builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) {
-              return const Center(child: CircularProgressIndicator());
-            }
-            if (snapshot.hasError || _hasBudgetLoadError) {
-              return Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Text('Virhe budjetin latauksessa. Yritä uudelleen.'),
-                    const SizedBox(height: 16),
-                    ElevatedButton(
-                      onPressed: _retryLoadBudget,
-                      child: const Text('Yritä uudelleen'),
-                    ),
-                  ],
-                ),
-              );
-            }
+        if (budgetProvider.budget != _lastBudget) {
+          _lastBudget = budgetProvider.budget;
+          _checkBudgetStatus();
+        }
 
-            return Scaffold(
-              appBar: MainScreenAppBar(
-                userFirstName: userFirstName,
-                nextMonthBudgetExists: _nextMonthBudgetExists,
-                onMenuSelected: (value) => _mainScreenActions.handleMenuSelection(value, context),
+        if (_hasBudgetLoadError) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Text('Virhe budjetin latauksessa. Yritä uudelleen.'),
+                const SizedBox(height: 16),
+                ElevatedButton(
+                  onPressed: _retryLoadBudget,
+                  child: const Text('Yritä uudelleen'),
+                ),
+              ],
+            ),
+          );
+        }
+
+        final initialRoute = _getInitialRoute();
+        print('MainScreen: build - initialRoute asetettu: $initialRoute (index: $_selectedIndex)');
+
+        return Scaffold(
+          appBar: MainScreenAppBar(
+            userFirstName: userFirstName,
+            nextMonthBudgetExists: _nextMonthBudgetExists,
+            onMenuSelected: (value) => _mainScreenActions.handleMenuSelection(value, context),
+          ),
+          body: Column(
+            children: [
+              const NotificationBanner(),
+              Expanded(
+                child: Navigator(
+                  key: _navigatorKey,
+                  initialRoute: initialRoute,
+                  onGenerateRoute: AppRouter.generateRoute,
+                ),
               ),
-              body: Column(
-                children: [
-                  const NotificationBanner(),
-                  Expanded(
-                    child: Navigator(
-                      key: _navigatorKey, // Käytetään GlobalKey:tä
-                      initialRoute: AppRouter.budgetRoute,
-                      onGenerateRoute: AppRouter.generateRoute,
-                    ),
-                  ),
+            ],
+          ),
+          bottomNavigationBar: Container(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.bottomCenter,
+                end: Alignment.topCenter,
+                colors: [
+                  Color.fromARGB(255, 253, 228, 190),
+                  Color(0xFFFFFCF5),
                 ],
               ),
-              bottomNavigationBar: Container(
-                decoration: const BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.bottomCenter,
-                    end: Alignment.topCenter,
-                    colors: [
-                      Color.fromARGB(255, 253, 228, 190), // Aloitetaan taustaväristä (alhaalta)
-                      Color(0xFFFFFCF5), // Päättyy keskivaaleaan oranssiin (ylhäällä)
-                    ],
-                  ),
-                ),
-                child: MainScreenBottomNavigationBar(
-                  selectedIndex: _selectedIndex < 3 ? _selectedIndex : 0,
-                  onItemTapped: _onItemTapped,
-                ),
-              ),
-            );
-          },
+            ),
+            child: MainScreenBottomNavigationBar(
+              selectedIndex: _selectedIndex < 3 ? _selectedIndex : 0,
+              onItemTapped: _onItemTapped,
+            ),
+          ),
         );
       },
     );

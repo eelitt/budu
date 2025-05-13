@@ -1,4 +1,3 @@
-import 'package:budu/core/app_router/app_router.dart';
 import 'package:budu/core/constants.dart';
 import 'package:budu/core/utils.dart';
 import 'package:flutter/material.dart';
@@ -12,14 +11,15 @@ Future<String?> showAddCategoryDialog({
       .toList();
 
   if (availableCategories.isEmpty) {
+    final categoryLimit = categoryMapping.keys.length; // Lasketaan kategorioiden määrä dynaamisesti
     showSnackBar(
       context,
-      'Ilmaisversiossa on 11 kategoriaa - Investoi tulevaisuuteesi täällä!',
+      'Ilmaisversiossa on $categoryLimit kategoriaa.',
       duration: const Duration(seconds: 3),
       action: SnackBarAction(
-        label: 'investoi nyt',
+        label: 'Premium',
         onPressed: () {
-         // Navigator.pushNamed(context, AppRouter.upgradeRoute);
+          // Navigator.pushNamed(context, AppRouter.upgradeRoute);
         },
       ),
     );
@@ -146,4 +146,4 @@ Future<String?> showAddCategoryDialog({
   }
 
   return result;
-} 
+}

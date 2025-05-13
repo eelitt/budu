@@ -12,7 +12,7 @@ class BudgetModel {
     required this.createdAt,
     required this.year,
     required this.month,
-    this.isPlaceholder = false, // Oletusarvoisesti false (käyttäjän luoma budjetti)
+    this.isPlaceholder = false, 
   });
 
   Map<String, dynamic> toMap() {

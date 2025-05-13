@@ -3,15 +3,15 @@ import 'package:flutter/material.dart';
 
 class SubcategoryManager {
   final Map<String, Map<String, TextEditingController>> expenseControllers;
-  final VoidCallback onUpdate;
+  final Function({required String category, required String subcategory}) onUpdate; // Päivitetty tyyppi
 
   SubcategoryManager({
     required this.expenseControllers,
     required this.onUpdate,
   });
 
-  static const int maxSubcategories = 6; // Maksimimäärä alakategorioita ilmaisversiossa
-  static const int maxSubcategoryLength = 50; // Maksimipituus alakategorian nimelle
+  static const int maxSubcategories = 6;
+  static const int maxSubcategoryLength = 50;
 
   bool canAddSubcategory(String category) {
     return (expenseControllers[category]?.length ?? 0) < maxSubcategories;
@@ -19,7 +19,7 @@ class SubcategoryManager {
 
   void removeSubcategory(String category, String subcategory) {
     expenseControllers[category]?.remove(subcategory);
-    onUpdate();
+    onUpdate(category: category, subcategory: subcategory);
   }
 
   String? _validateSubcategoryName(String? value) {
@@ -169,7 +169,7 @@ class SubcategoryManager {
                 } else {
                   if (subcategory.isNotEmpty) {
                     expenseControllers[category]![subcategory] = TextEditingController(text: '0.00');
-                    onUpdate();
+                    onUpdate(category: category, subcategory: subcategory);
                   }
                   FocusScope.of(context).unfocus();
                   Navigator.pop(context);

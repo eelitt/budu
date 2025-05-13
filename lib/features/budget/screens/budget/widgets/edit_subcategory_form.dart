@@ -31,7 +31,7 @@ class EditSubcategoryForm extends StatelessWidget {
               ),
               filled: true,
               fillColor: Colors.grey.shade100,
-              contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
             ),
             maxLength: 30,
             buildCounter: (context, {required currentLength, required isFocused, maxLength}) => null,

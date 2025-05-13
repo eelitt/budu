@@ -32,56 +32,60 @@ class ChatbotResponseProcessor {
   void processResponse(String response, int step) {
     double? value = double.tryParse(response.replaceAll('€', '').trim());
     switch (questions[step]) {
-      case "Hei! Paljonko saat tuloja kuukaudessa (esim. palkka, tuet)?":
+      case "Paljonko saat tuloja kuukaudessa (esim. palkka, tuet, pääomatulot)?":
         income = value ?? 0.0;
         break;
-      case "Asutko vuokralla, omakotitalossa vai ilman asuntokuluja?":
+      case "Mikä seuraavista kuvaa parhaiten asumistasi?":
         housingType = response;
-        if (response == "Vuokralla") {
-          expenses['Asuminen'] = {
-            'Vuokra': 0.0,
-            'Vesimaksu': 0.0,
-            'Kotivakuutus': 0.0,
-          };
-        }
-        if (response == "Omakotitalossa") {
-          expenses['Asuminen'] = {
-            'Asuntolaina': 0.0,
-            'Lämmitys': 0.0,
-            'Kiinteistövero': 0.0,
-            'Jätehuolto': 0.0,
-            'Kotivakuutus': 0.0,
-          };
+        if (response != "Asun ilman asuntokuluja (esim. vanhempien luona tai ilmaiseksi)") {
+          expenses['Asuminen'] = {};
+          expenses['Vakuutukset'] = {'Kotivakuutus': 0.0};
         }
         break;
       case "Paljonko maksat vuokraa kuukaudessa?":
         if (expenses.containsKey('Asuminen')) expenses['Asuminen']!['Vuokra'] = value ?? 0.0;
         break;
-      case "Paljonko maksat vesimaksua kuukaudessa (jos sisältyy vuokraan, syötä 0)?":
-        if (housingType == "Vuokralla") expenses['Asuminen']!['Vesimaksu'] = value ?? 0.0;
+      case "Paljonko maksat vesimaksua kuukaudessa (jos sisältyy vuokraan, syötä 0)?": // Vuokra-asunto
+      case "Paljonko maksat vesimaksua kuukaudessa (vesi + jätevesi)?": // Omakotitalo
+      case "Paljonko maksat vesimaksua kuukaudessa (jos sisältyy vastikkeeseen, syötä 0)?": // Kerrostalo/rivitalo
+        expenses['Laskut ja palvelut'] = expenses['Laskut ja palvelut'] ?? {};
+        expenses['Laskut ja palvelut']!['Vesi'] = value ?? 0.0;
         break;
-      case "Paljonko kotivakuutuksesi maksaa vuodessa?":
-        if (housingType == "Vuokralla") expenses['Asuminen']!['Kotivakuutus'] = (value ?? 0.0) / 12;
-        if (housingType == "Omakotitalossa") expenses['Asuminen']!['Kotivakuutus'] = (value ?? 0.0) / 12;
+      case "Paljonko maksat yhtiövastiketta kuukaudessa?":
+        if (expenses.containsKey('Asuminen')) expenses['Asuminen']!['Yhtiövastike'] = value ?? 0.0;
         break;
-      case "Paljonko maksat asuntolainaa kuukaudessa (jos ei lainaa, syötä 0)?":
+      case "Paljonko maksat asuntolainaa kuukaudessa? (jos ei lainaa, syötä 0)?": // Omakotitalo
         if (expenses.containsKey('Asuminen')) expenses['Asuminen']!['Asuntolaina'] = value ?? 0.0;
+        break;
+      case "Paljonko kotivakuutuksesi maksaa vuodessa?": // Omakotitalo
+        if (expenses.containsKey('Vakuutukset')) expenses['Vakuutukset']!['Kotivakuutus'] = (value ?? 0.0) / 12;
         break;
       case "Paljonko kiinteistöverosi on vuodessa?":
         if (expenses.containsKey('Asuminen')) expenses['Asuminen']!['Kiinteistövero'] = (value ?? 0.0) / 12;
         break;
-      case "Paljonko maksat jätehuollosta kuukaudessa?":
+      case "Paljonko maksat jätehuollosta (Roskien tyhjennys) kuukaudessa?":
         if (expenses.containsKey('Asuminen')) expenses['Asuminen']!['Jätehuolto'] = value ?? 0.0;
+        break;
+      case "Paljonko maksat sähkölaskua kuukaudessa?":
+        expenses['Laskut ja palvelut'] = expenses['Laskut ja palvelut'] ?? {};
+        expenses['Laskut ja palvelut']!['Sähkö'] = value ?? 0.0;
+        break;
+      case "Paljonko maksat puhelinlaskua kuukaudessa?":
+        if (expenses.containsKey('Laskut ja palvelut')) expenses['Laskut ja palvelut']!['Puhelinlasku'] = value ?? 0.0;
+        break;
+      case "Paljonko maksat nettiliittymästä kuukaudessa (Syötä 0, jos ei ole nettiliittymää)?":
+        if (expenses.containsKey('Laskut ja palvelut')) expenses['Laskut ja palvelut']!['Nettiliittymä'] = value ?? 0.0;
         break;
       case "Onko sinulla autoa?":
         carOwnership = response;
         if (response == "Kyllä") {
           expenses['Liikkuminen'] = {
             'Polttoaine': 0.0,
-            'Autovakuutus': 0.0,
-            'Ajoneuvovero': 0.0,
-            'Auton huolto': 0.0,
+            'auton verot': 0.0,
+            'Auton ylläpito': 0.0,
           };
+          expenses['Vakuutukset'] = expenses['Vakuutukset'] ?? {};
+          expenses['Vakuutukset']!['Autovakuutus'] = 0.0;
         }
         break;
       case "Onko autosi oma vai maksatko siitä rahoitusta?":
@@ -92,105 +96,82 @@ class ChatbotResponseProcessor {
           hasCarLoan = true;
         } else {
           hasCarLoan = false;
-        }
-        break;
-      case "Paljonko maksat Auton rahoitusta kuukaudessa?":
-        if (expenses.containsKey('Liikkuminen')) expenses['Liikkuminen']!['Auton rahoitus'] = value ?? 0.0;
-        break;
-      case "Vuokraatko autopaikkaa (esim. pihapaikka, autotalli)?":
-        rentsParkingSpace = response == "Kyllä";
-        if (rentsParkingSpace) {
           if (expenses.containsKey('Liikkuminen')) {
-            expenses['Liikkuminen']!['AutopaikanVuokra'] = 0.0;
+            expenses['Liikkuminen']!.remove('Auton rahoitus');
           }
         }
         break;
-      case "Paljonko maksat autopaikan vuokraa kuukaudessa?":
-        if (expenses.containsKey('Liikkuminen')) expenses['Liikkuminen']!['AutopaikanVuokra'] = value ?? 0.0;
+      case "Paljonko maksat auton rahoitusta kuukaudessa?":
+        if (expenses.containsKey('Liikkuminen')) expenses['Liikkuminen']!['Auton rahoitus'] = value ?? 0.0;
+        break;
+      case "Vuokraatko autopaikkaa?":
+        rentsParkingSpace = response == "Kyllä";
+        if (rentsParkingSpace) {
+          if (expenses.containsKey('Liikkuminen')) {
+            expenses['Liikkuminen']!['Autopaikan vuokra'] = 0.0;
+          }
+        } else {
+          if (expenses.containsKey('Liikkuminen')) {
+            expenses['Liikkuminen']!.remove('Autopaikan vuokra');
+          }
+        }
+        break;
+      case "Paljonko maksat autopaikasta kuukaudessa?":
+        if (expenses.containsKey('Liikkuminen')) expenses['Liikkuminen']!['Autopaikan vuokra'] = value ?? 0.0;
         break;
       case "Paljonko auton polttoainekulut ovat kuukaudessa?":
         if (carOwnership == "Kyllä") expenses['Liikkuminen']!['Polttoaine'] = value ?? 0.0;
         break;
       case "Paljonko auton vakuutukset maksavat vuodessa?":
-        if (carOwnership == "Kyllä") expenses['Liikkuminen']!['Autovakuutus'] = (value ?? 0.0) / 12;
+        if (carOwnership == "Kyllä") expenses['Vakuutukset']!['Autovakuutus'] = (value ?? 0.0) / 12;
         break;
-      case "Paljonko maksat ajoneuvoveroa vuodessa?":
-        if (carOwnership == "Kyllä") expenses['Liikkuminen']!['Ajoneuvovero'] = (value ?? 0.0) / 12;
+      case "Paljonko maksat käyttövoima- ja ajoneuvoveroa vuodessa?":
+        if (carOwnership == "Kyllä") expenses['Liikkuminen']!['auton verot'] = (value ?? 0.0) / 12;
         break;
-      case "Onko sinulla renkaiden vaihto- ja säilytyspalvelu?":
-        hasTireService = response == "Kyllä";
-        if (hasTireService) {
-          if (expenses.containsKey('Liikkuminen')) {
-            expenses['Liikkuminen']!['Renkaiden vaihto ja säilytys'] = 0.0;
-          }
-        }
+      case "Paljonko maksat autosta muita kuluja vuodessa (Esim. Renkaiden säilytys, huolto (Suomessa huolto keskim. 600-1000€/vuosi))?":
+        if (carOwnership == "Kyllä") expenses['Liikkuminen']!['Auton ylläpito'] = (value ?? 0.0) / 12;
         break;
-      case "Paljonko maksat renkaiden vaihto- ja säilytyspalvelusta vuodessa?":
-        if (expenses.containsKey('Liikkuminen')) expenses['Liikkuminen']!['Renkaiden vaihto ja säilytys'] = (value ?? 0.0) / 12;
+      case "Paljonko varaat ruokaan kuukaudessa?":
+        expenses['Ruoka'] = {'Ruokakauppa': value ?? 0.0};
         break;
-      case "Haluatko syöttää auton huolto- ja korjauskulut itse vai käyttää suomalaisten keskimääräisiä kuluja?":
-        useAverageCarMaintenance = response == "Käytä suomalaisten keskim. huolto- ja korjauskustannuksia (1070 € vuodessa)";
-        if (useAverageCarMaintenance) expenses['Liikkuminen']!['Auton huolto'] = 1070.0 / 12;
+      case "Paljonko käytät rahaa terveyteen liittyviin kuluihin kuukaudessa (Lääkkeet, lääkärikäynnit)?":
+        expenses['Terveys'] = {'Terveyskulut': value ?? 0.0};
         break;
-      case "Paljonko auton huolto- ja korjauskulut ovat vuodessa?":
-        if (carOwnership == "Kyllä") expenses['Liikkuminen']!['Auton huolto'] = (value ?? 0.0) / 12;
+      case "Paljonko käytät rahaa hygieniaan liittyviin kuluihin kuukaudessa (Kosmetiikka, Siivous- ja wc-tarvikkeet)?":
+        expenses['Hygienia'] = {'Hygieniakulut': value ?? 0.0};
         break;
-      case "Paljonko sähkölaskusi on keskimäärin kuukaudessa?":
-        expenses['Kodin kulut'] = {
-          'Sähkö': value ?? 0.0,
-          'Nettiliittymä': 0.0,
-          'Puhelinlasku': 0.0,
-        };
+      case "Paljonko varaat sijoittamiseen kuukaudessa (esim. osakkeet, rahastot, kryptovaluutat)?": // Sijoittaminen ja säästäminen
+        expenses['Sijoittaminen ja säästäminen'] = expenses['Sijoittaminen ja säästäminen'] ?? {};
+        expenses['Sijoittaminen ja säästäminen']!['Sijoittaminen'] = value ?? 0.0;
         break;
-      case "Onko sinulla kuukausimaksullisia palveluita (esim. Netflix, Spotify)?":
-        if (response == "Kyllä") expenses['Viihde'] = {'Viihde-Palvelut': 0.0};
+      case "Paljonko varaat säästämiseen kuukaudessa (esim. pahanpäivän kassa, lomareissut)?": // Sijoittaminen ja säästäminen
+        if (expenses.containsKey('Sijoittaminen ja säästäminen')) expenses['Sijoittaminen ja säästäminen']!['Säästäminen'] = value ?? 0.0;
         break;
-      case "Paljonko palveluihin menee rahaa kuukaudessa?":
-        if (expenses.containsKey('Viihde')) expenses['Viihde']!['Viihde-Palvelut'] = value ?? 0.0;
-        break;
-      case "Paljonko varaat ruokaan ja päivittäistavaroihin kuukaudessa?":
-        expenses['Ruoka'] = {'Ruoka': value ?? 0.0};
-        break;
-      case "Paljonko käytät rahaa terveyteen liittyviin kuluihin kuukaudessa (esim. lääkärikäynnit, lääkkeet)?":
-        expenses['Terveys'] = {'Terveys': value ?? 0.0};
-        break;
-      case "Paljonko käytät rahaa hygieniaan liittyviin kuluihin kuukaudessa (esim. puhdistusaineet, WC-paperit, muut vessassa ja keittiössä tarvittavat kulutustuotteet)?":
-        expenses['Hygienia'] = {'Hygienia': value ?? 0.0};
-        break;
-      case "Paljonko käytät rahaa harrastuksiin kuukaudessa (esim. urheilu, kulttuuri, pelit)?":
-        expenses['Harrastukset'] = {'Harrastukset': value ?? 0.0};
-        break;
-      case "Onko sinulla lemmikkejä?":
-        hasPets = response == "Kyllä";
-        if (hasPets) expenses['Lemmikit'] = {'Lemmikit': 0.0};
-        break;
-      case "Paljonko lemmikeistä aiheutuu kuluja kuukaudessa (esim. ruoka, tarvikkeet, eläinlääkäri)?":
-        if (expenses.containsKey('Lemmikit')) expenses['Lemmikit']!['Lemmikit'] = value ?? 0.0;
-        break;
-      case "Paljonko maksat puhelinlaskua kuukaudessa?":
-        if (expenses.containsKey('Kodin kulut')) expenses['Kodin kulut']!['Puhelinlasku'] = value ?? 0.0;
-        break;
-      case "Paljonko maksat nettiliittymästä kuukaudessa?":
-        if (expenses.containsKey('Kodin kulut')) expenses['Kodin kulut']!['Nettiliittymä'] = value ?? 0.0;
-        break;
-      case "Maksatko muita kuukausittaisia velkoja autorahoituksen lisäksi? (Kyllä/Ei)":
-      case "Maksatko kuukausittain velkoja (Esim. osamaksuja)? (Kyllä/Ei)":
-      case "Maksatko kuukausittain muita velkoja (Esim. osamaksuja) kuin omakotitalovelkaa? (Kyllä/Ei)":
+      case "Maksatko muita kuukausittaisia velkoja autorahoituksen ja asuntolainan lisäksi?":
+      case "Maksatko asuntolainan lisäksi muita velkoja?":
+      case "Maksatko muita kuukausittaisia velkoja autorahoituksen lisäksi?":
+      case "Onko sinulla velkoja?":
         hasOtherDebts = response == "Kyllä";
+        if (hasOtherDebts) expenses['Velat'] = {'Velat': 0.0};
         break;
-      case "Paljonko maksat velkoja kuukausittain?":
-        debtAmount = value ?? 0.0;
-        expenses['Velat'] = {'Velat': value ?? 0.0};
+      case "Paljonko maksat velkaa kuukaudessa?":
+        if (expenses.containsKey('Velat')) expenses['Velat']!['Velat'] = value ?? 0.0;
         break;
-      case "Paljonko varaat kuukausittain säästämiseen tai sijoittamiseen?":
-        expenses['Sijoittaminen'] = {'Sijoittaminen': value ?? 0.0};
+      case "Paljonko varaat harrastuksiin kuukaudessa (esim. kuntosali, välineet, tapahtumat)?": // Harrastukset
+        expenses['Harrastukset'] = {'Harrastuskulut': value ?? 0.0};
         break;
-      case "Onko muita säännöllisiä menoja?":
-        hasOtherExpenses = response == "Kyllä";
-        if (hasOtherExpenses) expenses['Muut'] = {'Muut': 0.0};
+      case "Paljonko käytät rahaa suoratoistopalveluihin kuukaudessa (esim. Spotify, Netflix)?": // Viihde
+        expenses['Viihde'] = {'Suoratoistopalvelut': value ?? 0.0};
         break;
-      case "Paljonko muihin menoihin menee rahaa kuukaudessa?":
-        if (expenses.containsKey('Muut')) expenses['Muut']!['Muut'] = value ?? 0.0;
+      case "Paljonko käytät rahaa muuhun viihteeseen kuukaudessa (esim. pelit, elokuvat, lehdet, konsertit)?": // Viihde
+        if (expenses.containsKey('Viihde')) expenses['Viihde']!['Viihdekulut'] = value ?? 0.0;
+        break;
+      case "Onko sinulla lemmikki/lemmikkejä?":
+        hasPets = response == "Kyllä";
+        if (hasPets) expenses['Lemmikit'] = {'Lemmikkikulut': 0.0};
+        break;
+      case "Paljonko varaat lemmikkikuluihin kuukaudessa (Ruoka, tarvikkeet, Lääkärikäynnit)?": // Lemmikit
+        if (expenses.containsKey('Lemmikit')) expenses['Lemmikit']!['Lemmikkikulut'] = value ?? 0.0;
         break;
     }
   }

@@ -48,7 +48,7 @@ class BudgetSubCategoryList extends StatelessWidget {
 
       return AnimatedContainer(
         duration: const Duration(seconds: 2),
-        margin: const EdgeInsets.symmetric(vertical: 4.0),
+        margin: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 8.0),
         padding: const EdgeInsets.all(8.0),
         decoration: BoxDecoration(
           color: isNewlyAdded ? Colors.blueGrey[50] : Colors.white,

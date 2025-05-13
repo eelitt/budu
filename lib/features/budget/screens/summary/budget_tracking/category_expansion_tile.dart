@@ -45,8 +45,8 @@ class _CategoryExpansionTileState extends State<CategoryExpansionTile> {
             ? Icons.home
             : widget.categoryName == "Liikkuminen"
                 ? Icons.directions_car
-                : widget.categoryName == "Kodin kulut"
-                    ? Icons.power
+                : widget.categoryName == "Laskut ja palvelut"
+                    ? Icons.receipt_long
                     : widget.categoryName == "Viihde"
                         ? Icons.movie
                         : widget.categoryName == "Harrastukset"
@@ -59,11 +59,13 @@ class _CategoryExpansionTileState extends State<CategoryExpansionTile> {
                                         ? Icons.cleaning_services
                                         : widget.categoryName == "Lemmikit"
                                             ? Icons.pets
-                                            : widget.categoryName == "Sijoittaminen"
+                                            : widget.categoryName == "Sijoittaminen ja säästäminen"
                                                 ? Icons.savings
-                                                : widget.categoryName == "Velat"
-                                                    ? Icons.money_off
-                                                    : Icons.category;
+                                                  :widget.categoryName == "Vakuutukset"
+                                                    ? Icons.description
+                                                    : widget.categoryName == "Velat"
+                                                      ? Icons.money_off
+                                                        : Icons.category;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
@@ -134,6 +136,7 @@ class _CategoryExpansionTileState extends State<CategoryExpansionTile> {
                                 child: Text(
                                   widget.categoryName,
                                   style: Theme.of(context).textTheme.bodyLarge?.copyWith(fontSize: 14,fontWeight: FontWeight.w700),
+                                  maxLines: 2,
                                   overflow: TextOverflow.ellipsis,
                                 ),
                               ),

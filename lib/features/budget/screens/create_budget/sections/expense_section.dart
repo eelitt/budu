@@ -2,8 +2,7 @@ import 'package:budu/features/budget/screens/create_budget/managers/category_man
 import 'package:budu/features/budget/screens/create_budget/managers/subcategory_manager.dart';
 import 'package:flutter/material.dart';
 
-
-class ExpensesSection extends StatelessWidget {
+class ExpensesSection extends StatefulWidget {
   final Map<String, Map<String, TextEditingController>> expenseControllers;
   final VoidCallback onUpdate;
 
@@ -13,9 +12,51 @@ class ExpensesSection extends StatelessWidget {
     required this.onUpdate,
   });
 
+  @override
+  State<ExpensesSection> createState() => _ExpensesSectionState();
+}
+
+class _ExpensesSectionState extends State<ExpensesSection> {
+  Map<String, Map<String, FocusNode>> focusNodes = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _updateFocusNodes();
+  }
+
+  @override
+  void didUpdateWidget(ExpensesSection oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _updateFocusNodes();
+  }
+
+  void _updateFocusNodes() {
+    final currentCategories = widget.expenseControllers.keys.toSet();
+    focusNodes.removeWhere((category, _) => !currentCategories.contains(category));
+
+    for (var category in widget.expenseControllers.keys) {
+      focusNodes[category] ??= {};
+      final currentSubcategories = widget.expenseControllers[category]!.keys.toSet();
+      focusNodes[category]!.removeWhere((subcategory, _) => !currentSubcategories.contains(subcategory));
+
+      for (var subcategory in widget.expenseControllers[category]!.keys) {
+        focusNodes[category]![subcategory] ??= FocusNode();
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    focusNodes.forEach((_, subFocusNodes) {
+      subFocusNodes.forEach((_, focusNode) => focusNode.dispose());
+    });
+    super.dispose();
+  }
+
   String? _validateAmount(String? value) {
     if (value == null || value.isEmpty) {
-      return null; // Salli tyhjä kenttä
+      return null;
     }
     final parsed = double.tryParse(value);
     if (parsed == null) {
@@ -46,16 +87,23 @@ class ExpensesSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final categoryManager = CategoryManager(
-      expenseControllers: expenseControllers,
-      onUpdate: onUpdate,
+      expenseControllers: widget.expenseControllers,
+      onUpdate: widget.onUpdate,
     );
     final subcategoryManager = SubcategoryManager(
-      expenseControllers: expenseControllers,
-      onUpdate: onUpdate,
+      expenseControllers: widget.expenseControllers,
+      onUpdate: ({required String category, required String subcategory}) {
+        widget.onUpdate();
+        _updateFocusNodes(); // Varmistetaan, että focusNodes on päivitetty
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (focusNodes[category] != null && focusNodes[category]![subcategory] != null) {
+            focusNodes[category]![subcategory]!.requestFocus();
+          }
+        });
+      },
     );
 
-    // Järjestä yläkategoriat aakkosjärjestykseen
-    final sortedCategories = expenseControllers.keys.toList()..sort();
+    final sortedCategories = widget.expenseControllers.keys.toList()..sort();
     final canAddCategory = categoryManager.canAddCategory;
 
     return Container(
@@ -91,7 +139,7 @@ class ExpensesSection extends StatelessWidget {
             ],
           ),
           subtitle: Text(
-            'Kategorioita: ${sortedCategories.length} \n(ilmaisversiossa max 11)',
+            'Kategorioita: ${sortedCategories.length} \n(ilmaisversiossa max 12)',
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
                   color: Colors.grey,
                 ),
@@ -138,7 +186,7 @@ class ExpensesSection extends StatelessWidget {
                   ),
                   const SizedBox(height: 16),
                   ...sortedCategories.map((category) {
-                    final sortedSubcategories = expenseControllers[category]!.keys.toList()..sort();
+                    final sortedSubcategories = widget.expenseControllers[category]!.keys.toList()..sort();
                     final canAddSubcategory = subcategoryManager.canAddSubcategory(category);
 
                     return Container(
@@ -163,7 +211,14 @@ class ExpensesSection extends StatelessWidget {
                           title: Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              Text(category),
+                              Expanded(
+                                child: Text(
+                                  category,
+                                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
                               IconButton(
                                 icon: const Icon(Icons.delete, color: Colors.red),
                                 onPressed: () => categoryManager.removeCategory(category),
@@ -194,19 +249,21 @@ class ExpensesSection extends StatelessWidget {
                                     SizedBox(
                                       width: 100,
                                       child: TextField(
-                                        controller: expenseControllers[category]![subcategory],
+                                        controller: widget.expenseControllers[category]![subcategory],
+                                        focusNode: focusNodes[category]![subcategory],
                                         keyboardType: TextInputType.number,
                                         decoration: InputDecoration(
                                           labelText: 'Summa (€)',
                                           border: const OutlineInputBorder(),
-                                          errorText: _validateAmount(expenseControllers[category]![subcategory]!.text),
+                                          errorText: _validateAmount(widget.expenseControllers[category]![subcategory]!.text),
                                         ),
                                         onChanged: (value) {
-                                          onUpdate();
+                                          widget.onUpdate();
                                         },
                                         onEditingComplete: () {
-                                          _formatAmount(expenseControllers[category]![subcategory]!);
-                                          onUpdate();
+                                          _formatAmount(widget.expenseControllers[category]![subcategory]!);
+                                          widget.onUpdate();
+                                          FocusScope.of(context).unfocus();
                                         },
                                       ),
                                     ),

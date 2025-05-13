@@ -159,7 +159,7 @@ class _IncomeSectionState extends State<IncomeSection> {
                       children: [
                         Text(
                           '${income.toStringAsFixed(2)} €',
-                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.black54),
+                          style: Theme.of(context).textTheme.bodyLarge?.copyWith(color: Colors.black54),
                         ),
                         IconButton(
                           icon: const Icon(Icons.edit, size: 20),

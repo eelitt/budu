@@ -204,9 +204,21 @@ class BudgetSaver {
     );
 
     try {
+      // Tallennetaan budjetti Firestoreen
       await budgetProvider.saveBudget(authProvider.user!.uid, newBudget);
+
+      // Päivitetään BudgetProvider-tila suoraan
+      budgetProvider.setBudget(newBudget);
+
       if (context.mounted) {
-        Navigator.pushReplacementNamed(context, '/main');
+        // Navigoidaan /main-reitille, jotta MainScreen voi hoitaa budjetin latauksen ja bannerien näyttämisen
+        Navigator.pushReplacementNamed(
+          context,
+          '/main',
+          arguments: {
+            'index': 0, // Asetetaan BudgetScreen-välilehti aktiiviseksi
+          },
+        );
       }
     } catch (e) {
       print('Error creating budget: $e');

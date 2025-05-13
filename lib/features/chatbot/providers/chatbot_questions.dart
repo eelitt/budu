@@ -25,106 +25,117 @@ class ChatbotQuestions {
 
   List<String> getQuestions() {
     List<String> questions = [
-      "Hei! Paljonko saat tuloja kuukaudessa (esim. palkka, tuet)?",
-      "Asutko vuokralla, omakotitalossa vai ilman asuntokuluja?",
+      "Paljonko saat tuloja kuukaudessa (esim. palkka, tuet, pääomatulot)?",
+      "Mikä seuraavista kuvaa parhaiten asumistasi?",
     ];
 
-    if (housingType == "Vuokralla") {
+    // Kysymykset asumistilanteen mukaan
+    if (housingType == "Vuokra-asunto") {
       questions.addAll([
         "Paljonko maksat vuokraa kuukaudessa?",
         "Paljonko maksat vesimaksua kuukaudessa (jos sisältyy vuokraan, syötä 0)?",
         "Paljonko kotivakuutuksesi maksaa vuodessa?",
       ]);
-    } else if (housingType == "Omakotitalossa") {
+    } else if (housingType == "Omistusasunto omakotitalossa") {
       questions.addAll([
         "Paljonko maksat asuntolainaa kuukaudessa? (jos ei lainaa, syötä 0)?",
         "Paljonko kiinteistöverosi on vuodessa?",
-        "Paljonko maksat jätehuollosta kuukaudessa?",
+        "Paljonko maksat jätehuollosta (Roskien tyhjennys) kuukaudessa?",
+        "Paljonko kotivakuutuksesi maksaa vuodessa?",
+        "Paljonko maksat vesimaksua kuukaudessa (vesi + jätevesi)?",
+      ]);
+    } else if (housingType == "Omistusasunto kerros-/rivitalossa (esim. yhtiövastiketta maksava)") {
+      questions.addAll([
+        "Paljon maksat yhtiövastiketta kuukaudessa?",
+        "Paljonko maksat vesimaksua kuukaudessa (jos sisältyy vastikkeeseen, syötä 0)?",
         "Paljonko kotivakuutuksesi maksaa vuodessa?",
       ]);
     }
 
-    questions.add("Onko sinulla autoa?");
+    // Yleiset laskut
+    questions.addAll([
+      "Paljonko maksat sähkölaskua kuukaudessa?",
+      "Paljonko maksat puhelinlaskua kuukaudessa?",
+      "Paljonko maksat nettiliittymästä kuukaudessa (Syötä 0, jos ei ole nettiliittymää)?",
+    ]);
 
+    // Autokysymykset
+    questions.add("Onko sinulla autoa?");
     if (carOwnership == "Kyllä") {
       questions.add("Onko autosi oma vai maksatko siitä rahoitusta?");
-      if (expenses.containsKey('Liikkuminen') && expenses['Liikkuminen']!.containsKey('Auton rahoitus')) {
-        questions.add("Paljonko maksat Auton rahoitusta kuukaudessa?");
+      if (hasCarLoan) {
+        questions.add("Paljonko maksat auton rahoitusta kuukaudessa?");
       }
-      if (housingType == "Vuokralla") {
-        questions.add("Vuokraatko autopaikkaa, esimerkiksi pihapaikkaa tai autotallia?");
-      }
-      if (rentsParkingSpace) {
-        questions.add("Paljonko maksat autopaikan vuokraa kuukaudessa?");
+      // Lisätään autopaikan vuokrauskysymys, jos asuu vuokralla
+      if (housingType == "Vuokra-asunto") {
+        questions.add("Vuokraatko autopaikkaa?");
+        if (rentsParkingSpace) {
+          questions.add("Paljonko maksat autopaikasta kuukaudessa?");
+        }
       }
       questions.addAll([
         "Paljonko auton polttoainekulut ovat kuukaudessa?",
         "Paljonko auton vakuutukset maksavat vuodessa?",
-        "Paljonko maksat ajoneuvoveroa vuodessa?",
-        "Onko sinulla renkaiden vaihto- ja säilytyspalvelua?",
+        "Paljonko maksat käyttövoima- ja ajoneuvoveroa vuodessa?",
+        "Paljonko maksat autosta muita kuluja vuodessa (Esim. Renkaiden säilytys, huolto (Suomessa huolto keskim. 600-1000€/vuosi))?",
       ]);
-      if (hasTireService) {
-        questions.add("Paljonko maksat renkaiden vaihto- ja säilytyspalvelusta vuodessa?");
+    }
+
+    // Ruoka
+    questions.add("Paljonko varaat ruokaan kuukaudessa?");
+
+    // Terveys
+    questions.add("Paljonko käytät rahaa terveyteen liittyviin kuluihin kuukaudessa (Lääkkeet, lääkärikäynnit)?");
+
+    // Hygienia
+    questions.add("Paljonko käytät rahaa hygieniaan liittyviin kuluihin kuukaudessa (Kosmetiikka, Siivous- ja wc-tarvikkeet)?");
+
+    // Sijoittaminen ja säästäminen
+    questions.addAll([
+      "Paljonko varaat sijoittamiseen kuukaudessa (esim. osakkeet, rahastot, kryptovaluutat)?",
+      "Paljonko varaat säästämiseen kuukaudessa (esim. pahanpäivän kassa, lomareissut)?",
+    ]);
+
+    // Velat
+    if (housingType == "Omistusasunto omakotitalossa" || housingType == "Omistusasunto kerros-/rivitalossa (esim. yhtiövastiketta maksava)") {
+      if (expenses['Asuminen']?['Asuntolaina'] != null && expenses['Asuminen']!['Asuntolaina']! > 0) {
+        if (carOwnership == "Kyllä" && hasCarLoan) {
+          questions.add("Maksatko muita kuukausittaisia velkoja autorahoituksen ja asuntolainan lisäksi?");
+        } else {
+          questions.add("Maksatko asuntolainan lisäksi muita velkoja?");
+        }
+      } else {
+        if (carOwnership == "Kyllä" && hasCarLoan) {
+          questions.add("Maksatko muita kuukausittaisia velkoja autorahoituksen lisäksi?");
+        } else {
+          questions.add("Onko sinulla velkoja?");
+        }
       }
-      questions.add("Haluatko syöttää auton huolto- ja korjauskulut itse vai käyttää suomalaisten keskimääräisiä kuluja?");
-      if (!useAverageCarMaintenance) {
-        questions.add("Paljonko auton huolto- ja korjauskulut ovat vuodessa?");
-      }
-    }
-
-    questions.addAll([
-      "Paljonko sähkölaskusi on keskimäärin kuukaudessa?",
-      "Onko sinulla kuukausimaksullisia palveluita, esimerkiksi Netflix tai Spotify?",
-    ]);
-
-    if (expenses.containsKey('Viihde') && expenses['Viihde']!.containsKey('Viihde-Palvelut')) {
-      questions.add("Paljonko palveluihin menee rahaa kuukaudessa?");
-    }
-
-    questions.addAll([
-      "Paljonko varaat ruokaan ja päivittäistavaroihin kuukaudessa?",
-      "Paljonko käytät rahaa terveyteen liittyviin kuluihin kuukaudessa, esimerkiksi lääkärikäynteihin tai lääkkeisiin?",
-      "Paljonko käytät rahaa hygieniaan liittyviin kuluihin kuukaudessa, esimerkiksi puhdistusaineisiin, WC-paperiin tai muihin vessassa ja keittiössä tarvittaviin kulutustuotteisiin?",
-      "Paljonko käytät rahaa harrastuksiin kuukaudessa, esimerkiksi urheiluun, kulttuuriin tai peleihin?",
-      "Onko sinulla lemmikkejä?",
-    ]);
-
-    if (hasPets) {
-      questions.add("Paljonko lemmikeistä aiheutuu kuluja kuukaudessa, esimerkiksi ruokaan, tarvikkeisiin tai eläinlääkäriin?");
-    }
-
-    questions.addAll([
-      "Paljonko maksat puhelinlaskua kuukaudessa?",
-      "Paljonko maksat nettiliittymästä kuukaudessa?",
-    ]);
-
-    if (housingType == "Vuokralla") {
+    } else if (housingType == "Vuokra-asunto") {
       if (carOwnership == "Kyllä" && hasCarLoan) {
         questions.add("Maksatko muita kuukausittaisia velkoja autorahoituksen lisäksi?");
       } else {
-        questions.add("Maksatko kuukausittain velkoja, esimerkiksi osamaksuja?");
-      }
-    } else if (housingType == "Omakotitalossa") {
-      if (expenses['Asuminen']?['Asuntolaina'] != null && expenses['Asuminen']!['Asuntolaina']! > 0) {
-        if (carOwnership == "Kyllä" && hasCarLoan) {
-          questions.add("Maksatko muita kuukausittaisia velkoja autorahoituksen lisäksi?");
-        } else {
-          questions.add("Maksatko kuukausittain omakotitalovelan lisäksi muita velkoja (Esim. osamaksuja)?");
-        }
-      } else {
-        if (carOwnership == "Kyllä" && hasCarLoan) {
-          questions.add("Maksatko muita kuukausittaisia velkoja autorahoituksen lisäksi?");
-        } else {
-          questions.add("Maksatko kuukausittain velkoja, esimerkiksi osamaksuja?");
-        }
+        questions.add("Onko sinulla velkoja?");
       }
     }
-
     if (hasOtherDebts) {
-      questions.add("Paljonko maksat velkoja kuukausittain?");
+      questions.add("Paljonko maksat velkaa kuukaudessa?");
     }
 
-    questions.add("Paljonko varaat kuukausittain säästämiseen tai sijoittamiseen?");
+    // Harrastukset
+    questions.add("Paljonko varaat harrastuksiin kuukaudessa (esim. kuntosali, välineet, tapahtumat)?");
+
+    // Viihde
+    questions.addAll([
+      "Paljonko käytät rahaa suoratoistopalveluihin kuukaudessa (esim. Spotify, Netflix)?",
+      "Paljonko käytät rahaa muuhun viihteeseen kuukaudessa (esim. pelit, elokuvat, lehdet, konsertit)?",
+    ]);
+
+    // Lemmikit
+    questions.add("Onko sinulla lemmikki/lemmikkejä?");
+    if (hasPets) {
+      questions.add("Paljonko varaat lemmikkikuluihin kuukaudessa (Ruoka, tarvikkeet, Lääkärikäynnit)?");
+    }
 
     return questions;
   }
