@@ -82,7 +82,7 @@ class _WelcomeViewState extends State<WelcomeView> with TickerProviderStateMixin
               child: FadeTransition(
                 opacity: _textFadeAnimation!,
                 child: Text(
-                  'Tervetuloa tavoittelemaan taloudellista vapautta!',
+                  'Tervetuloa tavoittelemaan stressittömämpää elämää!',
                   style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                         color: Colors.black87,
                         fontSize: 28,
@@ -110,7 +110,7 @@ class _WelcomeViewState extends State<WelcomeView> with TickerProviderStateMixin
                     const SizedBox(height: 12),
                     _buildTip(context, 'Voit luoda budjettipohjan kysymysten pohjalta tai luoda itse budjetin.'),
                     const SizedBox(height: 8),
-                    _buildTip(context, 'Pyri arvioimaan menosi realistisesti.'),
+                    _buildTip(context, 'Pyri arvioimaan menosi realistisesti, mieluummin hiukan ylä- kuin alakanttiin.'),
                     const SizedBox(height: 8),
                     _buildTip(context, 'Käytä hetki aikaa vastaamiseen, jotta saat tarkemman kuvan taloudestasi.'),
                     const SizedBox(height: 8),

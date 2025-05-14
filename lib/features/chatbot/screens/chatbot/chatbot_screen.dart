@@ -104,7 +104,7 @@ class _ChatbotScreenState extends State<ChatbotScreen> with TickerProviderStateM
         return Scaffold(
           appBar: AppBar(
             automaticallyImplyLeading: false,
-            title: const Text('Budu - Chatbot'),
+            title: const Text('Budu - Budjetin muodostus'),
           ),
           body: _showWelcome
               ? WelcomeView(

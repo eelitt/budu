@@ -95,7 +95,7 @@ class LoginButton extends StatelessWidget {
                   },
             icon: Icon(
               Icons.g_mobiledata,
-              size: 24, // Säädetty ikonin kokoa hieman suuremmaksi
+              size: 24,
               color: Theme.of(context).elevatedButtonTheme.style?.foregroundColor?.resolve({}), // Teeman foregroundColor (valkoinen)
             ),
             label: Text(

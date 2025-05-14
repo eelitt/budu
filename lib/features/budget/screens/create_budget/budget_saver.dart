@@ -1,6 +1,7 @@
 import 'package:budu/features/auth/providers/auth_provider.dart';
 import 'package:budu/features/budget/models/budget_model.dart';
 import 'package:budu/features/budget/providers/budget_provider.dart';
+import 'package:budu/features/notification/providers/notification_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -212,6 +213,7 @@ class BudgetSaver {
 
       if (context.mounted) {
         // Navigoidaan /main-reitille, jotta MainScreen voi hoitaa budjetin latauksen ja bannerien näyttämisen
+        Provider.of<NotificationProvider>(context, listen: false).clearNotification();
         Navigator.pushReplacementNamed(
           context,
           '/main',

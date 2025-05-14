@@ -5,10 +5,10 @@ import 'package:budu/features/budget/providers/budget_provider.dart';
 import 'package:budu/features/budget/screens/budget/controllers/budget_screen_controller.dart';
 import 'package:budu/features/budget/screens/budget/income_section.dart';
 import 'package:budu/features/budget/screens/budget/widgets/budget_confirmation_dialogs.dart';
-import 'package:budu/features/budget/screens/budget/widgets/budget_header.dart';
 import 'package:budu/features/budget/screens/budget/widgets/budget_month_selector.dart';
 import 'package:budu/features/budget/screens/budget/widgets/category_dialog.dart';
 import 'package:budu/features/budget/screens/budget/widgets/category_list_wrapper.dart';
+import 'package:budu/features/notification/providers/notification_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -40,14 +40,12 @@ class _BudgetScreenState extends State<BudgetScreen> {
   Future<void> _initializeBudget() async {
     final budgetProvider = Provider.of<BudgetProvider>(context, listen: false);
 
-    // Asetetaan _currentYear ja _currentMonth BudgetProviderin budjetin perusteella
     if (budgetProvider.budget != null) {
       _currentYear = ValueNotifier(budgetProvider.budget!.year);
       _currentMonth = ValueNotifier(budgetProvider.budget!.month);
     } else {
       _currentYear = ValueNotifier(DateTime.now().year);
       _currentMonth = ValueNotifier(DateTime.now().month);
-      // Jos budjettia ei ole, ladataan oletuskuukauden budjetti
       final authProvider = Provider.of<AuthProvider>(context, listen: false);
       if (authProvider.user != null) {
         await _controller!.loadBudget(
@@ -112,8 +110,12 @@ class _BudgetScreenState extends State<BudgetScreen> {
           month: _currentMonth.value,
         );
       } else {
-        if (context.mounted) {
-          Navigator.pushNamed(context, AppRouter.chatbotRoute);
+      if (context.mounted) {
+        Provider.of<NotificationProvider>(context, listen: false).clearNotification();
+          Navigator.of(context, rootNavigator: true).pushNamedAndRemoveUntil(
+            AppRouter.chatbotRoute,
+            (Route<dynamic> route) => false, // Poistaa kaikki aiemmat reitit
+          );
         }
       }
     }
@@ -169,28 +171,65 @@ class _BudgetScreenState extends State<BudgetScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      BudgetHeader(selectedMonth: _selectedMonth.value),
+                      Container(
+                        width: double.infinity,
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(12),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.15),
+                              blurRadius: 8,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
+                        ),
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Icon(
+                                  Icons.edit_document,
+                                  color: Colors.blueGrey,
+                                  size: 24,
+                                ),
+                                const SizedBox(width: 12),
+                                Text(
+                                  'Muokkaa budjettia',
+                                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.w800,
+                                        color: Colors.black87,
+                                      ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+                            BudgetMonthSelector(
+                              availableMonths: _availableMonths,
+                              selectedMonth: _selectedMonth.value,
+                              onMonthSelected: (value) {
+                                if (value != null) {
+                                  _selectedMonth.value = value;
+                                  _currentYear.value = value['year']!;
+                                  _currentMonth.value = value['month']!;
+                                  _controller!.loadBudget(
+                                    userId: Provider.of<AuthProvider>(context, listen: false).user!.uid,
+                                    year: _currentYear.value,
+                                    month: _currentMonth.value,
+                                  );
+                                }
+                              },
+                            ),
+                          ],
+                        ),
+                      ),
                       const SizedBox(height: 16),
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
-                          BudgetMonthSelector(
-                            availableMonths: _availableMonths,
-                            selectedMonth: _selectedMonth.value,
-                            onMonthSelected: (value) {
-                              if (value != null) {
-                                _selectedMonth.value = value;
-                                _currentYear.value = value['year']!;
-                                _currentMonth.value = value['month']!;
-                                _controller!.loadBudget(
-                                  userId: Provider.of<AuthProvider>(context, listen: false).user!.uid,
-                                  year: _currentYear.value,
-                                  month: _currentMonth.value,
-                                );
-                              }
-                            },
-                          ),
-                          const SizedBox(height: 8),
                           Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
