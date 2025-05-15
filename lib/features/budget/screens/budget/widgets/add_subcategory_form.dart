@@ -27,7 +27,7 @@ class AddSubcategoryForm extends StatelessWidget {
               border: const OutlineInputBorder(),
               errorText: errorMessage,
             ),
-            maxLength: 30,
+            maxLength: 20,
             buildCounter: (context, {required currentLength, required isFocused, maxLength}) => null,
           ),
         ),

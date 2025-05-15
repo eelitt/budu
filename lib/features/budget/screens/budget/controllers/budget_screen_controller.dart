@@ -1,4 +1,5 @@
 import 'package:budu/features/budget/providers/budget_provider.dart';
+import 'package:budu/features/budget/providers/expense_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -62,15 +63,28 @@ class BudgetScreenController {
     required ValueNotifier<int> currentMonth,
   }) async {
     final budgetProvider = Provider.of<BudgetProvider>(context, listen: false);
-    await budgetProvider.deleteBudget(userId, year, month);
-    // Päivitetään saatavilla olevat budjettikuukaudet poiston jälkeen
-    final updatedMonths = await loadAvailableMonths(
-      userId: userId,
-      selectedMonth: selectedMonth,
-      currentYear: currentYear,
-      currentMonth: currentMonth,
-    );
-    return updatedMonths;
+   final expenseProvider = Provider.of<ExpenseProvider>(context, listen: false);
+    try {
+      // Poista kaikki meno- ja tulotapahtumat kyseiseltä ajanjaksolta
+      await expenseProvider.deleteAllExpensesForMonth(
+        userId: userId,
+        year: year,
+        month: month,
+      );
+      // Poista budjetti
+      await budgetProvider.deleteBudget(userId, year, month);
+      // Päivitetään saatavilla olevat budjettikuukaudet poiston jälkeen
+      final updatedMonths = await loadAvailableMonths(
+        userId: userId,
+        selectedMonth: selectedMonth,
+        currentYear: currentYear,
+        currentMonth: currentMonth,
+      );
+      return updatedMonths;
+    } catch (e) {
+      print('Error in deleteBudget: $e');
+      rethrow;
+    }
   }
 
   void dispose() {

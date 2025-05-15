@@ -68,8 +68,8 @@ Future<bool> showDeleteConfirmationDialog({
             Text(
               customMessage ??
                   (isLastBudget
-                      ? 'Haluatko varmasti poistaa tämän budjetin? Tämä on ainut budjettisi, joten sinut ohjataan luomaan uusi budjetti.'
-                      : 'Haluatko varmasti poistaa tämän budjetin? Näet seuraavan budjettisi poiston jälkeen.'),
+                      ? 'Haluatko varmasti poistaa tämän budjetin? Myös budjetin tulo- ja menotapahtumat poistetaan. Tämä on ainut budjettisi, joten sinut ohjataan luomaan uusi budjetti.'
+                      : 'Haluatko varmasti poistaa tämän budjetin? Myös budjetin tulo- ja menotapahtumat poistetaan.'),
               style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                     color: Colors.black87,
                   ),

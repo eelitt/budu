@@ -314,6 +314,34 @@ class ExpenseProvider with ChangeNotifier {
     }
   }
 
+Future<void> deleteAllExpensesForMonth({
+    required String userId,
+    required int year,
+    required int month,
+  }) async {
+    try {
+      final eventsSnapshot = await FirebaseFirestore.instance
+          .collection('budgets')
+          .doc(userId)
+          .collection('monthly_budgets')
+          .doc('${year}_${month}')
+          .collection('expenses')
+          .get();
+
+      if (eventsSnapshot.docs.isNotEmpty) {
+        for (var doc in eventsSnapshot.docs) {
+          await doc.reference.delete();
+          _expenses.removeWhere((expense) => expense.id == doc.id);
+        }
+        print('Deleted all expenses for $year/$month');
+        notifyListeners();
+      }
+    } catch (e) {
+      print('Error deleting all expenses for month: $e');
+      throw Exception('Kaikkien meno- ja tulotapahtumien poistaminen epäonnistui: $e');
+    }
+  }
+  
   @override
   void dispose() {
     _expenseSubscription?.cancel();

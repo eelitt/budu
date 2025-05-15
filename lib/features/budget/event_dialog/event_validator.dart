@@ -17,12 +17,17 @@ class EventValidator {
       return 'Syötä positiivinen numero';
     }
 
+    // Maksimiarvon validointi meno-tapahtumille
+    if (isExpense && amount > 99999) {
+      return 'Summa voi olla enintään 99999';
+    }
+
     // Kategorian validointi menoille
     if (isExpense && selectedCategory == null) {
       return 'Valitse kategoria';
     }
 
-    // Alakategorian validointi, jos alakategorioita on olemassa
+    // Alakategorian validointi
     if (isExpense) {
       final subCategories = selectedCategory != null && budgetProvider.budget != null
           ? budgetProvider.budget!.expenses[selectedCategory]?.keys.toList() ?? []
@@ -30,15 +35,11 @@ class EventValidator {
       if (subCategories.isNotEmpty && selectedSubcategory == null) {
         return 'Valitse alakategoria';
       }
-      // Jos alakategorioita ei ole, näytetään virheilmoitus
-      if (subCategories.isEmpty) {
-        return 'Lisää alakategoria budjettiin';
-      }
     }
 
     // Kuvaus-kentän validointi
-    if (description.length > 75) {
-      return 'Kuvaus voi olla enintään 75 merkkiä';
+    if (description.length > 50) {
+      return 'Kuvaus voi olla enintään 50 merkkiä';
     }
 
     // Käyttäjän tarkistus

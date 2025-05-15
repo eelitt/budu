@@ -22,7 +22,7 @@ class BudgetMonthSelector extends StatelessWidget {
     return Material(
       color: Colors.grey[50], // Kevyt taustaväri erottamaan ulommasta suorakulmiosta
       borderRadius: BorderRadius.circular(12),
-      elevation: 2, // Palautetaan kevyt varjostus
+      elevation: 2,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         child: Row(

@@ -37,6 +37,16 @@ class BudgetSubCategoryList extends StatelessWidget {
     required this.onUpdateSubcategory,
   });
 
+// Funktio, joka lisää katkaisumerkin, jos nimi on pidempi kuin 13 merkkiä
+  String _formatSubcategoryName(String subcategory) {
+    const int maxLengthBeforeHyphen = 14;
+    if (subcategory.length <= maxLengthBeforeHyphen) {
+      return subcategory;
+    }
+    // Lisätään "-" 13 merkin jälkeen ja jätetään loput seuraavalle riville
+    return '${subcategory.substring(0, maxLengthBeforeHyphen)}-${subcategory.substring(maxLengthBeforeHyphen)}';
+  }
+
   @override
   Widget build(BuildContext context) {
     final entries = displayedExpenses.entries.toList()..sort((a, b) => a.key.compareTo(b.key));
@@ -49,7 +59,7 @@ class BudgetSubCategoryList extends StatelessWidget {
       return AnimatedContainer(
         duration: const Duration(seconds: 2),
         margin: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 8.0),
-        padding: const EdgeInsets.all(8.0),
+        padding: const EdgeInsets.all(2.0),
         decoration: BoxDecoration(
           color: isNewlyAdded ? Colors.blueGrey[50] : Colors.white,
           borderRadius: BorderRadius.circular(8),
@@ -73,10 +83,12 @@ class BudgetSubCategoryList extends StatelessWidget {
                       onCancel: onCancelEditing,
                     )
                   : Padding(
-                      padding: const EdgeInsets.only(left: 8.0),
+                      padding: const EdgeInsets.only(left: 8.0,right:4.0),
+
                       child: Text(
-                        subcategory,
+                        _formatSubcategoryName(subcategory),
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.black54, fontSize: 14),
+                        softWrap: true,
                       ),
                     ),
             ),
@@ -99,7 +111,7 @@ class BudgetSubCategoryList extends StatelessWidget {
                     ),
                   IconButton(
                     icon: const Icon(Icons.edit, size: 20),
-                    onPressed: () => onStartEditing(subcategory, context), // Välitetään context
+                    onPressed: () => onStartEditing(subcategory, context),
                   ),
                   IconButton(
                     icon: const Icon(Icons.delete, size: 20, color: Colors.red),

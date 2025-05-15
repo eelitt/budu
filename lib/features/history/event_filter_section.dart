@@ -60,59 +60,101 @@ class _EventFilterSectionState extends State<EventFilterSection> {
               ),
               const SizedBox(height: 16),
               // Kategoria-suodatin
-              DropdownButtonFormField<String>(
-                value: _selectedCategory,
-                isExpanded: true,
+              InputDecorator(
                 decoration: InputDecoration(
                   labelText: 'Kategoria',
                   labelStyle: Theme.of(context).textTheme.bodyLarge?.copyWith(
                         color: Theme.of(context).textTheme.bodyMedium?.color,
                       ),
                   border: const OutlineInputBorder(),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 ),
-                items: categories.map((category) {
-                  return DropdownMenuItem<String>(
-                    value: category,
-                    child: Text(
-                      category,
-                      style: Theme.of(context).textTheme.bodyMedium,
-                    ),
-                  );
-                }).toList(),
-                onChanged: (value) {
-                  setState(() {
-                    _selectedCategory = value;
-                    widget.onCategoryChanged(value);
-                  });
-                },
+                child: PopupMenuButton<String>(
+                  onSelected: (value) {
+                    setState(() {
+                      _selectedCategory = value;
+                      widget.onCategoryChanged(value);
+                    });
+                  },
+                  itemBuilder: (BuildContext context) {
+                    return categories.map((category) {
+                      return PopupMenuItem<String>(
+                        value: category,
+                        child: Text(
+                          category,
+                          style: Theme.of(context).textTheme.bodyMedium,
+                        ),
+                      );
+                    }).toList();
+                  },
+                  color: Colors.white, // Teeman mukainen taustaväri
+                  position: PopupMenuPosition.under, // Valikko avautuu alas
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          _selectedCategory ?? 'Kaikki kategoriat',
+                          style: Theme.of(context).textTheme.bodyMedium,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const Icon(
+                        Icons.arrow_drop_down,
+                        color: Colors.black87,
+                      ),
+                    ],
+                  ),
+                ),
               ),
               const SizedBox(height: 16),
               // Kuukausi-suodatin
-              DropdownButtonFormField<String>(
-                value: _selectedMonth,
-                isExpanded: true,
+              InputDecorator(
                 decoration: InputDecoration(
                   labelText: 'Kuukausi',
                   labelStyle: Theme.of(context).textTheme.bodyLarge?.copyWith(
                         color: Theme.of(context).textTheme.bodyMedium?.color,
                       ),
                   border: const OutlineInputBorder(),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 ),
-                items: widget.availableMonths.map((month) {
-                  return DropdownMenuItem<String>(
-                    value: month,
-                    child: Text(
-                      month,
-                      style: Theme.of(context).textTheme.bodyMedium,
-                    ),
-                  );
-                }).toList(),
-                onChanged: (value) {
-                  setState(() {
-                    _selectedMonth = value;
-                    widget.onMonthChanged(value);
-                  });
-                },
+                child: PopupMenuButton<String>(
+                  onSelected: (value) {
+                    setState(() {
+                      _selectedMonth = value;
+                      widget.onMonthChanged(value);
+                    });
+                  },
+                  itemBuilder: (BuildContext context) {
+                    return widget.availableMonths.map((month) {
+                      return PopupMenuItem<String>(
+                        value: month,
+                        child: Text(
+                          month,
+                          style: Theme.of(context).textTheme.bodyMedium,
+                        ),
+                      );
+                    }).toList();
+                  },
+                  color: Colors.white, // Teeman mukainen taustaväri
+                  position: PopupMenuPosition.under, // Valikko avautuu alas
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          _selectedMonth ?? 'Kaikki kuukaudet',
+                          style: Theme.of(context).textTheme.bodyMedium,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const Icon(
+                        Icons.arrow_drop_down,
+                        color: Colors.black87,
+                      ),
+                    ],
+                  ),
+                ),
               ),
               const SizedBox(height: 16),
               // Tyyppi-suodatin

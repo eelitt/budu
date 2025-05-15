@@ -37,10 +37,9 @@ class ChatbotResponseProcessor {
         break;
       case "Mikä seuraavista kuvaa parhaiten asumistasi?":
         housingType = response;
-        if (response != "Asun ilman asuntokuluja (esim. vanhempien luona tai ilmaiseksi)") {
-          expenses['Asuminen'] = {};
-          expenses['Vakuutukset'] = {'Kotivakuutus': 0.0};
-        }
+        // Poistettu ehto: Aina luodaan Asuminen-kategoria
+        expenses['Asuminen'] = {};
+        expenses['Vakuutukset'] = {'Kotivakuutus': 0.0};
         break;
       case "Paljonko maksat vuokraa kuukaudessa?":
         if (expenses.containsKey('Asuminen')) expenses['Asuminen']!['Vuokra'] = value ?? 0.0;

@@ -15,7 +15,7 @@ class CategorySelector extends StatelessWidget {
     required this.selectedCategory,
     required this.selectedSubcategory,
     required this.onCategoryChanged,
-    required this.onSubcategoryChanged,
+    required this.onSubcategoryChanged, String? categoryError, String? subcategoryError,
   });
 
   @override
@@ -37,7 +37,7 @@ class CategorySelector extends StatelessWidget {
               labelText: 'Kategoria',
               border: OutlineInputBorder(),
             ),
-            dropdownColor: Colors.white, // Asetetaan avautuvan valikon taustaväri valkoiseksi
+            dropdownColor: Colors.white,
             items: budgetProvider.budget?.expenses.keys.map((key) {
               return DropdownMenuItem<String>(
                 value: key,
@@ -57,7 +57,7 @@ class CategorySelector extends StatelessWidget {
               labelText: 'Alakategoria',
               border: OutlineInputBorder(),
             ),
-            dropdownColor: Colors.white, // Asetetaan avautuvan valikon taustaväri valkoiseksi
+            dropdownColor: Colors.white,
             items: subCategories.map((subCategory) {
               return DropdownMenuItem<String>(
                 value: subCategory,
@@ -68,7 +68,7 @@ class CategorySelector extends StatelessWidget {
               onSubcategoryChanged(value);
             },
           ),
-        if (isExpense && subCategories.isNotEmpty) const SizedBox(height: 16),
+        if (isExpense) const SizedBox(height: 16),
       ],
     );
   }

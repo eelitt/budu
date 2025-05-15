@@ -39,6 +39,11 @@ class _CategoryExpansionTileState extends State<CategoryExpansionTile> {
         : 100.0;
     final isOverBudget = progress > 1;
 
+    // Lasketaan alakategorioiden lukumäärä
+    final subCategoryCount = widget.isUnmappedCategory
+        ? (widget.unmappedExpenses?.length ?? 0)
+        : (widget.categoryExpenses?.length ?? 0);
+
     final categoryIcon = widget.isUnmappedCategory
         ? Icons.category
         : widget.categoryName == "Asuminen"
@@ -61,10 +66,10 @@ class _CategoryExpansionTileState extends State<CategoryExpansionTile> {
                                             ? Icons.pets
                                             : widget.categoryName == "Sijoittaminen ja säästäminen"
                                                 ? Icons.savings
-                                                  :widget.categoryName == "Vakuutukset"
+                                                : widget.categoryName == "Vakuutukset"
                                                     ? Icons.description
                                                     : widget.categoryName == "Velat"
-                                                      ? Icons.money_off
+                                                        ? Icons.money_off
                                                         : Icons.category;
 
     return Container(
@@ -105,6 +110,17 @@ class _CategoryExpansionTileState extends State<CategoryExpansionTile> {
                   size: 22,
                 ),
               ),
+              // Alakategorioiden lukumäärä ikonista vasemmalle
+              Positioned(
+                right: 30, // Sijoitetaan ikonin vasemmalle puolelle
+                top: 4,
+                child: Text(
+                  '$subCategoryCount alakategoria${subCategoryCount == 1 ? '' : 'a'}',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Colors.grey[500],
+                      ),
+                ),
+              ),
               // Laajennus/supistus-ikoni oikeassa yläkulmassa
               Positioned(
                 right: 0,
@@ -135,7 +151,7 @@ class _CategoryExpansionTileState extends State<CategoryExpansionTile> {
                               Expanded(
                                 child: Text(
                                   widget.categoryName,
-                                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(fontSize: 14,fontWeight: FontWeight.w700),
+                                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(fontSize: 14, fontWeight: FontWeight.w700),
                                   maxLines: 2,
                                   overflow: TextOverflow.ellipsis,
                                 ),

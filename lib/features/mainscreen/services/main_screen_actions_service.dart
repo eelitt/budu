@@ -1,4 +1,5 @@
 import 'package:budu/features/budget/event_dialog/add_event_dialog.dart';
+import 'package:budu/core/utils.dart';
 import 'package:budu/core/app_router/app_router.dart';
 import 'package:budu/features/account/account_settings.dart';
 import 'package:budu/features/auth/providers/auth_provider.dart';
@@ -9,6 +10,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 class MainScreenActionsService {
+
   Future<void> createBudgetForNextMonth(
     BuildContext context,
     Function() onBudgetCreated,
@@ -68,10 +70,36 @@ class MainScreenActionsService {
 
   void handleMenuSelection(String value, BuildContext context) {
     if (value == 'add_event') {
+      // Tarkista, onko budjetissa kategorioita
+      final budgetProvider = Provider.of<BudgetProvider>(context, listen: false);
+      if (budgetProvider.budget == null || budgetProvider.budget!.expenses.isEmpty) {
+        // Käytä utils.dart-tiedostossa määriteltyä showSnackBar-metodia
+        showSnackBar(
+          context,
+          'Lisää ensin kategoria budjettiin!',
+          duration: const Duration(seconds: 3),
+          backgroundColor: Colors.blueGrey[700],
+        );
+        return;
+      }
+      // Avaa AddEventDialog, jos kategorioita on
       showDialog(
         context: context,
-        builder: (context) => const AddEventDialog(),
-      );
+        builder: (dialogContext) {
+          return const AddEventDialog();
+      },
+      ).then((result) {
+  print('MainScreenActionsService: AddEventDialog suljettu');
+      if (result != null && result['success'] == true) {
+    final isExpense = result['isExpense'] as bool;
+    showSnackBar(
+      context,
+      isExpense ? 'Meno lisätty onnistuneesti!' : 'Tulo lisätty onnistuneesti!',
+      duration: const Duration(seconds: 3),
+      backgroundColor: Colors.blueGrey[700],
+    );
+  }
+});
     } else if (value == 'create_budget') {
       createBudgetForNextMonth(context, () {});
     } else if (value == 'settings') {

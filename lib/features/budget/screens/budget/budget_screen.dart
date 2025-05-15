@@ -269,8 +269,8 @@ class _BudgetScreenState extends State<BudgetScreen> {
                                     context: context,
                                     isLastBudget: _availableMonths.length == 1,
                                     customMessage: _availableMonths.length == 1
-                                        ? 'Haluatko varmasti poistaa tämän budjetin? Tämä on viimeinen budjettisi, joten sinut ohjataan luomaan uutta budjettia.'
-                                        : 'Haluatko varmasti poistaa tämän budjetin? Näet seuraavan budjettisi poiston jälkeen.',
+                                        ? 'Haluatko varmasti poistaa budjetin?\nKaikki siihen liittyvät tapahtumat poistetaan.\nKoska tämä on ainoa budjettisi, sinut ohjataan luomaan uusi.'
+                                        : 'Haluatko varmasti poistaa tämän budjetin? Budjetin tulo- ja menotapahtumat poistetaan samalla.',
                                   );
                                   if (confirmed) {
                                     await _deleteBudget();

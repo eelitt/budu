@@ -23,6 +23,16 @@ class _BudgetTrackingSectionState extends State<BudgetTrackingSection> {
     final categoryTotals = expenseProvider.getCategoryTotals();
     final budget = budgetProvider.budget!;
 
+    // Haetaan budjetin kategoriat
+    final budgetCategories = budget.expenses.keys.toSet();
+
+    // Suodatetaan categoryMapping-kategoriat vain niihin, jotka ovat budjetissa
+    final List<MapEntry<String, List<String>>> filteredCategories = categoryMapping.entries
+        .where((entry) => budgetCategories.contains(entry.key))
+        .toList()
+      ..sort((a, b) => a.key.compareTo(b.key));
+
+    // Haetaan unmapped-kategoriat (kategoriat, joita ei ole categoryMapping-rakenteessa)
     final allMappedCategories = categoryMapping.values.expand((categories) => categories).toSet();
     final mappedMainCategories = categoryMapping.keys.toSet();
     final unmappedCategories = budget.expenses.keys
@@ -42,10 +52,7 @@ class _BudgetTrackingSectionState extends State<BudgetTrackingSection> {
         .where((e) => unmappedCategories.contains(e.key))
         .fold<double>(0.0, (sum, e) => sum + e.value);
 
-    final List<MapEntry<String, List<String>>> sortedCategories = categoryMapping.entries.toList()
-      ..sort((a, b) => a.key.compareTo(b.key));
-
-    final List<Widget> categoryWidgets = sortedCategories.map((categoryEntry) {
+    final List<Widget> categoryWidgets = filteredCategories.map((categoryEntry) {
       final categoryName = categoryEntry.key;
       final subCategories = categoryEntry.value;
 
@@ -73,7 +80,7 @@ class _BudgetTrackingSectionState extends State<BudgetTrackingSection> {
       );
     }).toList();
 
-    // Lasketaan kategorioiden kokonaismäärä (mapped + unmapped)
+    // Lasketaan kategorioiden kokonaismäärä (filtered + unmapped)
     final totalCategories = categoryWidgets.length + (unmappedExpenses.isNotEmpty ? 1 : 0);
 
     return Container(

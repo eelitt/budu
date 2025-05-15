@@ -174,17 +174,48 @@ class _EventsSectionState extends State<EventsSection> {
                                             final confirm = await showDialog<bool>(
                                               context: context,
                                               builder: (context) => AlertDialog(
-                                                title: const Text('Poista tapahtuma'),
+                                                backgroundColor: Colors.white, // Teeman mukainen taustaväri
+                                                shape: RoundedRectangleBorder(
+                                                  borderRadius: BorderRadius.circular(12),
+                                                ),
+                                                elevation: 8,
+                                                title: Text(
+                                                  'Poista tapahtuma',
+                                                  style: Theme.of(context).textTheme.headlineSmall,
+                                                ),
                                                 content: Text(
-                                                    'Haluatko varmasti poistaa tapahtuman "${expense.category}${expense.subcategory != null && expense.subcategory!.isNotEmpty ? ' (${expense.subcategory})' : ''}" (${formatCurrency(expense.amount)})?'),
+                                                  'Haluatko varmasti poistaa tapahtuman "${expense.category}${expense.subcategory != null && expense.subcategory!.isNotEmpty ? ' (${expense.subcategory})' : ''}" (${formatCurrency(expense.amount)})?',
+                                                  style: Theme.of(context).textTheme.bodyLarge,
+                                                ),
                                                 actions: [
                                                   TextButton(
                                                     onPressed: () => Navigator.pop(context, false),
-                                                    child: const Text('Peruuta'),
+                                                    style: TextButton.styleFrom(
+                                                      foregroundColor: Colors.grey[600],
+                                                    ),
+                                                    child: Text(
+                                                      'Peruuta',
+                                                      style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                                                            color: Colors.grey[600],
+                                                          ),
+                                                    ),
                                                   ),
-                                                  TextButton(
+                                                  ElevatedButton(
                                                     onPressed: () => Navigator.pop(context, true),
-                                                    child: const Text('Poista'),
+                                                    style: ElevatedButton.styleFrom(
+                                                      backgroundColor: Colors.red, // Poisto-painike punainen
+                                                      foregroundColor: Colors.white,
+                                                      shape: RoundedRectangleBorder(
+                                                        borderRadius: BorderRadius.circular(8),
+                                                      ),
+                                                      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                                                    ),
+                                                    child: Text(
+                                                      'Poista',
+                                                      style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                                                            color: Colors.white,
+                                                          ),
+                                                    ),
                                                   ),
                                                 ],
                                               ),

@@ -35,6 +35,7 @@ class SubCategoryTile extends StatelessWidget {
                 child: Text(
                   subCategory,
                   style: Theme.of(context).textTheme.bodyLarge,
+                  maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),
               ),

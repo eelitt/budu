@@ -34,6 +34,7 @@ class _MainScreenState extends State<MainScreen> with RouteAware {
   final MainScreenActionsService _mainScreenActions = MainScreenActionsService();
 
   final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>(); // Lisätty ScaffoldKey
 
   @override
   void initState() {
@@ -139,68 +140,69 @@ class _MainScreenState extends State<MainScreen> with RouteAware {
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     final userFirstName = authProvider.user?.user!.displayName?.split(' ').first ?? '';
 
-    return Consumer<BudgetProvider>(
-      builder: (context, budgetProvider, child) {
-        if (budgetProvider.budget != _lastBudget) {
-          _lastBudget = budgetProvider.budget;
-          _checkBudgetStatus();
-        }
+    return Scaffold(
+      key: _scaffoldKey, // Lisätty ScaffoldKey
+      appBar: MainScreenAppBar(
+        userFirstName: userFirstName,
+        nextMonthBudgetExists: _nextMonthBudgetExists,
+        onMenuSelected: (value) => _mainScreenActions.handleMenuSelection(value, context),
+      ),
+      body: Column(
+        children: [
+          const NotificationBanner(),
+          Expanded(
+            child: Consumer<BudgetProvider>(
+              builder: (context, budgetProvider, child) {
+                if (budgetProvider.budget != _lastBudget) {
+                  _lastBudget = budgetProvider.budget;
+                  _checkBudgetStatus();
+                }
 
-        if (_hasBudgetLoadError) {
-          return Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Text('Virhe budjetin latauksessa. Yritä uudelleen.'),
-                const SizedBox(height: 16),
-                ElevatedButton(
-                  onPressed: _retryLoadBudget,
-                  child: const Text('Yritä uudelleen'),
-                ),
-              ],
-            ),
-          );
-        }
+                if (_hasBudgetLoadError) {
+                  return Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Text('Virhe budjetin latauksessa. Yritä uudelleen.'),
+                        const SizedBox(height: 16),
+                        ElevatedButton(
+                          onPressed: _retryLoadBudget,
+                          child: const Text('Yritä uudelleen'),
+                        ),
+                      ],
+                    ),
+                  );
+                }
 
-        final initialRoute = _getInitialRoute();
-        print('MainScreen: build - initialRoute asetettu: $initialRoute (index: $_selectedIndex)');
+                final initialRoute = _getInitialRoute();
+                print('MainScreen: build - initialRoute asetettu: $initialRoute (index: $_selectedIndex)');
 
-        return Scaffold(
-          appBar: MainScreenAppBar(
-            userFirstName: userFirstName,
-            nextMonthBudgetExists: _nextMonthBudgetExists,
-            onMenuSelected: (value) => _mainScreenActions.handleMenuSelection(value, context),
-          ),
-          body: Column(
-            children: [
-              const NotificationBanner(),
-              Expanded(
-                child: Navigator(
+                return Navigator(
                   key: _navigatorKey,
                   initialRoute: initialRoute,
                   onGenerateRoute: AppRouter.generateRoute,
-                ),
-              ),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+      bottomNavigationBar: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.bottomCenter,
+            end: Alignment.topCenter,
+            colors: [
+              Color.fromARGB(255, 253, 228, 190),
+              Color(0xFFFFFCF5),
             ],
           ),
-          bottomNavigationBar: Container(
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.bottomCenter,
-                end: Alignment.topCenter,
-                colors: [
-                  Color.fromARGB(255, 253, 228, 190),
-                  Color(0xFFFFFCF5),
-                ],
-              ),
-            ),
-            child: MainScreenBottomNavigationBar(
-              selectedIndex: _selectedIndex < 3 ? _selectedIndex : 0,
-              onItemTapped: _onItemTapped,
-            ),
-          ),
-        );
-      },
+        ),
+        child: MainScreenBottomNavigationBar(
+          selectedIndex: _selectedIndex < 3 ? _selectedIndex : 0,
+          onItemTapped: _onItemTapped,
+        ),
+      ),
     );
   }
 }

@@ -46,7 +46,7 @@ class ChatbotQuestions {
       ]);
     } else if (housingType == "Omistusasunto kerros-/rivitalossa (esim. yhtiövastiketta maksava)") {
       questions.addAll([
-        "Paljon maksat yhtiövastiketta kuukaudessa?",
+        "Paljonko maksat yhtiövastiketta kuukaudessa?",
         "Paljonko maksat vesimaksua kuukaudessa (jos sisältyy vastikkeeseen, syötä 0)?",
         "Paljonko kotivakuutuksesi maksaa vuodessa?",
       ]);
