@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart'; // Tarvitaan inputFormatters-ominaisuutta varten
 import 'package:google_fonts/google_fonts.dart';
 
 class TextFieldWithNumberKeyboard extends StatefulWidget {
@@ -52,6 +53,10 @@ class _TextFieldWithNumberKeyboardState extends State<TextFieldWithNumberKeyboar
           fontSize: 14,
           color: Colors.black87,
         ),
+        inputFormatters: [
+          FilteringTextInputFormatter.allow(RegExp(r'[0-9]')), // Sallitaan vain numerot
+          LengthLimitingTextInputFormatter(6), // Rajoitetaan syöte 6 merkkiin (100 000 €)
+        ],
         onSubmitted: (value) {
           widget.onSubmitted(value);
           _controller.clear();

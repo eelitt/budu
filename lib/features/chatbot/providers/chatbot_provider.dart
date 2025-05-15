@@ -64,6 +64,21 @@ class ChatbotProvider with ChangeNotifier {
         notifyListeners(); // Ilmoitetaan virheilmoituksen lisäyksestä
         return;
       }
+
+      // Maksimiarvon validointi
+      double maxValue = currentQuestion == "Paljonko saat tuloja kuukaudessa (esim. palkka, tuet, pääomatulot)?"
+          ? 100000.0 // Tulot: maksimi 100 000 €
+          : 10000.0; // Muut kulut: maksimi 10 000 €
+      if (value > maxValue) {
+        _messages.add(ChatMessage(
+          text: "Syötä pienempi arvo (maksimi $maxValue €). Yritä uudelleen.",
+          isUser: false,
+          createdAt: DateTime.now(),
+        ));
+        notifyListeners(); // Ilmoitetaan virheilmoituksen lisäyksestä
+        return;
+      }
+
       _processResponse(response);
       _step++;
     }

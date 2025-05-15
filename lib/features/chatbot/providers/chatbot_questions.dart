@@ -40,7 +40,7 @@ class ChatbotQuestions {
       questions.addAll([
         "Paljonko maksat asuntolainaa kuukaudessa? (jos ei lainaa, syötä 0)?",
         "Paljonko kiinteistöverosi on vuodessa?",
-        "Paljonko maksat jätehuollosta (Roskien tyhjennys) kuukaudessa?",
+        "Paljonko maksat jätehuollosta (Esim. Roskien tyhjennys) kuukaudessa?",
         "Paljonko kotivakuutuksesi maksaa vuodessa?",
         "Paljonko maksat vesimaksua kuukaudessa (vesi + jätevesi)?",
       ]);

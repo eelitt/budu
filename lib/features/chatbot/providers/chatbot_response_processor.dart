@@ -62,7 +62,7 @@ class ChatbotResponseProcessor {
       case "Paljonko kiinteistöverosi on vuodessa?":
         if (expenses.containsKey('Asuminen')) expenses['Asuminen']!['Kiinteistövero'] = (value ?? 0.0) / 12;
         break;
-      case "Paljonko maksat jätehuollosta (Roskien tyhjennys) kuukaudessa?":
+      case "Paljonko maksat jätehuollosta (Esim. Roskien tyhjennys) kuukaudessa?":
         if (expenses.containsKey('Asuminen')) expenses['Asuminen']!['Jätehuolto'] = value ?? 0.0;
         break;
       case "Paljonko maksat sähkölaskua kuukaudessa?":
