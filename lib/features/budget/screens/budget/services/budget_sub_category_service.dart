@@ -101,8 +101,8 @@ class BudgetSubCategoryService {
     if (subcategory.isEmpty) {
       return 'Syötä alakategorian nimi';
     }
-    if (subcategory.length > 30) {
-      return 'Nimi voi olla enintään 30 merkkiä pitkä';
+    if (subcategory.length > 20) { // Päivitetty maksimipituus 30 -> 20 merkkiä
+      return 'Nimi voi olla enintään 20 merkkiä pitkä';
     }
     if (subcategory != editingSubcategory && expenses.containsKey(subcategory)) {
       return 'Tämä alakategorian nimi on jo käytössä';
@@ -116,8 +116,8 @@ class BudgetSubCategoryService {
     if (amount == null || amount < 0) {
       return 'Syötä positiivinen numero';
     }
-    if (amount > 1000000) {
-      return 'Euromäärä voi olla enintään 1 000 000 €';
+    if (amount > 99999) { // Päivitetty maksimiarvo 1 000 000 -> 99 999 €
+      return 'Euromäärä voi olla enintään 99 999 €';
     }
     final decimalPlaces = amountText.contains('.') ? amountText.split('.')[1].length : 0;
     if (decimalPlaces > 2) {

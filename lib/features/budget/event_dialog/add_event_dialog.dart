@@ -4,7 +4,7 @@ import 'package:budu/features/budget/event_dialog/category_selector.dart';
 import 'package:budu/features/budget/event_dialog/event_type_selector.dart';
 import 'package:budu/features/budget/event_dialog/event_validator.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart'; // Tarvitaan inputFormatters-ominaisuutta varten
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
@@ -13,7 +13,9 @@ import '../providers/budget_provider.dart';
 import '../providers/expense_provider.dart';
 
 class AddEventDialog extends StatefulWidget {
-  const AddEventDialog({super.key});
+  final String? initialCategory; // Uusi parametri esivalitulle kategorialle
+
+  const AddEventDialog({super.key, this.initialCategory});
 
   @override
   State<AddEventDialog> createState() => _AddEventDialogState();
@@ -36,7 +38,9 @@ class _AddEventDialogState extends State<AddEventDialog> {
   void initState() {
     super.initState();
     final budgetProvider = Provider.of<BudgetProvider>(context, listen: false);
-    _selectedCategory = budgetProvider.budget?.expenses.keys.first;
+    
+    // Asetetaan esivalittu kategoria, jos initialCategory on annettu
+    _selectedCategory = widget.initialCategory ?? budgetProvider.budget?.expenses.keys.first;
     if (_selectedCategory != null && budgetProvider.budget != null) {
       final subCategories = budgetProvider.budget!.expenses[_selectedCategory]?.keys.toList() ?? [];
       _selectedSubcategory = subCategories.isNotEmpty ? subCategories.first : null;
@@ -121,17 +125,15 @@ class _AddEventDialogState extends State<AddEventDialog> {
         } else if (error.contains('Valitse alakategoria')) {
           _subcategoryError = error;
         } else if (error.contains('Käyttäjä ei ole kirjautunut')) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            showSnackBar(
-              context,
-              error,
-              duration: const Duration(seconds: 3),
-              backgroundColor: Colors.blueGrey[700],
-            );
-            if (mounted) {
-              Navigator.pop(context, true);
-            }
-          });
+          showSnackBar(
+            context,
+            error,
+            duration: const Duration(seconds: 3),
+            backgroundColor: Colors.blueGrey[700],
+          );
+          if (mounted) {
+            Navigator.pop(context);
+          }
         }
       });
       return;
@@ -211,8 +213,8 @@ class _AddEventDialogState extends State<AddEventDialog> {
                   errorText: _amountError,
                 ),
                 inputFormatters: [
-                  FilteringTextInputFormatter.allow(RegExp(r'[0-9]')), // Sallitaan vain numerot
-                  LengthLimitingTextInputFormatter(5), // Rajoitetaan syöte 5 merkkiin
+                  FilteringTextInputFormatter.allow(RegExp(r'[0-9]')),
+                  LengthLimitingTextInputFormatter(5),
                 ],
                 onChanged: (value) {
                   setState(() {

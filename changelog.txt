@@ -18,3 +18,7 @@
 ## 1.0.5
 - uix-parannuksia
 - Tiedon haun optimointia
+
+## 1.0.6
+- Korjattu bugi ala-kategoriaa poistaessa.
+- Budjetin yhteenveto-sivulla kategorian laajennuksessa nappi, josta tapahtumia voi lisätä.

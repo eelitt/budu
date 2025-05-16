@@ -1,5 +1,4 @@
 import 'package:budu/core/utils.dart';
-import 'package:budu/features/budget/screens/summary/budget_tracking/progressColorHelper.dart';
 import 'package:flutter/material.dart';
 
 class SubCategoryTile extends StatelessWidget {
@@ -22,6 +21,7 @@ class SubCategoryTile extends StatelessWidget {
     final subRemainingPercentage = subCategoryBudget > 0
         ? ((subCategoryBudget - spentAmount) / subCategoryBudget * 100).clamp(0, 100)
         : 0.0;
+    final isOverBudget = subProgress > 1;
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 16.0),
@@ -52,7 +52,7 @@ class SubCategoryTile extends StatelessWidget {
           LinearProgressIndicator(
             value: subProgress > 1 ? 1 : subProgress,
             backgroundColor: Colors.grey[200],
-            valueColor: AlwaysStoppedAnimation<Color>(ProgressColorHelper.getProgressColor(categoryName, subProgress)),
+            valueColor: AlwaysStoppedAnimation<Color>(isOverBudget ? Colors.red : Colors.green),
             minHeight: 8,
             borderRadius: BorderRadius.circular(4),
           ),

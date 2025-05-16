@@ -1,4 +1,3 @@
-// lib/features/budget/screens/budget/widgets/edit_subcategory_form.dart
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -33,7 +32,7 @@ class EditSubcategoryForm extends StatelessWidget {
               fillColor: Colors.grey.shade100,
               contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
             ),
-            maxLength: 30,
+            maxLength: 20, // Päivitetty maksimipituus 30 -> 20 merkkiä
             buildCounter: (context, {required currentLength, required isFocused, maxLength}) => null,
           ),
         ),
@@ -55,6 +54,7 @@ class EditSubcategoryForm extends StatelessWidget {
             ),
             inputFormatters: [
               FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+              LengthLimitingTextInputFormatter(5), // Lisätty maksimipituus 5 merkkiä (99 999 €)
             ],
           ),
         ),

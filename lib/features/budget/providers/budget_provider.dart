@@ -166,14 +166,119 @@ class BudgetProvider with ChangeNotifier {
     try {
       if (_budget!.expenses.containsKey(category)) {
         _budget!.expenses[category]!.remove(subcategory);
-        if (_budget!.expenses[category]!.isEmpty) {
-          _budget!.expenses.remove(category);
-        }
+
         _scheduleSave(userId);
         notifyListeners();
       }
     } catch (e) {
       print('Error removing subcategory: $e');
+      rethrow;
+    }
+  }
+
+  Future<void> deleteExpense({
+    required String userId,
+    required int year,
+    required int month,
+    required String category,
+    String? subCategory
+  }) async {
+    if (_budget == null) return;
+    try {
+      if (subCategory != null) {
+        // Poista vain annettu alakategoria yläkategoriasta
+        if (_budget!.expenses.containsKey(category)) {
+          _budget!.expenses[category]!.remove(subCategory);
+          // Jos yläkategorian expenses-lista on tyhjä, poista koko yläkategoria
+        //  if (_budget!.expenses[category]!.isEmpty) {
+         //   _budget!.expenses.remove(category);
+          //}
+        }
+      } else {
+        // Poista koko yläkategoria (vanha logiikka)
+        _budget!.expenses.remove(category);
+      }
+      _scheduleSave(userId);
+      notifyListeners();
+    } catch (e) {
+      print('Error deleting expense: $e');
+      rethrow;
+    }
+  }
+
+  Future<void> updateExpense({required int year, required String userId, required int month, required String category, required double amount}) async {
+    if (_budget == null) return;
+    try {
+      if (!_budget!.expenses.containsKey(category)) {
+        _budget!.expenses[category] = {};
+      }
+      _budget!.expenses[category]!['default'] = amount;
+      _scheduleSave(userId);
+    } catch (e) {
+      print('Error updating expense: $e');
+      rethrow;
+    }
+  }
+
+  Future<void> updateIncome({
+    required String userId,
+    required int year,
+    required int month,
+    required double income,
+  }) async {
+    if (_budget == null) return;
+    try {
+      _budget!.income = income;
+      _scheduleSave(userId);
+      print('Income updated: ${_budget!.income}');
+      notifyListeners();
+    } catch (e) {
+      print('Error updating income: $e');
+      rethrow;
+    }
+  }
+
+  Future<void> addToIncome({
+    required String userId,
+    required int year,
+    required int month,
+    required double amount,
+  }) async {
+    try {
+      final exists = await budgetExists(userId, year, month);
+      if (!exists) {
+        final newBudget = BudgetModel(
+          income: 0.0,
+          expenses: {},
+          createdAt: DateTime.now(),
+          year: year,
+          month: month,
+          isPlaceholder: true,
+        );
+        await _budgetRepository.saveBudget(userId, newBudget);
+      }
+
+      final budget = await _budgetRepository.getBudget(userId, year, month);
+      if (budget == null) {
+        print('Cannot add to income: Failed to load budget for $year/$month');
+        return;
+      }
+
+      final updatedIncome = (budget.income) + amount;
+      await FirebaseFirestore.instance
+          .collection('budgets')
+          .doc(userId)
+          .collection('monthly_budgets')
+          .doc('${year}_$month')
+          .update({'income': updatedIncome});
+
+      if (_budget != null && _budget!.year == year && _budget!.month == month) {
+        _budget!.income = updatedIncome;
+      }
+      print('Adding to income: $amount, new income: $updatedIncome');
+      notifyListeners();
+    } catch (e) {
+      print('Error adding to income: $e');
       rethrow;
     }
   }
@@ -239,94 +344,6 @@ class BudgetProvider with ChangeNotifier {
       }
     } catch (e) {
       print('Error saving budget: $e');
-      rethrow;
-    }
-  }
-
-  Future<void> updateExpense({required int year, required String userId, required int month, required String category, required double amount}) async {
-    if (_budget == null) return;
-    try {
-      if (!_budget!.expenses.containsKey(category)) {
-        _budget!.expenses[category] = {};
-      }
-      _budget!.expenses[category]!['default'] = amount;
-      _scheduleSave(userId);
-    } catch (e) {
-      print('Error updating expense: $e');
-      rethrow;
-    }
-  }
-
-  Future<void> deleteExpense({required String userId, required int year, required int month, required String category}) async {
-    if (_budget == null) return;
-    try {
-      _budget!.expenses.remove(category);
-      _scheduleSave(userId);
-    } catch (e) {
-      print('Error deleting expense: $e');
-      rethrow;
-    }
-  }
-
-  Future<void> updateIncome({
-    required String userId,
-    required int year,
-    required int month,
-    required double income,
-  }) async {
-    if (_budget == null) return;
-    try {
-      _budget!.income = income;
-      _scheduleSave(userId);
-      print('Income updated: ${_budget!.income}');
-      notifyListeners();
-    } catch (e) {
-      print('Error updating income: $e');
-      rethrow;
-    }
-  }
-
-  Future<void> addToIncome({
-    required String userId,
-    required int year,
-    required int month,
-    required double amount,
-  }) async {
-    try {
-      final exists = await budgetExists(userId, year, month);
-      if (!exists) {
-        final newBudget = BudgetModel(
-          income: 0.0,
-          expenses: {},
-          createdAt: DateTime.now(),
-          year: year,
-          month: month,
-          isPlaceholder: true,
-        );
-        await _budgetRepository.saveBudget(userId, newBudget);
-      }
-
-      final budget = await _budgetRepository.getBudget(userId, year, month);
-      if (budget == null) {
-        print('Cannot add to income: Failed to load budget for $year/$month');
-        return;
-      }
-
-      final updatedIncome = (budget.income) + amount;
-      await FirebaseFirestore.instance
-          .collection('budgets')
-          .doc(userId)
-          .collection('monthly_budgets')
-          .doc('${year}_$month')
-          .update({'income': updatedIncome});
-
-      if (_budget != null && _budget!.year == year && _budget!.month == month) {
-        _budget!.income = updatedIncome;
-      }
-      print('Adding to income: $amount, new income: $updatedIncome');
-      notifyListeners();
-    } catch (e) {
-      print('Error adding to income: $e');
       rethrow;
     }
   }

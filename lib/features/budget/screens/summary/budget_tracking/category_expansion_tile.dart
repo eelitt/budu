@@ -1,7 +1,7 @@
 import 'package:budu/core/utils.dart';
+import 'package:budu/features/budget/event_dialog/add_event_dialog.dart';
 import 'package:budu/features/budget/models/expense_event.dart';
 import 'package:budu/features/budget/providers/expense_provider.dart';
-import 'package:budu/features/budget/screens/summary/budget_tracking/progressColorHelper.dart';
 import 'package:budu/features/budget/screens/summary/budget_tracking/sub_category_tile.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -112,7 +112,7 @@ class _CategoryExpansionTileState extends State<CategoryExpansionTile> {
               ),
               // Alakategorioiden lukumäärä ikonista vasemmalle
               Positioned(
-                right: 30, // Sijoitetaan ikonin vasemmalle puolelle
+                right: 30,
                 top: 4,
                 child: Text(
                   '$subCategoryCount alakategoria${subCategoryCount == 1 ? '' : 'a'}',
@@ -178,7 +178,7 @@ class _CategoryExpansionTileState extends State<CategoryExpansionTile> {
                     LinearProgressIndicator(
                       value: progress > 1 ? 1 : progress,
                       backgroundColor: Colors.grey[200],
-                      valueColor: AlwaysStoppedAnimation<Color>(ProgressColorHelper.getProgressColor(widget.categoryName, progress)),
+                      valueColor: AlwaysStoppedAnimation<Color>(isOverBudget ? Colors.red : Colors.green),
                       minHeight: 8,
                       borderRadius: BorderRadius.circular(4),
                     ),
@@ -206,36 +206,57 @@ class _CategoryExpansionTileState extends State<CategoryExpansionTile> {
               ),
             ],
           ),
-          children: widget.isUnmappedCategory
-              ? widget.unmappedExpenses!.map((entry) {
-                  final subCategory = entry.key;
-                  final budgetAmount = entry.value;
-                  final spentAmount = Provider.of<ExpenseProvider>(context, listen: false)
-                      .getCategoryTotals()[subCategory] ?? 0.0;
-                  return SubCategoryTile(
-                    subCategory: subCategory,
-                    subCategoryBudget: budgetAmount,
-                    spentAmount: spentAmount,
-                    categoryName: widget.categoryName,
-                  );
-                }).toList()
-              : widget.categoryExpenses!.map((entry) {
-                  final subCategory = entry.key;
-                  final subCategoryBudget = entry.value;
-                  final spentAmount = Provider.of<ExpenseProvider>(context, listen: false)
-                      .expenses
-                      .where((expense) =>
-                          expense.type == EventType.expense &&
-                          expense.category == widget.categoryName &&
-                          expense.subcategory == subCategory)
-                      .fold<double>(0.0, (sum, expense) => sum + expense.amount);
-                  return SubCategoryTile(
-                    subCategory: subCategory,
-                    subCategoryBudget: subCategoryBudget,
-                    spentAmount: spentAmount,
-                    categoryName: widget.categoryName,
-                  );
-                }).toList(),
+          children: [
+            ...widget.isUnmappedCategory
+                ? widget.unmappedExpenses!.map((entry) {
+                    final subCategory = entry.key;
+                    final budgetAmount = entry.value;
+                    final spentAmount = Provider.of<ExpenseProvider>(context, listen: false)
+                        .getCategoryTotals()[subCategory] ?? 0.0;
+                    return SubCategoryTile(
+                      subCategory: subCategory,
+                      subCategoryBudget: budgetAmount,
+                      spentAmount: spentAmount,
+                      categoryName: widget.categoryName,
+                    );
+                  }).toList()
+                : widget.categoryExpenses!.map((entry) {
+                    final subCategory = entry.key;
+                    final subCategoryBudget = entry.value;
+                    final spentAmount = Provider.of<ExpenseProvider>(context, listen: false)
+                        .expenses
+                        .where((expense) =>
+                            expense.type == EventType.expense &&
+                            expense.category == widget.categoryName &&
+                            expense.subcategory == subCategory)
+                        .fold<double>(0.0, (sum, expense) => sum + expense.amount);
+                    return SubCategoryTile(
+                      subCategory: subCategory,
+                      subCategoryBudget: subCategoryBudget,
+                      spentAmount: spentAmount,
+                      categoryName: widget.categoryName,
+                    );
+                  }).toList(),
+            // Lisää painike vain, kun kategoria on laajennettu
+            if (_isExpanded && subCategoryCount > 0)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 16.0),
+                child: ElevatedButton(
+                  onPressed: () {
+                    // Avaa AddEventDialog esivalitulla kategorialla
+                    showDialog(
+                      context: context,
+                      barrierDismissible: false,
+                      builder: (dialogContext) => AddEventDialog(
+                        initialCategory: widget.categoryName,
+                      ),
+                    );
+                  },
+                  child: Text('Lisää meno',style: Theme.of(context).textTheme.bodyLarge?.copyWith(color: Colors.white)),
+                  
+                ),
+              ),
+          ],
         ),
       ),
     );

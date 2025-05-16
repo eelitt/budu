@@ -96,32 +96,36 @@ class _EventsSectionState extends State<EventsSection> {
                                   ],
                                 ),
                                 padding: const EdgeInsets.all(12),
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Expanded(
-                                      child: Row(
-                                        children: [
-                                          Column(
+                                    // Kategorian nimi kortin yläosassa
+                                    Row(
+                                      children: [
+                                        Icon(
+                                          expense.type == EventType.income
+                                              ? Icons.arrow_upward
+                                              : Icons.arrow_downward,
+                                          color: expense.type == EventType.income ? Colors.green : Colors.red,
+                                          size: 16,
+                                        ),
+                                        const SizedBox(width: 4),
+                                        Text(
+                                          expense.category,
+                                          style: Theme.of(context).textTheme.bodyLarge,
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 4), // Välistys kategorian nimen ja muiden tietojen välillä
+                                    // Muut tiedot (kuvaus, alakategoria, päivämäärä, euromäärä, poisto-ikoni)
+                                    Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Expanded(
+                                          child: Column(
                                             crossAxisAlignment: CrossAxisAlignment.start,
                                             children: [
-                                              Row(
-                                                children: [
-                                                  Icon(
-                                                    expense.type == EventType.income
-                                                        ? Icons.arrow_upward
-                                                        : Icons.arrow_downward,
-                                                    color: expense.type == EventType.income ? Colors.green : Colors.red,
-                                                    size: 16,
-                                                  ),
-                                                  const SizedBox(width: 4),
-                                                  Text(
-                                                    expense.category,
-                                                    style: Theme.of(context).textTheme.bodyLarge,
-                                                  ),
-                                                ],
-                                              ),
-                                              const SizedBox(height: 4),
                                               if (expense.description != null && expense.description!.isNotEmpty)
                                                 Text(
                                                   expense.description!,
@@ -149,87 +153,93 @@ class _EventsSectionState extends State<EventsSection> {
                                               ),
                                             ],
                                           ),
-                                        ],
-                                      ),
-                                    ),
-                                    Row(
-                                      children: [
-                                        Text(
-                                          expense.type == EventType.income
-                                              ? '+${formatCurrency(expense.amount)}'
-                                              : '-${formatCurrency(expense.amount)}',
-                                          style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                                                color: expense.type == EventType.income ? Colors.green : Colors.red,
-                                                fontWeight: FontWeight.bold,
-                                              ),
                                         ),
-                                        const SizedBox(width: 8),
-                                        IconButton(
-                                          icon: const Icon(
-                                            Icons.delete,
-                                            color: Colors.red,
-                                            size: 20,
-                                          ),
-                                          onPressed: () async {
-                                            final confirm = await showDialog<bool>(
-                                              context: context,
-                                              builder: (context) => AlertDialog(
-                                                backgroundColor: Colors.white, // Teeman mukainen taustaväri
-                                                shape: RoundedRectangleBorder(
-                                                  borderRadius: BorderRadius.circular(12),
-                                                ),
-                                                elevation: 8,
-                                                title: Text(
-                                                  'Poista tapahtuma',
-                                                  style: Theme.of(context).textTheme.headlineSmall,
-                                                ),
-                                                content: Text(
-                                                  'Haluatko varmasti poistaa tapahtuman "${expense.category}${expense.subcategory != null && expense.subcategory!.isNotEmpty ? ' (${expense.subcategory})' : ''}" (${formatCurrency(expense.amount)})?',
-                                                  style: Theme.of(context).textTheme.bodyLarge,
-                                                ),
-                                                actions: [
-                                                  TextButton(
-                                                    onPressed: () => Navigator.pop(context, false),
-                                                    style: TextButton.styleFrom(
-                                                      foregroundColor: Colors.grey[600],
-                                                    ),
-                                                    child: Text(
-                                                      'Peruuta',
-                                                      style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                                                            color: Colors.grey[600],
-                                                          ),
-                                                    ),
-                                                  ),
-                                                  ElevatedButton(
-                                                    onPressed: () => Navigator.pop(context, true),
-                                                    style: ElevatedButton.styleFrom(
-                                                      backgroundColor: Colors.red, // Poisto-painike punainen
-                                                      foregroundColor: Colors.white,
-                                                      shape: RoundedRectangleBorder(
-                                                        borderRadius: BorderRadius.circular(8),
+                                        Column(
+                                          crossAxisAlignment: CrossAxisAlignment.end,
+                                          children: [
+                                            Row(
+                                              mainAxisAlignment: MainAxisAlignment.end,
+                                              children: [
+                                                Text(
+                                                  expense.type == EventType.income
+                                                      ? '+${formatCurrency(expense.amount)}'
+                                                      : '-${formatCurrency(expense.amount)}',
+                                                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                                                        color: expense.type == EventType.income ? Colors.green : Colors.red,
+                                                        fontWeight: FontWeight.bold,
                                                       ),
-                                                      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-                                                    ),
-                                                    child: Text(
-                                                      'Poista',
-                                                      style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                                                            color: Colors.white,
-                                                          ),
-                                                    ),
+                                                ),
+                                                const SizedBox(width: 12),
+                                                IconButton(
+                                                  icon: const Icon(
+                                                    Icons.delete,
+                                                    color: Colors.red,
+                                                    size: 20,
                                                   ),
-                                                ],
-                                              ),
-                                            );
-                                            if (confirm == true) {
-                                              try {
-                                                await expenseProvider.deleteExpense(authProvider.user!.uid, expense.id, budgetProvider);
-                                              } catch (e) {
-                                                ScaffoldMessenger.of(context).showSnackBar(
-                                                  SnackBar(content: Text('Virhe poistettaessa tapahtumaa: $e')),
-                                                );
-                                              }
-                                            }
-                                          },
+                                                  onPressed: () async {
+                                                    final confirm = await showDialog<bool>(
+                                                      context: context,
+                                                      builder: (context) => AlertDialog(
+                                                        backgroundColor: Colors.white,
+                                                        shape: RoundedRectangleBorder(
+                                                          borderRadius: BorderRadius.circular(12),
+                                                        ),
+                                                        elevation: 8,
+                                                        title: Text(
+                                                          'Poista tapahtuma',
+                                                          style: Theme.of(context).textTheme.headlineSmall,
+                                                        ),
+                                                        content: Text(
+                                                          'Haluatko varmasti poistaa tapahtuman "${expense.category}${expense.subcategory != null && expense.subcategory!.isNotEmpty ? ' (${expense.subcategory})' : ''}" (${formatCurrency(expense.amount)})?',
+                                                          style: Theme.of(context).textTheme.bodyLarge,
+                                                        ),
+                                                        actions: [
+                                                          TextButton(
+                                                            onPressed: () => Navigator.pop(context, false),
+                                                            style: TextButton.styleFrom(
+                                                              foregroundColor: Colors.grey[600],
+                                                            ),
+                                                            child: Text(
+                                                              'Peruuta',
+                                                              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                                                                    color: Colors.grey[600],
+                                                                  ),
+                                                            ),
+                                                          ),
+                                                          ElevatedButton(
+                                                            onPressed: () => Navigator.pop(context, true),
+                                                            style: ElevatedButton.styleFrom(
+                                                              backgroundColor: Colors.red,
+                                                              foregroundColor: Colors.white,
+                                                              shape: RoundedRectangleBorder(
+                                                                borderRadius: BorderRadius.circular(8),
+                                                              ),
+                                                              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                                                            ),
+                                                            child: Text(
+                                                              'Poista',
+                                                              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                                                                    color: Colors.white,
+                                                                  ),
+                                                            ),
+                                                          ),
+                                                        ],
+                                                      ),
+                                                    );
+                                                    if (confirm == true) {
+                                                      try {
+                                                        await expenseProvider.deleteExpense(authProvider.user!.uid, expense.id, budgetProvider);
+                                                      } catch (e) {
+                                                        ScaffoldMessenger.of(context).showSnackBar(
+                                                          SnackBar(content: Text('Virhe poistettaessa tapahtumaa: $e')),
+                                                        );
+                                                      }
+                                                    }
+                                                  },
+                                                ),
+                                              ],
+                                            ),
+                                          ],
                                         ),
                                       ],
                                     ),
