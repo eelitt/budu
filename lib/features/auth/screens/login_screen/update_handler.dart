@@ -9,17 +9,21 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-class UpdateHandler {
+class UpdateHandler with ChangeNotifier {
   final UpdateService _updateService = UpdateService();
   bool _isUpdateRequired = false;
   String? _apkUrl;
   String? _latestVersion;
   double _downloadProgress = 0.0;
   bool _isDownloading = false;
+  String? _currentVersion;
 
   bool get isUpdateRequired => _isUpdateRequired;
   bool get isDownloading => _isDownloading;
   double get downloadProgress => _downloadProgress;
+  String? get apkUrl => _apkUrl;
+  String? get latestVersion => _latestVersion;
+  String? get currentVersion => _currentVersion;
 
   Future<void> checkForAppUpdate(BuildContext context, UpdateProvider updateProvider) async {
     await updateProvider.checkForUpdate(context);
@@ -30,7 +34,7 @@ class UpdateHandler {
       _latestVersion = updateProvider.latestVersion;
 
       final packageInfo = await PackageInfo.fromPlatform();
-      final currentVersion = packageInfo.version;
+      _currentVersion = packageInfo.version;
 
       final hasInstallPermission = await _checkInstallPermission();
       if (!hasInstallPermission) {
@@ -49,7 +53,7 @@ class UpdateHandler {
                       await openAppSettings();
                       final newStatus = await _checkInstallPermission();
                       if (newStatus) {
-                        _showUpdateDialog(context, currentVersion);
+                        await _showUpdateDialog(context, _currentVersion!);
                       }
                     },
                     child: const Text('Avaa asetukset'),
@@ -88,7 +92,7 @@ class UpdateHandler {
         return;
       }
 
-      _showUpdateDialog(context, currentVersion);
+      await _showUpdateDialog(context, _currentVersion!);
     }
   }
 
@@ -106,115 +110,62 @@ class UpdateHandler {
     return connectivityResult != ConnectivityResult.none;
   }
 
-  void _showUpdateDialog(BuildContext context, String currentVersion) {
-    showDialog(
+  Future<bool> _showUpdateDialog(BuildContext context, String currentVersion) async {
+    final result = await showDialog<bool>(
       context: context,
       barrierDismissible: false,
       builder: (context) {
         return UpdateDialog(
-          updateService: _updateService,
           currentVersion: currentVersion,
           latestVersion: _latestVersion!,
           apkUrl: _apkUrl!,
-          onUpdate: (apkUrl, latestVersion) async {
-            await _startDownload(context, apkUrl, latestVersion);
+          onUpdate: (apkUrl, latestVersion) {
+            Navigator.pop(context, true);
           },
         );
       },
     );
+
+    return result ?? false;
   }
 
-  Future<void> _startDownload(BuildContext context, String apkUrl, String latestVersion) async {
-    setState(() {
-      _isDownloading = true;
-      _downloadProgress = 0.0;
-    });
-
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (dialogContext) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            return AlertDialog(
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Text("Ladataan päivitystä...", style: TextStyle(color: Colors.white)),
-                  const SizedBox(height: 16),
-                  LinearProgressIndicator(value: _downloadProgress / 100),
-                  const SizedBox(height: 8),
-                  Text('${_downloadProgress.toStringAsFixed(1)}%', style: const TextStyle(color: Colors.white)),
-                ],
-              ),
-              backgroundColor: Colors.black87,
-            );
-          },
-        );
-      },
-    );
+  Stream<Map<String, dynamic>> startDownload(String apkUrl, String latestVersion) async* {
+    _isDownloading = true;
+    _downloadProgress = 0.0;
+    notifyListeners();
 
     try {
       await for (var event in _updateService.downloadAndOpenApk(apkUrl, latestVersion)) {
         if (event.containsKey('progress')) {
-          setState(() {
-            _downloadProgress = event['progress'] as double;
-          });
+          _downloadProgress = event['progress'] as double;
+          notifyListeners();
+          yield event;
         } else if (event.containsKey('result')) {
           final result = event['result'] as OpenResult;
 
           if (result.type != ResultType.done) {
-            if (result.message.contains("REQUEST_INSTALL_PACKAGES")) {
-              await _requestInstallPermission(context, apkUrl, latestVersion);
-            } else {
-              throw Exception('APK:n avaaminen epäonnistui: ${result.message}');
-            }
+            yield event;
           } else {
             final prefs = await SharedPreferences.getInstance();
             await prefs.setBool('isUpdated', true);
             await prefs.setString('updatedVersion', latestVersion);
-            setState(() {
-              _isUpdateRequired = false;
-            });
+            _isUpdateRequired = false;
+            notifyListeners();
+            yield event;
           }
         } else if (event.containsKey('error')) {
           throw Exception(event['error'] as String);
         }
       }
     } catch (e) {
-      if (context.mounted) {
-        await showDialog(
-          context: context,
-          barrierDismissible: false,
-          builder: (context) {
-            return AlertDialog(
-              title: const Text('Päivityksen lataaminen epäonnistui'),
-              content: Text('Virhe: $e\nHaluatko yrittää uudelleen?'),
-              actions: [
-                TextButton(
-                  onPressed: () {
-                    Navigator.pop(context);
-                    final updateProvider = Provider.of<UpdateProvider>(context, listen: false);
-                    checkForAppUpdate(context, updateProvider);
-                  },
-                  child: const Text('Kyllä'),
-                ),
-              ],
-            );
-          },
-        );
-      }
+      yield {'error': e.toString()};
     } finally {
-      if (context.mounted) {
-        Navigator.pop(context);
-      }
-      setState(() {
-        _isDownloading = false;
-      });
+      _isDownloading = false;
+      notifyListeners();
     }
   }
 
-  Future<void> _requestInstallPermission(BuildContext context, String apkUrl, String latestVersion) async {
+  Future<void> requestInstallPermission(BuildContext context, String apkUrl, String latestVersion) async {
     if (context.mounted) {
       await showDialog(
         context: context,
@@ -240,7 +191,6 @@ class UpdateHandler {
                             TextButton(
                               onPressed: () {
                                 Navigator.pop(context);
-                                _startDownload(context, apkUrl, latestVersion);
                               },
                               child: const Text('Kyllä'),
                             ),
@@ -265,9 +215,5 @@ class UpdateHandler {
         },
       );
     }
-  }
-
-  void setState(VoidCallback fn) {
-    fn();
   }
 }

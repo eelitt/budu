@@ -3,24 +3,18 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'update_handler.dart';
 
-class UpdateDialogWrapper extends StatelessWidget {
+class UpdateDialogWrapper {
   final UpdateHandler updateHandler;
   final String currentVersion;
 
   const UpdateDialogWrapper({
-    super.key,
     required this.updateHandler,
     required this.currentVersion,
   });
 
-  @override
-  Widget build(BuildContext context) {
-    return Container();
-  }
-
-  void show(BuildContext context) {
-    if (updateHandler.isUpdateRequired) {
-      updateHandler.checkForAppUpdate(context, Provider.of<UpdateProvider>(context, listen: false));
-    }
+  Future<bool> show(BuildContext context) async {
+    final updateProvider = Provider.of<UpdateProvider>(context, listen: false);
+    await updateHandler.checkForAppUpdate(context, updateProvider);
+    return updateHandler.isUpdateRequired;
   }
 }

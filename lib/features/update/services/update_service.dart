@@ -30,10 +30,6 @@ class UpdateService {
     final versionUrl = dotenv.env['VERSION_URL'];
     final apiToken = dotenv.env['GITHUB_API_TOKEN'];
 
-    // Tulostetaan arvot debuggausta varten
-    print('VERSION_URL: $versionUrl');
-    print('GITHUB_API_TOKEN: $apiToken');
-
     if (versionUrl == null || versionUrl.isEmpty) {
       FirebaseCrashlytics.instance.recordError(
         Exception('VERSION_URL puuttuu .env-tiedostosta'),
@@ -103,11 +99,6 @@ class UpdateService {
     final repoOwner = dotenv.env['GITHUB_OWNER'];
     final repoName = dotenv.env['GITHUB_REPO'];
     final apiToken = dotenv.env['GITHUB_API_TOKEN'];
-
-    // Tulostetaan arvot debuggausta varten
-    print('GITHUB_OWNER: $repoOwner');
-    print('GITHUB_REPO: $repoName');
-    print('GITHUB_API_TOKEN: $apiToken');
 
     if (repoOwner == null || repoOwner.isEmpty || repoName == null || repoName.isEmpty) {
       FirebaseCrashlytics.instance.recordError(

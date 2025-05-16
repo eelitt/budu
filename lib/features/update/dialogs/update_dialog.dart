@@ -1,16 +1,13 @@
 import 'package:flutter/material.dart';
-import '../services/update_service.dart';
 
 class UpdateDialog extends StatelessWidget {
-  final UpdateService updateService;
   final String currentVersion;
   final String latestVersion;
   final String apkUrl;
-  final Function(String, String) onUpdate; // Callback päivityksen suorittamiseen
+  final Function(String, String) onUpdate;
 
   const UpdateDialog({
     super.key,
-    required this.updateService,
     required this.currentVersion,
     required this.latestVersion,
     required this.apkUrl,
@@ -31,9 +28,7 @@ class UpdateDialog extends StatelessWidget {
         ),
         TextButton(
           onPressed: () {
-            // Suljetaan dialogi ja kutsutaan päivitystä
-            Navigator.pop(context);
-            onUpdate(apkUrl, latestVersion); // Suoritetaan päivitys LoginScreen-kontekstissa
+            onUpdate(apkUrl, latestVersion);
           },
           child: const Text('Kyllä'),
         ),
