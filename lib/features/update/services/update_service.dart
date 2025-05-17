@@ -10,7 +10,7 @@ import 'dart:io';
 
 class UpdateService {
   // Haetaan sovelluksen versio dynaamisesti package_info_plus-paketilla
-  Future<String> _getAppVersion() async {
+  Future<String> getAppVersion() async {
     try {
       final packageInfo = await PackageInfo.fromPlatform();
       return packageInfo.version; // Palauttaa version pubspec.yaml-tiedostosta
@@ -39,7 +39,7 @@ class UpdateService {
       return {'isUpdateAvailable': false};
     }
 
-    final currentVersion = await _getAppVersion();
+    final currentVersion = await getAppVersion();
 
     final response = await http.get(
       Uri.parse(versionUrl),

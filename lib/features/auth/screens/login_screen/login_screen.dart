@@ -1,10 +1,14 @@
 import 'package:budu/core/utils.dart';
 import 'package:budu/features/auth/screens/login_screen/login_button.dart';
-import 'package:budu/features/auth/screens/login_screen/update_dialog_wrapper.dart';
-import 'package:budu/features/auth/screens/login_screen/update_handler.dart';
+import 'package:budu/features/update/dialogs/update_dialog_wrapper.dart';
+import 'package:budu/features/update/services/update_handler.dart';
 import 'package:flutter/material.dart';
 import 'package:open_file/open_file.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:provider/provider.dart';
+import 'package:budu/core/app_router/app_router.dart';
+import 'package:budu/features/auth/providers/auth_provider.dart';
+import 'package:budu/features/auth/providers/user_provider.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -16,12 +20,36 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> {
   late final UpdateHandler _updateHandler;
   bool _isLoggingIn = false;
+  AuthState? _lastAuthState; // Seuraa edellistä authState-arvoa
 
   @override
   void initState() {
     super.initState();
     _updateHandler = UpdateHandler();
     _checkForAppUpdate();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final authProvider = Provider.of<AuthProvider>(context);
+    final userProvider = Provider.of<UserProvider>(context, listen: false);
+
+    // Tarkista authState-muutokset
+    if (_lastAuthState != authProvider.authState) {
+      _lastAuthState = authProvider.authState;
+
+      if (authProvider.authState == AuthState.authenticated && authProvider.user != null) {
+        userProvider.fetchUserData(authProvider.user!.uid);
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (context.mounted) {
+            Navigator.pushReplacementNamed(context, AppRouter.mainRoute);
+          }
+        });
+      } else if (authProvider.authState == AuthState.unauthenticated) {
+        userProvider.clearUserData();
+      }
+    }
   }
 
   Future<void> _checkForAppUpdate() async {
@@ -109,6 +137,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
@@ -121,6 +150,7 @@ class _LoginScreenState extends State<LoginScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
+              // Sovelluksen logo pyöristetyillä reunoilla
               ClipRRect(
                 borderRadius: BorderRadius.circular(16),
                 child: Image.asset(
@@ -131,6 +161,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
               ),
               const SizedBox(height: 16),
+              // Sovelluksen nimi
               Text(
                 'Budu',
                 style: Theme.of(context).textTheme.titleLarge?.copyWith(
@@ -140,6 +171,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
               ),
               const SizedBox(height: 8),
+              // "Sisäänkirjautuminen"-teksti
               Text(
                 'Sisäänkirjautuminen',
                 style: Theme.of(context).textTheme.bodyLarge?.copyWith(

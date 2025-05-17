@@ -1,5 +1,6 @@
 import 'package:budu/core/app_router/app_router.dart';
 import 'package:budu/core/theme.dart';
+import 'package:budu/features/auth/providers/user_provider.dart';
 import 'package:budu/features/budget/providers/expense_provider.dart';
 import 'package:budu/features/update/providers/update_provider.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -35,7 +36,8 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
-        ChangeNotifierProvider(create: (_) => AuthProvider()..initialize()),
+        ChangeNotifierProvider(create: (_) => AuthProvider()),
+        ChangeNotifierProvider(create: (_) => UserProvider()),
         ChangeNotifierProvider(create: (_) => BudgetProvider()),
         ChangeNotifierProvider(create: (_) => ExpenseProvider()),
         ChangeNotifierProvider(create: (_) => NotificationProvider()),

@@ -14,7 +14,7 @@ class Changelog {
       }
 
       // GitHub API:n URL tiedoston hakemiseen
-      final url = Uri.parse('https://api.github.com/repos/$repoOwner/$repoName/contents/CHANGELOG.txt');
+      final url = Uri.parse('https://api.github.com/repos/$repoOwner/$repoName/contents/changelog.txt');
 
       // Suoritetaan haku GitHub API:lla
       final response = await http.get(
@@ -36,7 +36,8 @@ class Changelog {
         for (var line in lines) {
           if (line.trim() == versionHeader) {
             isRecording = true;
-            changelogForVersion.writeln(line);
+            // Poistetaan "## " versionumerosta
+            changelogForVersion.writeln(line.replaceFirst('## ', ''));
             continue;
           }
           if (isRecording) {

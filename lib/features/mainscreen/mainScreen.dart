@@ -1,5 +1,6 @@
 import 'package:budu/core/app_router/app_router.dart';
 import 'package:budu/features/auth/providers/auth_provider.dart';
+import 'package:budu/features/auth/providers/user_provider.dart';
 import 'package:budu/features/budget/models/budget_model.dart';
 import 'package:budu/features/budget/providers/budget_provider.dart';
 import 'package:budu/features/mainscreen/services/main_screen_actions_service.dart';
@@ -34,7 +35,7 @@ class _MainScreenState extends State<MainScreen> with RouteAware {
   final MainScreenActionsService _mainScreenActions = MainScreenActionsService();
 
   final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
-  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>(); // Lisätty ScaffoldKey
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
   @override
   void initState() {
@@ -48,6 +49,14 @@ class _MainScreenState extends State<MainScreen> with RouteAware {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    final authProvider = Provider.of<AuthProvider>(context);
+    final userProvider = Provider.of<UserProvider>(context, listen: false);
+
+    // Varmista, että UserProvider-tiedot on haettu, jos authState on authenticated
+    if (authProvider.authState == AuthState.authenticated && authProvider.user != null) {
+      userProvider.fetchUserData(authProvider.user!.uid);
+    }
+
     final ModalRoute? route = ModalRoute.of(context);
     if (route != null) {
       AppRouter.routeObserver.subscribe(this, route as PageRoute);
@@ -141,7 +150,7 @@ class _MainScreenState extends State<MainScreen> with RouteAware {
     final userFirstName = authProvider.user?.user!.displayName?.split(' ').first ?? '';
 
     return Scaffold(
-      key: _scaffoldKey, // Lisätty ScaffoldKey
+      key: _scaffoldKey,
       appBar: MainScreenAppBar(
         userFirstName: userFirstName,
         nextMonthBudgetExists: _nextMonthBudgetExists,

@@ -26,8 +26,6 @@ class AuthRepository {
     }
   }
 
- 
-
   // Hae nykyinen käyttäjä
   Future<UserModel?> getCurrentUser() async {
     try {
