@@ -25,3 +25,6 @@
 
 ## 1.0.7
 - Korjattu automaattipäivitys bugi
+
+## 1.0.8
+- Korjattu bugi muutoslokin haussa
