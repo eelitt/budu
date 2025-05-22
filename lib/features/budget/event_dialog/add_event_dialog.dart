@@ -8,12 +8,15 @@ import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
+import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import '../models/expense_event.dart';
 import '../providers/budget_provider.dart';
 import '../providers/expense_provider.dart';
 
+/// Dialogi uuden meno- tai tulotapahtuman lisäämiseksi.
+/// Käyttäjä voi valita tapahtuman tyypin, summan, kategorian, päivämäärän ja lisätä valinnaisen kuvauksen.
 class AddEventDialog extends StatefulWidget {
-  final String? initialCategory; // Uusi parametri esivalitulle kategorialle
+  final String? initialCategory; // Esivalittu kategoria, jos sellainen on annettu
 
   const AddEventDialog({super.key, this.initialCategory});
 
@@ -22,31 +25,43 @@ class AddEventDialog extends StatefulWidget {
 }
 
 class _AddEventDialogState extends State<AddEventDialog> {
-  bool _isExpense = true;
-  final TextEditingController _amountController = TextEditingController();
-  final TextEditingController _descriptionController = TextEditingController();
-  String? _selectedCategory;
-  String? _selectedSubcategory;
-  DateTime _selectedDate = DateTime.now();
-  String? _amountError;
-  String? _descriptionError;
-  String? _categoryError;
-  String? _subcategoryError;
-  final EventValidator _validator = EventValidator();
+  bool _isExpense = true; // Oletuksena meno, voidaan vaihtaa tuloksi
+  final TextEditingController _amountController = TextEditingController(); // Summan syöttökenttä
+  final TextEditingController _descriptionController = TextEditingController(); // Kuvauksen syöttökenttä
+  String? _selectedCategory; // Valittu kategoria
+  String? _selectedSubcategory; // Valittu alakategoria
+  DateTime _selectedDate = DateTime.now(); // Valittu päivämäärä
+  String? _amountError; // Virheilmoitus summalle
+  String? _descriptionError; // Virheilmoitus kuvalle
+  String? _categoryError; // Virheilmoitus kategorialle
+  String? _subcategoryError; // Virheilmoitus alakategorialle
+  final EventValidator _validator = EventValidator(); // Validointiluokka
 
   @override
   void initState() {
     super.initState();
     final budgetProvider = Provider.of<BudgetProvider>(context, listen: false);
-    
-    // Asetetaan esivalittu kategoria, jos initialCategory on annettu
+    // Asetetaan esivalittu kategoria, jos initialCategory on annettu, muuten otetaan budjetin ensimmäinen kategoria
     _selectedCategory = widget.initialCategory ?? budgetProvider.budget?.expenses.keys.first;
     if (_selectedCategory != null && budgetProvider.budget != null) {
       final subCategories = budgetProvider.budget!.expenses[_selectedCategory]?.keys.toList() ?? [];
       _selectedSubcategory = subCategories.isNotEmpty ? subCategories.first : null;
     }
+    // Tarkistetaan, onko budjetissa alakategorioita; jos ei, näytetään virheilmoitus ja suljetaan dialogi
+    _checkForSubcategories();
+  }
 
-    // Tarkista, onko budjetissa yhtään alakategoriaa
+  @override
+  void dispose() {
+    // Vapautetaan resurssit
+    _amountController.dispose();
+    _descriptionController.dispose();
+    super.dispose();
+  }
+
+  /// Tarkistaa, onko budjetissa alakategorioita. Jos ei, näytetään virheilmoitus ja suljetaan dialogi.
+  void _checkForSubcategories() {
+    final budgetProvider = Provider.of<BudgetProvider>(context, listen: false);
     bool hasSubcategories = false;
     if (budgetProvider.budget != null) {
       for (var category in budgetProvider.budget!.expenses.keys) {
@@ -56,8 +71,6 @@ class _AddEventDialogState extends State<AddEventDialog> {
         }
       }
     }
-
-    // Näytä SnackBar ja sulje dialogi, jos alakategorioita ei ole
     if (_isExpense && !hasSubcategories) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         showSnackBar(
@@ -71,13 +84,7 @@ class _AddEventDialogState extends State<AddEventDialog> {
     }
   }
 
-  @override
-  void dispose() {
-    _amountController.dispose();
-    _descriptionController.dispose();
-    super.dispose();
-  }
-
+  /// Näyttää päivämäärävalitsimen ja asettaa valitun päivämäärän.
   Future<void> _selectDate(BuildContext context) async {
     final DateTime? picked = await showDatePicker(
       context: context,
@@ -92,6 +99,7 @@ class _AddEventDialogState extends State<AddEventDialog> {
     }
   }
 
+  /// Tallentaa tapahtuman Firestoreen ja päivittää budjetin, jos kyseessä on tulo.
   void _saveEvent(BuildContext context) async {
     final expenseProvider = Provider.of<ExpenseProvider>(context, listen: false);
     final budgetProvider = Provider.of<BudgetProvider>(context, listen: false);
@@ -105,7 +113,8 @@ class _AddEventDialogState extends State<AddEventDialog> {
       _subcategoryError = null;
     });
 
-    final error = _validator.validateEvent(
+    // Validoidaan syötteet
+    final validationResult = _validator.validateEvent(
       isExpense: _isExpense,
       amountText: _amountController.text,
       description: _descriptionController.text,
@@ -114,33 +123,35 @@ class _AddEventDialogState extends State<AddEventDialog> {
       authProvider: authProvider,
       budgetProvider: budgetProvider,
     );
-    if (error != null) {
+
+    if (validationResult != null) {
+      // Näytetään validointivirheet asianomaisissa kentissä
       setState(() {
-        if (error.contains('Syötä positiivinen numero') || error.contains('Summa voi olla enintään 99999')) {
-          _amountError = error;
-        } else if (error.contains('Kuvaus voi olla enintään 75 merkkiä')) {
-          _descriptionError = error;
-        } else if (error.contains('Valitse kategoria')) {
-          _categoryError = error;
-        } else if (error.contains('Valitse alakategoria')) {
-          _subcategoryError = error;
-        } else if (error.contains('Käyttäjä ei ole kirjautunut')) {
+        if (validationResult.contains('Syötä positiivinen numero') || validationResult.contains('Summa voi olla enintään 99999')) {
+          _amountError = validationResult;
+        } else if (validationResult.contains('Kuvaus voi olla enintään 75 merkkiä')) {
+          _descriptionError = validationResult;
+        } else if (validationResult.contains('Valitse kategoria')) {
+          _categoryError = validationResult;
+        } else if (validationResult.contains('Valitse alakategoria')) {
+          _subcategoryError = validationResult;
+        } else if (validationResult.contains('Käyttäjä ei ole kirjautunut')) {
           showSnackBar(
             context,
-            error,
+            validationResult,
             duration: const Duration(seconds: 3),
             backgroundColor: Colors.blueGrey[700],
           );
-          if (mounted) {
-            Navigator.pop(context);
-          }
+          Navigator.pop(context);
         }
       });
       return;
     }
 
     try {
+      // Muunnetaan summa double-tyypiksi
       final amount = double.parse(_amountController.text);
+      // Luodaan uusi ExpenseEvent-olio
       final event = ExpenseEvent(
         id: const Uuid().v4(),
         category: _isExpense ? _selectedCategory! : 'Tulo',
@@ -152,24 +163,21 @@ class _AddEventDialogState extends State<AddEventDialog> {
         month: _selectedDate.month,
         description: _descriptionController.text.isNotEmpty ? _descriptionController.text : null,
       );
+      // Tallennetaan tapahtuma Firestoreen
       await expenseProvider.addExpense(authProvider.user!.uid, event, budgetProvider);
-      print('AddEventDialog: Tapahtuma tallennettu, yritetään sulkea dialogi');
-      if (mounted) {
-        Navigator.pop(context, {'success': true, 'isExpense': _isExpense});
-      } else {
-        print('AddEventDialog: Widget ei ole enää kiinnitetty, ei voida sulkea dialogia');
-      }
+      // Suljetaan dialogi ja palautetaan onnistumistieto
+      Navigator.pop(context, {'success': true, 'isExpense': _isExpense});
     } catch (e) {
-      print('AddEventDialog: Virhe tallennuksessa: $e');
-      if (mounted) {
-        showSnackBar(
-          context,
-          'Virhe tallennettaessa tapahtumaa: $e',
-          duration: const Duration(seconds: 3),
-          backgroundColor: Colors.blueGrey[700],
-        );
-        Navigator.pop(context);
-      }
+      // Raportoidaan virhe Crashlyticsiin
+      FirebaseCrashlytics.instance.recordError(e, StackTrace.current, reason: 'Tapahtuman tallennus epäonnistui');
+      // Näytetään virheilmoitus käyttäjälle
+      showSnackBar(
+        context,
+        'Virhe tallennettaessa tapahtumaa: ${e.toString()}',
+        duration: const Duration(seconds: 3),
+        backgroundColor: Colors.redAccent,
+      );
+      Navigator.pop(context);
     }
   }
 
@@ -190,6 +198,7 @@ class _AddEventDialogState extends State<AddEventDialog> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              // Tapahtuman tyypin valinta (meno tai tulo)
               EventTypeSelector(
                 isExpense: _isExpense,
                 onTypeChanged: (isExpense) {
@@ -204,6 +213,7 @@ class _AddEventDialogState extends State<AddEventDialog> {
                 },
               ),
               const SizedBox(height: 16),
+              // Summan syöttökenttä
               TextField(
                 controller: _amountController,
                 keyboardType: TextInputType.number,
@@ -213,16 +223,17 @@ class _AddEventDialogState extends State<AddEventDialog> {
                   errorText: _amountError,
                 ),
                 inputFormatters: [
-                  FilteringTextInputFormatter.allow(RegExp(r'[0-9]')),
-                  LengthLimitingTextInputFormatter(5),
+                  FilteringTextInputFormatter.allow(RegExp(r'[0-9]')), // Sallii vain numerot
+                  LengthLimitingTextInputFormatter(5), // Enintään 5 numeroa
                 ],
                 onChanged: (value) {
                   setState(() {
-                    _amountError = null;
+                    _amountError = null; // Poistetaan virhe, kun käyttäjä muokkaa kenttää
                   });
                 },
               ),
               const SizedBox(height: 16),
+              // Kategorian ja alakategorian valitsin
               CategorySelector(
                 isExpense: _isExpense,
                 selectedCategory: _selectedCategory,
@@ -248,6 +259,7 @@ class _AddEventDialogState extends State<AddEventDialog> {
                 },
               ),
               const SizedBox(height: 16),
+              // Kuvauksen syöttökenttä
               TextField(
                 controller: _descriptionController,
                 decoration: InputDecoration(
@@ -256,14 +268,15 @@ class _AddEventDialogState extends State<AddEventDialog> {
                   errorText: _descriptionError,
                 ),
                 maxLines: 2,
-                maxLength: 75,
+                maxLength: 75, // Enintään 75 merkkiä
                 onChanged: (value) {
                   setState(() {
-                    _descriptionError = null;
+                    _descriptionError = null; // Poistetaan virhe, kun käyttäjä muokkaa kenttää
                   });
                 },
               ),
               const SizedBox(height: 16),
+              // Päivämäärän valinta
               Row(
                 children: [
                   Expanded(
@@ -287,10 +300,7 @@ class _AddEventDialogState extends State<AddEventDialog> {
           width: 85,
           child: TextButton(
             onPressed: () {
-              print('AddEventDialog: Peruuta-painike painettu, suljetaan dialogi');
-              if (mounted) {
-                Navigator.pop(context);
-              }
+              Navigator.pop(context); // Suljetaan dialogi
             },
             child: Text(
               'Peruuta',
@@ -301,7 +311,7 @@ class _AddEventDialogState extends State<AddEventDialog> {
         SizedBox(
           width: 135,
           child: ElevatedButton(
-            onPressed: () => _saveEvent(context),
+            onPressed: () => _saveEvent(context), // Tallennetaan tapahtuma
             child: Text(
               _isExpense ? 'Tallenna meno' : 'Tallenna tulo',
               style: Theme.of(context).textTheme.bodyLarge?.copyWith(

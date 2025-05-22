@@ -18,11 +18,15 @@ class NotificationProvider with ChangeNotifier {
       onAction: onAction,
       actionText: actionText,
     );
-    notifyListeners();
+   WidgetsBinding.instance.addPostFrameCallback((_) {
+      notifyListeners();
+    });
   }
 
   void clearNotification() {
     _currentNotification = null;
-    notifyListeners();
+   WidgetsBinding.instance.addPostFrameCallback((_) {
+      notifyListeners();
+    });
   }
 }

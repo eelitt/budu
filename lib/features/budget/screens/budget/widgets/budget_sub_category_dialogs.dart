@@ -3,16 +3,19 @@ import 'package:budu/features/budget/providers/expense_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+/// Näyttää vahvistusdialogit alakategorian poistamiselle ja tarkistaa, onko alakategorialla meno-tapahtumia.
+/// Jos meno-tapahtumia on, kysyy käyttäjältä, poistetaanko myös tapahtumat.
+/// Palauttaa true, jos poisto vahvistetaan ja tapahtumat (jos olemassa) poistetaan, muuten false.
 Future<bool> confirmDeleteSubcategory({
   required BuildContext context,
-  required String subcategory,
-  required String categoryName,
+  required String subcategory, // Poistettavan alakategorian nimi
+  required String categoryName, // Yläkategorian nimi, johon alakategoria kuuluu
 }) async {
-  // Ensin varmistetaan poisto
+  // Näytetään ensimmäinen dialogi, jossa kysytään vahvistusta alakategorian poistamiselle
   final confirmed = await showDialog<bool>(
     context: context,
     builder: (context) => AlertDialog(
-      backgroundColor: Colors.white, // Asetetaan taustaväri valkoiseksi
+      backgroundColor: Colors.white, // Dialogin taustaväri
       title: Text(
         'Poista alakategoria',
         style: Theme.of(context).textTheme.bodyLarge?.copyWith(
@@ -28,6 +31,7 @@ Future<bool> confirmDeleteSubcategory({
             ),
       ),
       actions: [
+        // Peruuta-painike, joka sulkee dialogin ja palauttaa false
         TextButton(
           onPressed: () => Navigator.pop(context, false),
           child: Text(
@@ -35,6 +39,7 @@ Future<bool> confirmDeleteSubcategory({
             style: Theme.of(context).textTheme.bodyLarge,
           ),
         ),
+        // Poista-painike, joka vahvistaa poiston ja palauttaa true
         ElevatedButton(
           onPressed: () => Navigator.pop(context, true),
           style: ElevatedButton.styleFrom(
@@ -55,17 +60,19 @@ Future<bool> confirmDeleteSubcategory({
     ),
   );
 
+  // Jos poistoa ei vahvisteta, palautetaan false
   if (confirmed != true) {
     return false; // Peruutettu, ei jatketa
   }
 
-  // Tarkistetaan, onko alakategorialla meno-tapahtumia
+  // Haetaan AuthProvider ja ExpenseProvider meno-tapahtumien tarkistamista varten
   final authProvider = Provider.of<AuthProvider>(context, listen: false);
   final expenseProvider = Provider.of<ExpenseProvider>(context, listen: false);
   if (authProvider.user == null) {
-    return false;
+    return false; // Jos käyttäjää ei ole, ei voida jatkaa
   }
 
+  // Tarkistetaan, onko alakategorialla meno-tapahtumia
   final now = DateTime.now();
   final hasEvents = await expenseProvider.hasSubcategoryEvents(
     userId: authProvider.user!.uid,
@@ -76,11 +83,11 @@ Future<bool> confirmDeleteSubcategory({
   );
 
   if (hasEvents) {
-    // Jos meno-tapahtumia on, näytetään toinen dialogi
+    // Jos meno-tapahtumia on, näytetään toinen dialogi, jossa kysytään, poistetaanko myös tapahtumat
     final deleteEvents = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: Colors.white, // Asetetaan taustaväri valkoiseksi
+        backgroundColor: Colors.white, // Dialogin taustaväri
         title: Text(
           'Meno-tapahtumat löydetty',
           style: Theme.of(context).textTheme.bodyLarge?.copyWith(
@@ -96,6 +103,7 @@ Future<bool> confirmDeleteSubcategory({
               ),
         ),
         actions: [
+          // Peruuta-painike, joka sulkee dialogin ja palauttaa false
           TextButton(
             onPressed: () => Navigator.pop(context, false),
             child: Text(
@@ -103,6 +111,7 @@ Future<bool> confirmDeleteSubcategory({
               style: Theme.of(context).textTheme.bodyLarge,
             ),
           ),
+          // Poista kaikki -painike, joka vahvistaa tapahtumien poiston ja palauttaa true
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
             style: ElevatedButton.styleFrom(
@@ -122,9 +131,10 @@ Future<bool> confirmDeleteSubcategory({
         ],
       ),
     );
+    // Palautetaan true, jos tapahtumat halutaan poistaa, muuten false
     return deleteEvents ?? false;
   }
 
-  // Jos meno-tapahtumia ei ole, jatketaan poistoa
+  // Jos meno-tapahtumia ei ole, jatketaan poistoa (palautetaan true)
   return true;
 }

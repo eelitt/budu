@@ -1,19 +1,20 @@
+import 'dart:async';
 import 'package:budu/core/app_router/app_router.dart';
 import 'package:budu/features/auth/providers/auth_provider.dart';
 import 'package:budu/features/auth/providers/user_provider.dart';
-import 'package:budu/features/budget/models/budget_model.dart';
-import 'package:budu/features/budget/providers/budget_provider.dart';
+import 'package:budu/features/budget/screens/budget/budget_screen.dart';
 import 'package:budu/features/mainscreen/services/main_screen_actions_service.dart';
 import 'package:budu/features/mainscreen/services/main_screen_budget_status_service.dart';
-import 'package:budu/features/mainscreen/services/main_screen_update_dialog_service.dart';
 import 'package:budu/features/mainscreen/widgets/main_screen_app_bar.dart';
 import 'package:budu/features/mainscreen/widgets/main_screen_bottom_nav_bar.dart';
 import 'package:budu/features/notification/banner/notification_banner.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+/// Pääsivu, joka näyttää budjetin, yhteenvedon ja historian navigointipalkin kautta.
+/// Käsittelee budjettitilan tarkistuksen ja päivittää käyttöliittymän reaaliajassa.
 class MainScreen extends StatefulWidget {
-  final int initialIndex;
+  final int initialIndex; // Alkuvalikon indeksi (budjetti, yhteenveto, historia)
 
   const MainScreen({
     super.key,
@@ -24,63 +25,61 @@ class MainScreen extends StatefulWidget {
   State<MainScreen> createState() => _MainScreenState();
 }
 
-class _MainScreenState extends State<MainScreen> with RouteAware {
-  late int _selectedIndex;
-  bool _hasBudgetLoadError = false;
-  bool _nextMonthBudgetExists = false;
-  BudgetModel? _lastBudget;
+/// MainScreenin tilallinen tila, joka hallinnoi navigointipalkin valintaa ja budjettitilaa.
+class _MainScreenState extends State<MainScreen> {
+  late int _selectedIndex; // Navigointipalkin valittu indeksi
+  bool _hasBudgetLoadError = false; // Onko budjetin latauksessa virhe
+  final ValueNotifier<bool> _nextMonthBudgetExists = ValueNotifier<bool>(false); // Seuraavan kuukauden budjetin olemassaolo
+  final MainScreenBudgetStatusService _budgetStatusService = MainScreenBudgetStatusService(); // Palvelu budjettitilan tarkistamiseen
+  final MainScreenActionsService _mainScreenActions = MainScreenActionsService(); // Palvelu toimintovalikon käsittelyyn
 
-  final MainScreenBudgetStatusService _budgetStatusService = MainScreenBudgetStatusService();
-  final MainScreenUpdateDialogService _updateDialogService = MainScreenUpdateDialogService();
-  final MainScreenActionsService _mainScreenActions = MainScreenActionsService();
-
-  final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
-  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+  final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>(); // Avain sisäisen Navigatorin hallintaan
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>(); // Avain Scaffoldin hallintaan
 
   @override
   void initState() {
     super.initState();
+    // Alustetaan navigointipalkin indeksi annetulla arvolla
     _selectedIndex = widget.initialIndex;
     print('MainScreen: initState - _selectedIndex asetettu arvoon $_selectedIndex');
-    _checkBudgetStatus();
-    _updateDialogService.checkForUpdateDialog(context);
+    // Suoritetaan budjettitilan tarkistus build-vaiheen jälkeen
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkBudgetStatus();
+    });
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    // Haetaan AuthProvider, UserProvider ja BudgetProvider kontekstista
     final authProvider = Provider.of<AuthProvider>(context);
     final userProvider = Provider.of<UserProvider>(context, listen: false);
 
-    // Varmista, että UserProvider-tiedot on haettu, jos authState on authenticated
+    // Varmistetaan, että UserProvider-tiedot on haettu, jos käyttäjä on autentikoitu
     if (authProvider.authState == AuthState.authenticated && authProvider.user != null) {
       userProvider.fetchUserData(authProvider.user!.uid);
-    }
-
-    final ModalRoute? route = ModalRoute.of(context);
-    if (route != null) {
-      AppRouter.routeObserver.subscribe(this, route as PageRoute);
+    } else if (authProvider.authState == AuthState.unauthenticated && context.mounted) {
+      // Lykätään navigointi login-sivulle build-vaiheen jälkeen, jos käyttäjä ei ole autentikoitu
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (context.mounted) {
+          Navigator.pushNamedAndRemoveUntil(
+            context,
+            AppRouter.loginRoute,
+            (route) => false,
+          );
+        }
+      });
     }
   }
 
   @override
   void dispose() {
-    AppRouter.routeObserver.unsubscribe(this);
+    // Vapautetaan resurssit
+    _nextMonthBudgetExists.dispose();
     super.dispose();
   }
 
-  @override
-  void didPopNext() {
-    print('MainScreen: didPopNext - Päivitetaan budjetin tila');
-    _checkBudgetStatus();
-  }
-
-  @override
-  void didPush() {
-    print('MainScreen: didPush - Päivitetaan budjetin tila');
-    _checkBudgetStatus();
-  }
-
+  /// Yrittää ladata budjetin uudelleen, jos lataus epäonnistui.
   Future<void> _retryLoadBudget() async {
     if (mounted) {
       setState(() {
@@ -90,26 +89,37 @@ class _MainScreenState extends State<MainScreen> with RouteAware {
     await _checkBudgetStatus();
   }
 
+  /// Tarkistaa budjetin tilan ja päivittää seuraavan kuukauden budjetin olemassaolon.
   Future<void> _checkBudgetStatus() async {
-    await _budgetStatusService.checkBudgetStatus(
-      context,
-      (exists) {
-        if (mounted && _nextMonthBudgetExists != exists) {
-          print('MainScreen: _checkBudgetStatus - _nextMonthBudgetExists asetettu arvoon $exists');
-          setState(() => _nextMonthBudgetExists = exists);
-        }
-      },
-      () => _mainScreenActions.createBudgetForNextMonth(
+    print('MainScreen: _checkBudgetStatus - Aloitetaan budjettitilan tarkistus');
+    try {
+      await _budgetStatusService.checkBudgetStatus(
         context,
-        () => _checkBudgetStatus(),
-      ),
-    );
+        (exists) {
+          if (_nextMonthBudgetExists.value != exists) {
+            print('MainScreen: _checkBudgetStatus - _nextMonthBudgetExists asetettu arvoon $exists');
+            _nextMonthBudgetExists.value = exists;
+          }
+        },
+        () => _mainScreenActions.createBudgetForNextMonth(
+          context,
+          () => _checkBudgetStatus(),
+        ),
+      );
+    } catch (e) {
+      print('MainScreen: _checkBudgetStatus - Virhe budjettitilan tarkistuksessa: $e');
+    }
   }
 
+  /// Käsittelee navigointipalkin valinnat ja päivittää näkymän.
+  /// [index] on valittu indeksi navigointipalkista.
   void _onItemTapped(int index) async {
+    if (_selectedIndex == index) return; // Vältetään turha navigointi, jos sama välilehti on jo valittuna
+
     setState(() {
       _selectedIndex = index;
     });
+    // Määritetään reitti indeksin perusteella
     String routeName;
     switch (index) {
       case 0:
@@ -125,12 +135,15 @@ class _MainScreenState extends State<MainScreen> with RouteAware {
         routeName = AppRouter.budgetRoute;
     }
     print('MainScreen: _onItemTapped - Navigoidaan reittiin: $routeName (index: $index)');
+    // Tarkistetaan budjettitila navigoinnin jälkeen
     await _checkBudgetStatus();
     if (mounted) {
       _navigatorKey.currentState?.pushReplacementNamed(routeName);
     }
   }
 
+  /// Määrittää alkuvalikon reitin navigointipalkin indeksin perusteella.
+  /// Palauttaa reitin nimen (esim. AppRouter.budgetRoute) indeksin perusteella.
   String _getInitialRoute() {
     switch (_selectedIndex) {
       case 0:
@@ -146,29 +159,31 @@ class _MainScreenState extends State<MainScreen> with RouteAware {
 
   @override
   Widget build(BuildContext context) {
+    // Haetaan AuthProvider tarkistaaksemme käyttäjän autentikointitilan
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
+
+    // Jos käyttäjä ei ole autentikoitu, näytetään tyhjä widget ja odotetaan navigointia
+    if (authProvider.authState != AuthState.authenticated || authProvider.user == null) {
+      return const SizedBox.shrink();
+    }
+
+    // Haetaan käyttäjän etunimi näytettäväksi yläpalkissa
     final userFirstName = authProvider.user?.user!.displayName?.split(' ').first ?? '';
 
     return Scaffold(
-      key: _scaffoldKey,
+      key: _scaffoldKey, // Avain Scaffoldin hallintaan
       appBar: MainScreenAppBar(
         userFirstName: userFirstName,
-        nextMonthBudgetExists: _nextMonthBudgetExists,
+        nextMonthBudgetExists: _nextMonthBudgetExists.value,
         onMenuSelected: (value) => _mainScreenActions.handleMenuSelection(value, context),
       ),
       body: Column(
         children: [
-          const NotificationBanner(),
+          const NotificationBanner(), // Näyttää ilmoitusbannerin (esim. budjetin luomisen kehotukset)
           Expanded(
-            child: Consumer<BudgetProvider>(
-              builder: (context, budgetProvider, child) {
-                if (budgetProvider.budget != _lastBudget) {
-                  _lastBudget = budgetProvider.budget;
-                  _checkBudgetStatus();
-                }
-
-                if (_hasBudgetLoadError) {
-                  return Center(
+            // Poistetaan Consumer<BudgetProvider> ja renderöidään Navigator suoraan
+            child: _hasBudgetLoadError
+                ? Center(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
@@ -180,19 +195,40 @@ class _MainScreenState extends State<MainScreen> with RouteAware {
                         ),
                       ],
                     ),
-                  );
-                }
-
-                final initialRoute = _getInitialRoute();
-                print('MainScreen: build - initialRoute asetettu: $initialRoute (index: $_selectedIndex)');
-
-                return Navigator(
-                  key: _navigatorKey,
-                  initialRoute: initialRoute,
-                  onGenerateRoute: AppRouter.generateRoute,
-                );
-              },
-            ),
+                  )
+                : Navigator(
+                    key: _navigatorKey,
+                    initialRoute: _getInitialRoute(),
+                    onGenerateRoute: (settings) {
+                      // Välitetään onBudgetDeleted-callback BudgetScreenille
+                      if (settings.name == AppRouter.budgetRoute) {
+                        return AppRouter.generateRoute(
+                          RouteSettings(
+                            name: settings.name,
+                            arguments: BudgetScreen(
+                              onBudgetDeleted: _checkBudgetStatus, // Välitetään callback
+                            ),
+                          ),
+                        );
+                      }
+                      return AppRouter.generateRoute(settings);
+                    },
+                    onGenerateInitialRoutes: (NavigatorState navigator, String initialRoute) {
+                      print('MainScreen: build - initialRoute asetettu: $initialRoute (index: $_selectedIndex)');
+                      return [
+                        AppRouter.generateRoute(
+                          RouteSettings(
+                            name: initialRoute,
+                            arguments: initialRoute == AppRouter.budgetRoute
+                                ? BudgetScreen(
+                                    onBudgetDeleted: _checkBudgetStatus, // Välitetään callback
+                                  )
+                                : null,
+                          ),
+                        )!,
+                      ];
+                    },
+                  ),
           ),
         ],
       ),
@@ -202,8 +238,8 @@ class _MainScreenState extends State<MainScreen> with RouteAware {
             begin: Alignment.bottomCenter,
             end: Alignment.topCenter,
             colors: [
-              Color.fromARGB(255, 253, 228, 190),
-              Color(0xFFFFFCF5),
+              Color.fromARGB(255, 253, 228, 190), // Alareunan gradient-väri
+              Color(0xFFFFFCF5), // Yläreunan gradient-väri
             ],
           ),
         ),

@@ -21,20 +21,30 @@ class _BudgetTrackingSectionState extends State<BudgetTrackingSection> {
     final expenseProvider = Provider.of<ExpenseProvider>(context);
 
     final categoryTotals = expenseProvider.getCategoryTotals();
+    // Tarkistetaan, onko budjetti olemassa
+    if (budgetProvider.budget == null) {
+      // Näytetään viesti, jos budjettia ei ole saatavilla
+      return const Center(
+        child: Text(
+          'Budjettia ei ole saatavilla. Luo budjetti ensin.',
+          style: TextStyle(fontSize: 16, color: Colors.black54),
+        ),
+      );
+    }
     final budget = budgetProvider.budget!;
 
     // Haetaan budjetin kategoriat
     final budgetCategories = budget.expenses.keys.toSet();
 
     // Suodatetaan categoryMapping-kategoriat vain niihin, jotka ovat budjetissa
-    final List<MapEntry<String, List<String>>> filteredCategories = categoryMapping.entries
+    final List<MapEntry<String, List<String>>> filteredCategories = Constants.categoryMapping.entries
         .where((entry) => budgetCategories.contains(entry.key))
         .toList()
       ..sort((a, b) => a.key.compareTo(b.key));
 
     // Haetaan unmapped-kategoriat (kategoriat, joita ei ole categoryMapping-rakenteessa)
-    final allMappedCategories = categoryMapping.values.expand((categories) => categories).toSet();
-    final mappedMainCategories = categoryMapping.keys.toSet();
+    final allMappedCategories = Constants.categoryMapping.values.expand((categories) => categories).toSet();
+    final mappedMainCategories = Constants.categoryMapping.keys.toSet();
     final unmappedCategories = budget.expenses.keys
         .where((key) => !allMappedCategories.contains(key) && !mappedMainCategories.contains(key))
         .toList();

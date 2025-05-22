@@ -2,31 +2,20 @@ import 'package:budu/core/constants.dart';
 import 'package:budu/core/utils.dart';
 import 'package:flutter/material.dart';
 
+/// Näyttää dialogin kategorian lisäämistä varten.
+/// Sallii käyttäjän valita kategorian pudotusvalikosta tai lisätä oman kategorian.
 Future<String?> showAddCategoryDialog({
   required BuildContext context,
   required Map<String, Map<String, double>> currentExpenses,
 }) async {
-  final availableCategories = categoryMapping.keys
+  final availableCategories = Constants.categoryMapping.keys
       .where((category) => !currentExpenses.containsKey(category))
       .toList();
 
-  if (availableCategories.isEmpty) {
-    final categoryLimit = categoryMapping.keys.length; // Lasketaan kategorioiden määrä dynaamisesti
-    showSnackBar(
-      context,
-      'Ilmaisversiossa on $categoryLimit kategoriaa.',
-      duration: const Duration(seconds: 3),
-      action: SnackBarAction(
-        label: 'Premium',
-        onPressed: () {
-          // Navigator.pushNamed(context, AppRouter.upgradeRoute);
-        },
-      ),
-    );
-    return null;
-  }
-
   String? selectedCategory;
+  String? customCategoryName;
+  String? errorMessage;
+  bool isCustomCategory = false;
 
   final result = await showDialog<String>(
     context: context,
@@ -51,8 +40,9 @@ Future<String?> showAddCategoryDialog({
               return Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  // Pudotusvalikko kategorioiden valintaan
                   Material(
-                    color: Colors.white,
+                    color: Colors.white, // Teeman mukainen kortin väri
                     borderRadius: BorderRadius.circular(8),
                     elevation: 2,
                     shadowColor: Colors.black.withValues(alpha: 0.75),
@@ -61,15 +51,27 @@ Future<String?> showAddCategoryDialog({
                       child: PopupMenuButton<String>(
                         onSelected: (value) {
                           setState(() {
-                            selectedCategory = value;
+                            if (value == 'Lisää oma') {
+                              isCustomCategory = true;
+                              selectedCategory = null;
+                            } else {
+                              isCustomCategory = false;
+                              selectedCategory = value;
+                              customCategoryName = null;
+                              errorMessage = null;
+                            }
                           });
                         },
                         itemBuilder: (BuildContext context) {
-                          return availableCategories.map((category) {
+                          final options = [
+                            ...availableCategories,
+                            'Lisää oma', // Lisätään "Lisää oma" -vaihtoehto
+                          ];
+                          return options.map((option) {
                             return PopupMenuItem<String>(
-                              value: category,
+                              value: option,
                               child: Text(
-                                category,
+                                option,
                                 style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                                       color: Colors.black87,
                                     ),
@@ -83,7 +85,7 @@ Future<String?> showAddCategoryDialog({
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Text(
-                              selectedCategory ?? 'Valitse kategoria',
+                              selectedCategory ?? (isCustomCategory ? 'Oma kategoria' : 'Valitse kategoria'),
                               style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                                     color: Colors.black87,
                                   ),
@@ -98,6 +100,51 @@ Future<String?> showAddCategoryDialog({
                       ),
                     ),
                   ),
+                  // Tekstikenttä oman kategorian nimen syöttämiseen
+                  if (isCustomCategory) ...[
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      initialValue: customCategoryName,
+                      onChanged: (value) {
+                        setState(() {
+                          customCategoryName = value;
+                          if (value.isEmpty) {
+                            errorMessage = 'Kategorian nimi ei voi olla tyhjä';
+                          } else if (value.length > 20) {
+                            errorMessage = 'Kategorian nimi voi olla enintään 20 merkkiä';
+                          } else {
+                            errorMessage = null;
+                          }
+                        });
+                      },
+                      decoration: InputDecoration(
+                        labelText: 'Kategorian nimi',
+                        labelStyle: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                              color: Colors.black54,
+                            ),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: BorderSide(
+                            color: Theme.of(context).dividerColor,
+                          ),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: BorderSide(
+                            color: Theme.of(context).primaryColor,
+                          ),
+                        ),
+                        errorText: errorMessage,
+                        errorStyle: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: Colors.red,
+                            ),
+                      ),
+                      style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                            color: Colors.black87,
+                          ),
+                      maxLength: 20, // Rajoitetaan syöte 20 merkkiin
+                    ),
+                  ],
                 ],
               );
             },
@@ -113,7 +160,12 @@ Future<String?> showAddCategoryDialog({
           ),
           ElevatedButton(
             onPressed: () {
-              if (selectedCategory != null) {
+              // Tallenna valittu kategoria tai oma kategoria
+              if (isCustomCategory) {
+                if (customCategoryName != null && customCategoryName!.isNotEmpty && errorMessage == null) {
+                  Navigator.pop(context, customCategoryName);
+                }
+              } else if (selectedCategory != null) {
                 Navigator.pop(context, selectedCategory);
               }
             },

@@ -1,6 +1,6 @@
 import 'package:budu/features/auth/providers/auth_provider.dart';
 import 'package:budu/features/budget/providers/budget_provider.dart';
-
+// Tapahtumien validaattori-luokka
 class EventValidator {
   String? validateEvent({
     required bool isExpense,

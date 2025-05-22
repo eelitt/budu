@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
+/// Painike, joka tallentaa budjetin Firestoreen.
+/// Kutsuu onPressed-callbackia, kun painiketta painetaan.
 class SaveButton extends StatelessWidget {
-  final VoidCallback onPressed;
+  final VoidCallback onPressed; // Callback-funktio, jota kutsutaan painiketta painettaessa
 
   const SaveButton({
     super.key,
@@ -16,7 +18,7 @@ class SaveButton extends StatelessWidget {
         style: ElevatedButton.styleFrom(
           backgroundColor: Theme.of(context).elevatedButtonTheme.style?.backgroundColor?.resolve({}),
           foregroundColor: Theme.of(context).elevatedButtonTheme.style?.foregroundColor?.resolve({}),
-          padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+          padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16), // Sisäinen välistys
         ),
         child: Text(
           'Tallenna budjetti',

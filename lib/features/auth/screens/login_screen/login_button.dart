@@ -1,18 +1,22 @@
 import 'package:budu/core/app_router/app_router.dart';
 import 'package:budu/features/budget/providers/budget_provider.dart';
 import 'package:budu/features/budget/providers/expense_provider.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
+import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../providers/auth_provider.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../providers/auth_provider.dart' as custom_auth; // Lisätty as-etuliite
 
+/// Kirjautumispainike, joka käsittelee Google-kirjautumisen ja navigoi oikealle
+/// sivulle (chatbotRoute tai mainRoute) kirjautumisen jälkeen.
 class LoginButton extends StatelessWidget {
-  final bool isLoggingIn;
-  final bool isUpdateRequired;
-  final bool isDownloading;
-  final VoidCallback onLoginStart;
-  final VoidCallback onLoginEnd;
-  final Function(BuildContext, String) onError;
+  final bool isLoggingIn; // Näyttääkö kirjautumisindikaattorin
+  final bool isUpdateRequired; // Onko päivitys vaadittu (estää kirjautumisen)
+  final bool isDownloading; // Onko päivitys latautumassa (estää kirjautumisen)
+  final VoidCallback onLoginStart; // Kutsutaan, kun kirjautuminen alkaa
+  final VoidCallback onLoginEnd; // Kutsutaan, kun kirjautuminen päättyy
+  final Function(BuildContext, String) onError; // Kutsutaan virheen sattuessa
 
   const LoginButton({
     super.key,
@@ -24,19 +28,24 @@ class LoginButton extends StatelessWidget {
     required this.onError,
   });
 
+  /// Navigoi käyttäjän oikealle sivulle kirjautumisen jälkeen.
+  /// Jos budjettia ei ole, ohjaa chatbot-sivulle; muuten pääsivulle.
   Future<void> _navigateAfterLogin(BuildContext context) async {
     print('_navigateAfterLogin: Aloitetaan');
     try {
-      final authProvider = context.read<AuthProvider>();
+      final authProvider = context.read<custom_auth.AuthProvider>(); // Käytetään as-etuliitettä
       final budgetProvider = context.read<BudgetProvider>();
       final expenseProvider = context.read<ExpenseProvider>();
+
       if (authProvider.user != null) {
         await Future.delayed(const Duration(seconds: 2));
-        print('_navigateAfterLogin: Käyttäjä löytyy: ${authProvider.user!.uid}');
+        print('_navigateAfterLogin: Käyttäjä löytyy.');
+
         // Haetaan budjettidata vain tässä vaiheessa
         final now = DateTime.now();
         await budgetProvider.loadBudget(authProvider.user!.uid, now.year, now.month);
         print('_navigateAfterLogin: Budjetti ladattu, budget == null: ${budgetProvider.budget == null}');
+
         if (context.mounted) {
           if (budgetProvider.budget == null) {
             print('_navigateAfterLogin: Budjetti on null, tarkistetaan Firestore');
@@ -46,7 +55,7 @@ class LoginButton extends StatelessWidget {
                 .collection('monthly_budgets')
                 .limit(1)
                 .get();
-            print('_navigateAfterLogin: Budjettidokumenttien määrä: ${budgetsSnapshot.docs.length}');
+
             if (budgetsSnapshot.docs.isEmpty) {
               print('_navigateAfterLogin: Ei budjetteja, ohjataan chatbot-sivulle');
               Navigator.pushReplacementNamed(context, AppRouter.chatbotRoute);
@@ -63,6 +72,19 @@ class LoginButton extends StatelessWidget {
         }
       }
     } catch (e) {
+      // Raportoidaan virhe Crashlyticsiin
+      await FirebaseCrashlytics.instance.recordError(
+        e,
+        StackTrace.current,
+        reason: 'Failed to navigate after login',
+      );
+
+      // Tunnistetaan virhetyyppi ja lisätään kontekstia
+      if (e is FirebaseException) {
+        await FirebaseCrashlytics.instance.setCustomKey('error_code', e.code);
+        await FirebaseCrashlytics.instance.setCustomKey('error_message', e.message ?? 'Unknown Firestore error');
+      }
+
       print('_navigateAfterLogin: Virhe navigoinnissa: $e');
       onError(context, 'Navigointi epäonnistui: $e');
     }
@@ -83,10 +105,26 @@ class LoginButton extends StatelessWidget {
                     onLoginStart();
                     try {
                       print('Aloitetaan Google-kirjautuminen');
-                      await context.read<AuthProvider>().signInWithGoogle();
+                      await context.read<custom_auth.AuthProvider>().signInWithGoogle(); // Käytetään as-etuliitettä
                       print('Google-kirjautuminen onnistui, kutsutaan _navigateAfterLogin');
                       await _navigateAfterLogin(context);
                     } catch (e) {
+                      // Raportoidaan virhe Crashlyticsiin, mutta vain jos se ei ole jo raportoitu AuthProviderissa
+                      if (!e.toString().contains('Failed to create user document') &&
+                          !e.toString().contains('Google Sign-In failed')) {
+                        await FirebaseCrashlytics.instance.recordError(
+                          e,
+                          StackTrace.current,
+                          reason: 'Google Sign-In failed in LoginButton',
+                        );
+
+                        // Tunnistetaan virhetyyppi ja lisätään kontekstia
+                        if (e is firebase_auth.FirebaseAuthException) {
+                          await FirebaseCrashlytics.instance.setCustomKey('error_code', e.code);
+                          await FirebaseCrashlytics.instance.setCustomKey('error_message', e.message ?? 'Unknown FirebaseAuth error');
+                        }
+                      }
+
                       print('Google-kirjautumisvirhe: $e');
                       onError(context, 'Google-kirjautuminen epäonnistui: $e');
                     } finally {
@@ -96,7 +134,7 @@ class LoginButton extends StatelessWidget {
             icon: Icon(
               Icons.g_mobiledata,
               size: 24,
-              color: Theme.of(context).elevatedButtonTheme.style?.foregroundColor?.resolve({}), // Teeman foregroundColor (valkoinen)
+              color: Theme.of(context).elevatedButtonTheme.style?.foregroundColor?.resolve({}),
             ),
             label: Text(
               'Kirjaudu Googlella',
@@ -106,7 +144,7 @@ class LoginButton extends StatelessWidget {
                   ),
             ),
             style: Theme.of(context).elevatedButtonTheme.style?.copyWith(
-                  minimumSize: WidgetStateProperty.all(const Size(250, 48)), // Asetetaan minimi leveys ja korkeus
+                  minimumSize: WidgetStateProperty.all(const Size(250, 48)),
                 ),
           );
   }

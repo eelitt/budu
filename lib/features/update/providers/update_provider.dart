@@ -17,13 +17,15 @@ class UpdateProvider with ChangeNotifier {
       _isUpdateAvailable = updateInfo['isUpdateAvailable'] ?? false;
       _latestVersion = updateInfo['latestVersion'];
       _apkUrl = updateInfo['apkUrl'];
-      notifyListeners();
+
+        notifyListeners();
+
     } catch (e) {
       print('Error in UpdateProvider.checkForUpdate: $e');
       _isUpdateAvailable = false;
       _latestVersion = null;
       _apkUrl = null;
-      notifyListeners();
+        notifyListeners();
     }
   }
 
@@ -31,6 +33,6 @@ class UpdateProvider with ChangeNotifier {
     _isUpdateAvailable = false;
     _latestVersion = null;
     _apkUrl = null;
-    notifyListeners();
+        notifyListeners();
   }
 }

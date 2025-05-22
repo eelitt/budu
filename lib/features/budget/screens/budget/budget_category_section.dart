@@ -11,8 +11,10 @@ import 'package:budu/features/budget/screens/budget/widgets/budget_confirmation_
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+/// Widget, joka näyttää budjettikategorian ja sen alakategoriat laajennettavassa muodossa.
+/// Mahdollistaa kategorian ja alakategorioiden hallinnan, kuten lisäämisen, muokkaamisen ja poistamisen.
 class BudgetCategorySection extends StatefulWidget {
-  final String categoryName;
+  final String categoryName; // Kategorian nimi, joka näytetään ja jota hallitaan
 
   const BudgetCategorySection({super.key, required this.categoryName});
 
@@ -20,37 +22,46 @@ class BudgetCategorySection extends StatefulWidget {
   State<BudgetCategorySection> createState() => _BudgetCategorySectionState();
 }
 
+/// Budjettikategorian tilallinen tila, joka hallinnoi laajennettavaa näkymää ja alakategorioiden tilaa.
 class _BudgetCategorySectionState extends State<BudgetCategorySection> {
-  late BudgetCategoryController _controller;
-  late ExpansionStateManager _expansionStateManager;
-  late DeleteDialogStateManager _deleteDialogStateManager;
-  final ValueNotifier<bool> _isExpanded = ValueNotifier<bool>(false);
-  final GlobalKey _expansionTileKey = GlobalKey();
+  late BudgetCategoryController _controller; // Kontrolleri kategorian ja alakategorioiden hallintaan
+  late ExpansionStateManager _expansionStateManager; // Hallinnoi kategorian laajennettua/supistettua tilaa
+  late DeleteDialogStateManager _deleteDialogStateManager; // Hallinnoi poiston vahvistusdialogin tilaa
+  final ValueNotifier<bool> _isExpanded = ValueNotifier<bool>(false); // Seuraa, onko kategoria laajennettu
+  final GlobalKey _expansionTileKey = GlobalKey(); // Avain laajennettavan elementin tilan hallintaan
 
   @override
   void initState() {
     super.initState();
+    // Alustetaan kontrolleri kategorian ja alakategorioiden hallintaa varten
     _controller = BudgetCategoryController();
+    // Alustetaan ExpansionStateManager kategorian laajennustilan hallintaan
     _expansionStateManager = ExpansionStateManager(
       categoryName: widget.categoryName,
       isExpanded: _isExpanded,
     );
+    // Alustetaan DeleteDialogStateManager poiston vahvistusdialogin tilan hallintaan
     _deleteDialogStateManager = DeleteDialogStateManager();
+    // Ladataan tallennettu laajennustila (laajennettu/supistettu)
     _expansionStateManager.loadExpansionState();
   }
 
   @override
   void dispose() {
+    // Vapautetaan resurssit, kun widget poistetaan
     _controller.dispose();
     _isExpanded.dispose();
     super.dispose();
   }
 
+  /// Aloittaa uuden alakategorian lisäämisen ja laajentaa kategorian ohjelmallisesti.
   void _handleStartAdding() {
     _controller.startAdding(context, widget.categoryName);
     _expansionStateManager.expandProgrammatically();
   }
 
+  /// Aloittaa olemassa olevan alakategorian muokkauksen ja laajentaa kategorian ohjelmallisesti.
+  /// [subcategory] on muokattavan alakategorian nimi.
   void _handleStartEditing(String subcategory, BuildContext context) {
     _controller.startEditing(subcategory, context);
     _expansionStateManager.expandProgrammatically();
@@ -58,36 +69,40 @@ class _BudgetCategorySectionState extends State<BudgetCategorySection> {
 
   @override
   Widget build(BuildContext context) {
+    // Tarjoaa BudgetCategoryController:in jälkeläisille ja kuuntelee BudgetProvider:in muutoksia
     return ListenableProvider<BudgetCategoryController>.value(
       value: _controller,
       child: Consumer2<BudgetCategoryController, BudgetProvider>(
         builder: (context, controller, budgetProvider, child) {
           final budget = budgetProvider.budget;
+          // Haetaan kategorian menot budjetista, oletusarvoisesti tyhjä Map
           final expenses = budget?.expenses[widget.categoryName] ?? {};
           final Map<String, double> displayedExpenses = {};
+          // Muunnetaan menot näyttömuotoon: 'default'-alakategoria korvataan kategorian nimellä
           expenses.forEach((subcategory, value) {
             final displaySubcategory = subcategory == 'default' ? widget.categoryName : subcategory;
             displayedExpenses[displaySubcategory] = value;
           });
 
-          final subcategoryCount = displayedExpenses.length;
+          final subcategoryCount = displayedExpenses.length; // Lasketaan alakategorioiden määrä
 
           return Container(
             decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
+              color: Colors.white, // Kategorian taustaväri
+              borderRadius: BorderRadius.circular(12), // Pyöristetyt kulmat
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.15),
-                  blurRadius: 8,
-                  offset: const Offset(0, 4),
+                  color: Colors.black.withValues(alpha: 0.15), // Varjon väri
+                  blurRadius: 8, // Varjon pehmennys
+                  offset: const Offset(0, 4), // Varjon siirtymä
                 ),
               ],
             ),
             child: CustomExpansionTile(
-              key: _expansionTileKey,
-              isExpanded: _isExpanded,
+              key: _expansionTileKey, // Avain laajennettavan elementin tilan hallintaan
+              isExpanded: _isExpanded, // Laajennustilan seurantamuuttuja
               onExpansionChanged: (expanded) {
+                // Päivitetään laajennustila ja tallennetaan se
                 _isExpanded.value = expanded;
                 _expansionStateManager.saveExpansionState(expanded, isManual: true);
               },
@@ -98,21 +113,21 @@ class _BudgetCategorySectionState extends State<BudgetCategorySection> {
                     left: 12,
                     top: 4,
                     child: Icon(
-                      getCategoryIcon(widget.categoryName),
+                      getCategoryIcon(widget.categoryName), // Haetaan ikoni kategorian nimen perusteella
                       color: Colors.blueGrey,
                       size: 24,
                     ),
                   ),
                   // Ala-kategorioiden määrä kategorian ikonin oikealla puolella
                   Positioned(
-                    left: 40, // Asetetaan kategorian ikonin (24 px leveä + 4 px väli) oikealle puolelle
+                    left: 40, // Sijoitetaan ikonin (24 px leveä + 4 px väli) oikealle puolelle
                     top: 4,
                     child: ValueListenableBuilder<bool>(
                       valueListenable: _isExpanded,
                       builder: (context, isExpanded, child) {
-                        if (isExpanded) return const SizedBox.shrink(); // Ei näytetä, kun laajennettu
+                        if (isExpanded) return const SizedBox.shrink(); // Ei näytetä, kun kategoria on laajennettu
                         return Text(
-                          'Ala-kategorioita: $subcategoryCount', // Näyttää ala-kategorioiden määrän
+                          'Ala-kategorioita: $subcategoryCount', // Näyttää alakategorioiden lukumäärän
                           style: const TextStyle(
                             color: Colors.blueGrey,
                             fontSize: 12,
@@ -130,11 +145,11 @@ class _BudgetCategorySectionState extends State<BudgetCategorySection> {
                       valueListenable: _isExpanded,
                       builder: (context, isExpanded, child) {
                         return AnimatedRotation(
-                          turns: isExpanded ? 0.5 : 0, // 0.5 = 180 astetta
+                          turns: isExpanded ? 0.5 : 0, // 0.5 = 180 astetta, kun laajennettu
                           duration: const Duration(milliseconds: 200),
                           curve: Curves.linear,
                           child: Icon(
-                           Icons.expand_more,
+                            Icons.expand_more,
                             color: Colors.blueGrey,
                             size: 24,
                           ),
@@ -160,6 +175,7 @@ class _BudgetCategorySectionState extends State<BudgetCategorySection> {
                         Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
+                            // Painike uuden alakategorian lisäämiseen
                             IconButton(
                               icon: const Icon(Icons.add, size: 20),
                               onPressed: _handleStartAdding,
@@ -167,11 +183,14 @@ class _BudgetCategorySectionState extends State<BudgetCategorySection> {
                               constraints: const BoxConstraints(),
                               visualDensity: VisualDensity.compact,
                             ),
+                            // Painike kategorian poistamiseen
                             IconButton(
                               icon: const Icon(Icons.delete, color: Colors.red, size: 20),
                               onPressed: () async {
+                                // Tarkistetaan, näytetäänkö poiston vahvistusdialogi
                                 final shouldShowDialog = await _deleteDialogStateManager.shouldShowDeleteDialog();
                                 if (!shouldShowDialog) {
+                                  // Poistetaan kategoria suoraan, jos dialogia ei näytetä
                                   await controller.deleteCategory(context, widget.categoryName);
                                   showSnackBar(
                                     context,
@@ -181,6 +200,7 @@ class _BudgetCategorySectionState extends State<BudgetCategorySection> {
                                   return;
                                 }
 
+                                // Näytetään vahvistusdialogi poistolle
                                 final result = await showDeleteConfirmationDialog(
                                   context: context,
                                   isLastBudget: false,
@@ -191,6 +211,7 @@ class _BudgetCategorySectionState extends State<BudgetCategorySection> {
                                 );
 
                                 if (result == true) {
+                                  // Poistetaan kategoria, jos käyttäjä vahvistaa
                                   await controller.deleteCategory(context, widget.categoryName);
                                   showSnackBar(
                                     context,
@@ -212,6 +233,7 @@ class _BudgetCategorySectionState extends State<BudgetCategorySection> {
                 ],
               ),
               children: [
+                // Näytetään lomake uuden alakategorian lisäämiseen, jos lisäystila on aktiivinen
                 if (controller.isAdding)
                   Padding(
                     padding: const EdgeInsets.only(top: 8.0, left: 16, right: 16), // Lisätty top padding
@@ -222,6 +244,7 @@ class _BudgetCategorySectionState extends State<BudgetCategorySection> {
                       onCancel: controller.cancelAdding,
                     ),
                   ),
+                // Näytetään alakategorioiden lista ja muokkausmahdollisuudet
                 BudgetSubCategoryList(
                   categoryName: widget.categoryName,
                   displayedExpenses: displayedExpenses,

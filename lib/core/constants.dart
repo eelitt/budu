@@ -1,4 +1,13 @@
-const Map<String, List<String>> categoryMapping = {
+class Constants {
+static const int maxCategories = 25;
+
+  /// Maksimimäärä alakategorioita per yläkategoria budjetissa.
+  static const int maxSubcategories = 20;
+
+  /// Maksimipituus kategorian tai alakategorian nimelle merkkeinä.
+ static const int maxCategoryNameLength = 20;
+  
+static const Map<String, List<String>> categoryMapping = {
   "Asuminen": [
     "Vuokra",
     "Asuntolaina",
@@ -87,3 +96,5 @@ const Map<String, List<String>> categoryMapping = {
     "osa-maksut",
   ],
 };
+
+}

@@ -5,15 +5,17 @@ import 'package:budu/features/notification/providers/notification_provider.dart'
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+/// Luokka, joka vastaa budjetin tallentamisesta Firestoreen.
+/// Suorittaa validoinnit ja näyttää varoitusdialogeja tarvittaessa.
 class BudgetSaver {
-  final BuildContext context;
-  final TextEditingController incomeController;
-  final Map<String, Map<String, TextEditingController>> expenseControllers;
-  final int newYear;
-  final int newMonth;
-  final double totalIncome;
-  final double totalExpenses;
-  String? errorMessage;
+  final BuildContext context; // Sovelluksen konteksti dialogien näyttämistä ja navigointia varten
+  final TextEditingController incomeController; // Tekstikentän ohjain tulojen syöttämiseen
+  final Map<String, Map<String, TextEditingController>> expenseControllers; // Kategorioiden ja alakategorioiden ohjaimet
+  final int newYear; // Uuden budjetin vuosi
+  final int newMonth; // Uuden budjetin kuukausi
+  final double totalIncome; // Budjetin kokonaistulot
+  final double totalExpenses; // Budjetin kokonaismenot
+  String? errorMessage; // Virheviesti tallennuksen epäonnistuessa
 
   BudgetSaver({
     required this.context,
@@ -25,6 +27,9 @@ class BudgetSaver {
     required this.totalExpenses,
   });
 
+  /// Näyttää vahvistusdialogin, jossa käyttäjä voi vahvistaa tai peruuttaa toiminnon.
+  /// [title] on dialogin otsikko, [content] on dialogin sisältöteksti.
+  /// Palauttaa true, jos käyttäjä vahvistaa, muuten false.
   Future<bool?> _showConfirmationDialog({
     required String title,
     required String content,
@@ -77,6 +82,9 @@ class BudgetSaver {
     );
   }
 
+  /// Validoi budjetin tulot.
+  /// [value] on tarkistettava arvo.
+  /// Palauttaa virheviestin, jos arvo on virheellinen, muuten null.
   String? _validateIncome(String? value) {
     if (value == null || value.isEmpty) {
       return null; // Salli tyhjä arvo, käsitellään muualla
@@ -86,7 +94,7 @@ class BudgetSaver {
       return 'Syötä kelvollinen numero';
     }
     if (parsed < 0) {
-      return 'Tulot eivät voi olla negatiivisia';
+      return 'Tulot eivät voivat olla negatiivisia';
     }
     if (parsed > 999999) {
       return 'Tulot eivät voi olla suurempia kuin 999999 €';
@@ -94,13 +102,15 @@ class BudgetSaver {
     return null;
   }
 
+  /// Tallentaa budjetin Firestoreen ja suorittaa tarvittavat validoinnit.
   Future<void> createBudget() async {
+    // Haetaan AuthProvider ja BudgetProvider kontekstista
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     final budgetProvider = Provider.of<BudgetProvider>(context, listen: false);
 
     if (authProvider.user == null) return;
 
-    // Validointi: Tarkista incomeController-arvo
+    // Validointi: Tarkistetaan incomeController-arvo
     final incomeError = _validateIncome(incomeController.text);
     if (incomeError != null) {
       await showDialog<void>(
@@ -166,7 +176,7 @@ class BudgetSaver {
       if (confirm != true) return;
     }
 
-    // Validointi 2: Varoita, jos tulot ylittävät 99999 € (ylimääräinen tarkistus)
+    // Validointi 2: Varoita, jos tulot ylittävät 999999 € (ylimääräinen tarkistus)
     if (income > 999999) {
       final confirm = await _showConfirmationDialog(
         title: 'Varoitus',
@@ -196,6 +206,7 @@ class BudgetSaver {
       if (confirm != true) return;
     }
 
+    // Luodaan uusi budjetti tallennettavaksi
     final newBudget = BudgetModel(
       income: income,
       expenses: expenses,

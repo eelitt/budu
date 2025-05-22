@@ -65,7 +65,7 @@ class UpdateService {
     if (isUpdateAvailable) {
       apkUrl = await _fetchApkUrl(latestVersion);
     }
-
+    
     return {
       'isUpdateAvailable': isUpdateAvailable,
       'latestVersion': latestVersion,

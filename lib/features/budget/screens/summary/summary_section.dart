@@ -14,7 +14,17 @@ class SummarySection extends StatelessWidget {
   Widget build(BuildContext context) {
     final budgetProvider = Provider.of<BudgetProvider>(context);
     final expenseProvider = Provider.of<ExpenseProvider>(context);
-
+    
+ // Tarkistetaan, onko budjetti olemassa
+    if (budgetProvider.budget == null) {
+      // Näytetään viesti, jos budjettia ei ole saatavilla
+      return const Center(
+        child: Text(
+          'Budjettia ei ole saatavilla. Luo budjetti ensin.',
+          style: TextStyle(fontSize: 16, color: Colors.black54),
+        ),
+      );
+    }
     final totalBudget = budgetProvider.budget!.totalExpenses; // Budjetoidut menot yhteensä
     final totalIncome = budgetProvider.budget!.income;
     final balance = totalIncome - totalBudget; // Saldo budjetoiduilla menoilla

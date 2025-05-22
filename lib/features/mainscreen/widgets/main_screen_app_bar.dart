@@ -1,13 +1,15 @@
 import 'package:budu/features/auth/providers/user_provider.dart';
-import 'package:budu/features/mainscreen/services/main_screen_update_dialog_service.dart';
-import 'package:budu/features/update/services/update_service.dart';
+import 'package:budu/features/mainscreen/widgets/app_bar_debug.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+/// Sovelluksen yläpalkki, joka näyttää sovelluksen nimen, käyttäjän nimen ja
+/// toimintovalikon (lisää tapahtuma, luo budjetti, asetukset, uloskirjautuminen).
+/// Näyttää kehittäjävalikon, jos käyttäjä on admin.
 class MainScreenAppBar extends StatelessWidget implements PreferredSizeWidget {
-  final String userFirstName;
-  final bool nextMonthBudgetExists;
-  final Function(String) onMenuSelected;
+  final String userFirstName; // Käyttäjän etunimi näytettäväksi
+  final bool nextMonthBudgetExists; // Onko seuraavan kuukauden budjetti olemassa
+  final Function(String) onMenuSelected; // Toimintovalikon valintakäsittelijä
 
   const MainScreenAppBar({
     super.key,
@@ -15,17 +17,12 @@ class MainScreenAppBar extends StatelessWidget implements PreferredSizeWidget {
     required this.nextMonthBudgetExists,
     required this.onMenuSelected,
   });
-// Admin debuggaukseen
-  void _showChangelog(BuildContext context) async {
-     final service = UpdateService();
-     final dialog = MainScreenUpdateDialogService();
-   
-    dialog.checkForUpdateDialog(context, debugVersion: await service.getAppVersion());
-  }
 
   @override
   Widget build(BuildContext context) {
     final userProvider = Provider.of<UserProvider>(context);
+    final appBarDebug = AppBarDebug(); // Luodaan AppBarDebug-instanssi
+
     return AppBar(
       automaticallyImplyLeading: false,
       title: const Text(
@@ -43,13 +40,16 @@ class MainScreenAppBar extends StatelessWidget implements PreferredSizeWidget {
             padding: const EdgeInsets.symmetric(horizontal: 8.0),
             child: PopupMenuButton<String>(
               icon: const Icon(Icons.developer_mode, color: Colors.black),
-              onSelected: (value) {
+              onSelected: (value) async {
                 switch (value) {
                   case 'check_update':
-                  //  MainScreenUpdateDialogService().checkForAppUpdate(context);
+                    await appBarDebug.checkForUpdate(context);
+                    break;
+                  case 'toggle_debug_update':
+                    await appBarDebug.toggleDebugUpdate(context);
                     break;
                   case 'show_changelog':
-                    _showChangelog(context);
+                    await appBarDebug.showChangelog(context);
                     break;
                 }
               },
@@ -62,6 +62,19 @@ class MainScreenAppBar extends StatelessWidget implements PreferredSizeWidget {
                     leading: const Icon(Icons.update, color: Colors.black),
                     title: Text(
                       'Tarkista päivitys',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: Colors.black,
+                            fontSize: 14,
+                          ),
+                    ),
+                  ),
+                ),
+                PopupMenuItem(
+                  value: 'toggle_debug_update',
+                  child: ListTile(
+                    leading: const Icon(Icons.bug_report, color: Colors.black),
+                    title: Text(
+                      'Kytke testitila päälle/pois',
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                             color: Colors.black,
                             fontSize: 14,

@@ -1,15 +1,19 @@
 import 'package:budu/core/utils.dart';
 import 'package:budu/features/auth/screens/login_screen/login_button.dart';
-import 'package:budu/features/update/dialogs/update_dialog_wrapper.dart';
-import 'package:budu/features/update/services/update_handler.dart';
+import 'package:budu/features/budget/providers/budget_provider.dart';
+import 'package:budu/features/budget/providers/expense_provider.dart';
+import 'package:budu/features/update/update_manager.dart'; // Korvattu UpdateHandler-import
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-import 'package:open_file/open_file.dart';
-import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
 import 'package:budu/core/app_router/app_router.dart';
 import 'package:budu/features/auth/providers/auth_provider.dart';
 import 'package:budu/features/auth/providers/user_provider.dart';
+import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 
+/// Kirjautumisnäkymä, joka näyttää sovelluksen logon ja Google-kirjautumispainikkeen.
+/// Käsittelee autentikointitilan muutokset ja navigoi käyttäjän oikealle sivulle.
+/// Delegoi päivitystarkistuksen ja latauksen UpdateManager-luokalle.
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
@@ -18,15 +22,59 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  late final UpdateHandler _updateHandler;
-  bool _isLoggingIn = false;
-  AuthState? _lastAuthState; // Seuraa edellistä authState-arvoa
+  late final UpdateManager _updateManager; // Päivitysten hallinta
+  bool _isLoggingIn = false; // Näyttääkö kirjautumisindikaattorin
+  AuthState? _lastAuthState; // Seuraa edellistä autentikointitilaa
+  bool _hasNavigated = false; // Lippu ennenaikaisen navigoinnin estämiseksi
+  bool _isInitializing = false; // Lippu estämään useat initialize-kutsut
+  bool _hasInitialized = false; // Lippu estämään useat _initializeAuth-kutsut
 
   @override
   void initState() {
     super.initState();
-    _updateHandler = UpdateHandler();
-    _checkForAppUpdate();
+  
+   
+   _updateManager = UpdateManager();
+     
+    _initializeAuth();
+  }
+
+  /// Alustaa autentikoinnin ja tarkistaa käyttäjän tilan.
+  Future<void> _initializeAuth() async {
+    if (_isInitializing || _hasInitialized) {
+      print('LoginScreen: Auth-alustus jo käynnissä tai suoritettu, ohitetaan');
+      return;
+    }
+    _isInitializing = true;
+    try {
+      // Suoritetaan päivitystarkistus ja odotetaan sen valmistumista
+      print('LoginScreen: initState - Aloitetaan päivitystarkistus');
+      await _updateManager.checkAndHandleUpdate(context);
+
+      final authProvider = Provider.of<AuthProvider>(context, listen: false);
+      await authProvider.initialize();
+      if (authProvider.authState == AuthState.authenticated && authProvider.user != null && !_hasNavigated) {
+        print('LoginScreen: Automaattikirjautuminen onnistui, UID: ${authProvider.user!.uid}');
+        await _navigateAfterLogin(authProvider.user!.uid);
+      } else {
+        print('LoginScreen: Automaattikirjautumista ei suoritettu, authState: ${authProvider.authState}');
+      }
+    } catch (e) {
+      // Raportoi kriittinen virhe Crashlyticsiin (esim. autentikoinnin epäonnistuminen)
+      await FirebaseCrashlytics.instance.recordError(
+        e,
+        StackTrace.current,
+        reason: 'Autentikoinnin alustus epäonnistui LoginScreen:ssä',
+      );
+
+      // Näytä ystävällinen virheilmoitus käyttäjälle
+      if (context.mounted) {
+        showErrorSnackBar(context, 'Kirjautumisen alustus epäonnistui: $e');
+      }
+    } finally {
+      _isInitializing = false;
+      _hasInitialized = true; // Merkitään alustus suoritetuksi
+    }
   }
 
   @override
@@ -35,109 +83,94 @@ class _LoginScreenState extends State<LoginScreen> {
     final authProvider = Provider.of<AuthProvider>(context);
     final userProvider = Provider.of<UserProvider>(context, listen: false);
 
-    // Tarkista authState-muutokset
-    if (_lastAuthState != authProvider.authState) {
+    // Tarkista authState-muutokset vain, jos alustus on valmis
+    if (authProvider.isInitialized && _lastAuthState != authProvider.authState && !_hasNavigated) {
       _lastAuthState = authProvider.authState;
 
-      if (authProvider.authState == AuthState.authenticated && authProvider.user != null) {
-        userProvider.fetchUserData(authProvider.user!.uid);
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (context.mounted) {
-            Navigator.pushReplacementNamed(context, AppRouter.mainRoute);
-          }
-        });
-      } else if (authProvider.authState == AuthState.unauthenticated) {
-        userProvider.clearUserData();
+      if (authProvider.authState == AuthState.unauthenticated) {
+        if (context.mounted) {
+          userProvider.clearUserData();
+          print('LoginScreen: Käyttäjätiedot tyhjennetty, authState: unauthenticated');
+        }
       }
     }
   }
 
-  Future<void> _checkForAppUpdate() async {
-    final packageInfo = await PackageInfo.fromPlatform();
-    final currentVersion = packageInfo.version;
-
-    final updateDialogWrapper = UpdateDialogWrapper(
-      updateHandler: _updateHandler,
-      currentVersion: currentVersion,
-    );
-    final shouldUpdate = await updateDialogWrapper.show(context);
-
-    if (shouldUpdate && _updateHandler.apkUrl != null && _updateHandler.latestVersion != null) {
-      await _startDownload(_updateHandler.apkUrl!, _updateHandler.latestVersion!);
+  /// Navigoi käyttäjän oikealle sivulle autentikoinnin jälkeen.
+  /// Ohjaa joko pääsivulle (mainRoute) tai chatbot-sivulle (chatbotRoute) budjetin olemassaolon perusteella.
+  Future<void> _navigateAfterLogin(String userId) async {
+    if (_hasNavigated) {
+      print('LoginScreen: Navigointi estetty, _hasNavigated on true');
+      return; // Estä uudelleennavigointi
     }
-  }
-
-  Future<void> _startDownload(String apkUrl, String latestVersion) async {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (dialogContext) {
-        return StreamBuilder<Map<String, dynamic>>(
-          stream: _updateHandler.startDownload(apkUrl, latestVersion),
-          builder: (context, snapshot) {
-            double progress = _updateHandler.downloadProgress;
-            if (snapshot.hasData && snapshot.data!.containsKey('progress')) {
-              progress = snapshot.data!['progress'] as double;
-            }
-
-            return AlertDialog(
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Text("Ladataan päivitystä...", style: TextStyle(color: Colors.white)),
-                  const SizedBox(height: 16),
-                  LinearProgressIndicator(value: progress / 100),
-                  const SizedBox(height: 8),
-                  Text('${progress.toStringAsFixed(1)}%', style: const TextStyle(color: Colors.white)),
-                ],
-              ),
-              backgroundColor: Colors.black87,
-            );
-          },
-        );
-      },
-    );
+    _hasNavigated = true;
+    print('_navigateAfterLogin: Aloitetaan, UID: $userId');
 
     try {
-      await for (var event in _updateHandler.startDownload(apkUrl, latestVersion)) {
-        if (event.containsKey('result')) {
-          final result = event['result'] as OpenResult;
-          if (result.type != ResultType.done && result.message.contains("REQUEST_INSTALL_PACKAGES")) {
-            await _updateHandler.requestInstallPermission(context, apkUrl, latestVersion);
-            await _startDownload(apkUrl, latestVersion);
+      final budgetProvider = Provider.of<BudgetProvider>(context, listen: false);
+      final expenseProvider = Provider.of<ExpenseProvider>(context, listen: false);
+
+      final now = DateTime.now();
+      await budgetProvider.loadBudget(userId, now.year, now.month);
+      print('LoginScreen: Budjetti ladattu, budget == null: ${budgetProvider.budget == null}');
+
+      if (context.mounted) {
+        if (budgetProvider.budget == null) {
+          print('LoginScreen: Budjetti on null, tarkistetaan Firestore');
+          final budgetsSnapshot = await FirebaseFirestore.instance
+              .collection('budgets')
+              .doc(userId)
+              .collection('monthly_budgets')
+              .limit(1)
+              .get();
+          print('LoginScreen: Budjettidokumenttien määrä: ${budgetsSnapshot.docs.length}');
+
+          if (budgetsSnapshot.docs.isEmpty) {
+            print('LoginScreen: Ei budjetteja, ohjataan chatbot-sivulle');
+            Navigator.pushNamedAndRemoveUntil(
+              context,
+              AppRouter.chatbotRoute,
+              (route) => false,
+            );
+          } else {
+            print('LoginScreen: Budjetti löytyy, haetaan tapahtumat ja ohjataan pääsivulle');
+            await expenseProvider.loadAllExpenses(userId);
+            Navigator.pushNamedAndRemoveUntil(
+              context,
+              AppRouter.mainRoute,
+              (route) => false,
+            );
           }
-        } else if (event.containsKey('error')) {
-          await showDialog(
-            context: context,
-            barrierDismissible: false,
-            builder: (context) {
-              return AlertDialog(
-                title: const Text('Päivityksen lataaminen epäonnistui'),
-                content: Text('Virhe: ${event['error']}\nHaluatko yrittää uudelleen?'),
-                actions: [
-                  TextButton(
-                    onPressed: () {
-                      Navigator.pop(context);
-                      _startDownload(apkUrl, latestVersion);
-                    },
-                    child: const Text('Kyllä'),
-                  ),
-                ],
-              );
-            },
+        } else {
+          print('LoginScreen: Nykyinen budjetti löytyy, haetaan tapahtumat ja ohjataan pääsivulle');
+          await expenseProvider.loadAllExpenses(userId);
+          Navigator.pushNamedAndRemoveUntil(
+            context,
+            AppRouter.mainRoute,
+            (route) => false,
           );
         }
       }
-    } finally {
+    } catch (e) {
+      // Raportoi kriittinen virhe Crashlyticsiin (esim. Firestore-operaation epäonnistuminen)
+      await FirebaseCrashlytics.instance.recordError(
+        e,
+        StackTrace.current,
+        reason: 'Navigointi epäonnistui LoginScreen:ssä',
+      );
+
+      // Näytä ystävällinen virheilmoitus käyttäjälle
       if (context.mounted) {
-        Navigator.pop(context);
+        showErrorSnackBar(context, 'Navigointi epäonnistui: $e');
       }
+
+      // Palauta _hasNavigated-tila, jotta navigointi voidaan yrittää uudelleen
+      _hasNavigated = false;
     }
   }
 
   @override
   Widget build(BuildContext context) {
-
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
@@ -183,17 +216,21 @@ class _LoginScreenState extends State<LoginScreen> {
               const SizedBox(height: 32),
               LoginButton(
                 isLoggingIn: _isLoggingIn,
-                isUpdateRequired: _updateHandler.isUpdateRequired,
-                isDownloading: _updateHandler.isDownloading,
+                isUpdateRequired: _updateManager.isUpdateRequired,
+                isDownloading: _updateManager.isDownloading,
                 onLoginStart: () {
-                  setState(() {
-                    _isLoggingIn = true;
-                  });
+                  if (mounted) {
+                    setState(() {
+                      _isLoggingIn = true;
+                    });
+                  }
                 },
                 onLoginEnd: () {
-                  setState(() {
-                    _isLoggingIn = false;
-                  });
+                  if (mounted) {
+                    setState(() {
+                      _isLoggingIn = false;
+                    });
+                  }
                 },
                 onError: (context, error) {
                   showErrorSnackBar(context, error);

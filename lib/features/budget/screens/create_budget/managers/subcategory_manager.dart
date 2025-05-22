@@ -1,43 +1,89 @@
 import 'package:budu/core/constants.dart';
 import 'package:flutter/material.dart';
 
+/// Luokka, joka hallinnoi budjettialakategorioiden lisäämistä ja poistamista.
+/// Tukee ennalta määriteltyjen ja omien alakategorioiden lisäämistä.
 class SubcategoryManager {
-  final Map<String, Map<String, TextEditingController>> expenseControllers;
-  final Function({required String category, required String subcategory}) onUpdate; // Päivitetty tyyppi
+  final Map<String, Map<String, TextEditingController>> expenseControllers; // Kategorioiden ja alakategorioiden ohjaimet
+  final Function({required String category, required String subcategory}) onUpdate; // Callback-funktio, jota kutsutaan, kun alakategoriat päivittyvät
 
   SubcategoryManager({
     required this.expenseControllers,
     required this.onUpdate,
   });
 
-  static const int maxSubcategories = 6;
-  static const int maxSubcategoryLength = 50;
-
+  /// Palauttaa true, jos uusia alakategorioita voi lisätä (alakategorioiden määrä alle maksimin).
   bool canAddSubcategory(String category) {
-    return (expenseControllers[category]?.length ?? 0) < maxSubcategories;
+    return (expenseControllers[category]?.length ?? 0) < Constants.maxSubcategories;
   }
 
+  /// Poistaa alakategorian kategoriasta.
+  /// [category] on yläkategoria, [subcategory] on poistettava alakategoria.
   void removeSubcategory(String category, String subcategory) {
     expenseControllers[category]?.remove(subcategory);
     onUpdate(category: category, subcategory: subcategory);
   }
 
+  /// Validoi alakategorian nimen.
+  /// [value] on tarkistettava nimi.
+  /// Palauttaa virheviestin, jos nimi on virheellinen, muuten null.
   String? _validateSubcategoryName(String? value) {
     if (value == null || value.isEmpty) {
       return 'Syötä alakategorian nimi';
     }
-    if (value.length > maxSubcategoryLength) {
-      return 'Nimi voi olla enintään $maxSubcategoryLength merkkiä';
+    if (value.length > Constants.maxCategoryNameLength) {
+      return 'Nimi voi olla enintään ${Constants.maxCategoryNameLength} merkkiä';
     }
     return null;
   }
 
+  /// Näyttää dialogin, jossa käyttäjä voi valita ennalta määritellyn alakategorian tai lisätä oman.
+  /// [category] on yläkategoria, johon alakategoria lisätään.
   void addSubcategory(BuildContext context, String category) {
-    if (!canAddSubcategory(category)) return;
+    if (!canAddSubcategory(category)) {
+      // Näytetään varoitus, jos alakategorioiden maksimimäärä on saavutettu
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          backgroundColor: Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          elevation: 8,
+          title: Text(
+            'Virhe',
+            style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black87,
+                ),
+          ),
+          content: Text(
+            'Alakategorioiden maksimimäärä (${Constants.maxSubcategories}) on saavutettu.',
+            style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                  color: Colors.black87,
+                ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text(
+                'OK',
+                style: Theme.of(context).textTheme.bodyLarge,
+              ),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
 
-    final availableSubcategories = categoryMapping[category]!
-        .where((subcategory) => !(expenseControllers[category]?.containsKey(subcategory) ?? false))
-        .toList();
+ // Haetaan saatavilla olevat ennalta määritellyt alakategoriat, jos kategoria löytyy Constants.categoryMapping:ista
+    final availableSubcategories = Constants.categoryMapping.containsKey(category)
+        ? Constants.categoryMapping[category]!
+            .where((subcategory) => !(expenseControllers[category]?.containsKey(subcategory) ?? false))
+            .toList()
+        : <String>[]; // Jos kategoria on oma, ei ole ennalta määriteltyjä alakategorioita
 
     showDialog(
       context: context,
@@ -85,6 +131,7 @@ class SubcategoryManager {
                 return Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    // Pudotusvalikko ennalta määriteltyjen alakategorioiden valintaan
                     Theme(
                       data: Theme.of(context).copyWith(
                         canvasColor: Colors.white,
@@ -132,6 +179,7 @@ class SubcategoryManager {
                         ),
                       ),
                     ),
+                    // Tekstikenttä oman alakategorian syöttämiseen
                     if (selectedSubcategory == null) ...[
                       const SizedBox(height: 8),
                       TextField(
@@ -142,8 +190,16 @@ class SubcategoryManager {
                           errorText: errorText,
                           errorMaxLines: 2,
                         ),
+                        maxLength: Constants.maxCategoryNameLength,
                         onChanged: (value) {
-                          updateErrorText(_validateSubcategoryName(value));
+                          final error = _validateSubcategoryName(value);
+                          if (error != null) {
+                            setState(() => errorText = error);
+                          } else if (expenseControllers[category]?.containsKey(value.trim()) ?? false) {
+                            setState(() => errorText = 'Alakategoria on jo olemassa');
+                          } else {
+                            setState(() => errorText = null);
+                          }
                         },
                       ),
                     ],
@@ -166,11 +222,11 @@ class SubcategoryManager {
                 final validationError = _validateSubcategoryName(subcategory);
                 if (validationError != null) {
                   updateErrorText(validationError);
-                } else {
-                  if (subcategory.isNotEmpty) {
-                    expenseControllers[category]![subcategory] = TextEditingController(text: '0.00');
-                    onUpdate(category: category, subcategory: subcategory);
-                  }
+                } else if (expenseControllers[category]?.containsKey(subcategory) ?? false) {
+                  updateErrorText('Alakategoria on jo olemassa');
+                } else if (subcategory.isNotEmpty) {
+                  expenseControllers[category]![subcategory] = TextEditingController(text: '0.00');
+                  onUpdate(category: category, subcategory: subcategory);
                   FocusScope.of(context).unfocus();
                   Navigator.pop(context);
                 }
@@ -187,7 +243,7 @@ class SubcategoryManager {
               ),
             ),
           ],
-        );
+      );
       },
     );
   }

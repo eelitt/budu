@@ -1,167 +1,81 @@
-import 'package:budu/core/app_router/app_router.dart';
-import 'package:budu/core/constants.dart';
 import 'package:budu/features/auth/providers/auth_provider.dart';
+import 'package:budu/features/budget/models/budget_model.dart';
 import 'package:budu/features/budget/providers/budget_provider.dart';
 import 'package:budu/features/budget/screens/budget/controllers/budget_screen_controller.dart';
 import 'package:budu/features/budget/screens/budget/income_section.dart';
-import 'package:budu/features/budget/screens/budget/widgets/budget_confirmation_dialogs.dart';
+import 'package:budu/features/budget/screens/budget/widgets/add_category.dart';
 import 'package:budu/features/budget/screens/budget/widgets/budget_month_selector.dart';
-import 'package:budu/features/budget/screens/budget/widgets/category_dialog.dart';
 import 'package:budu/features/budget/screens/budget/widgets/category_list_wrapper.dart';
-import 'package:budu/features/notification/providers/notification_provider.dart';
+import 'package:budu/features/budget/screens/budget/widgets/budget_confirmation_dialogs.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+/// Budjettinäkymä, joka näyttää budjetin tiedot, tulot ja kategoriat.
+/// Delegoi budjetin tilan hallinnan BudgetScreenController:ille ja keskittyy käyttöliittymän renderöintiin.
 class BudgetScreen extends StatefulWidget {
-  const BudgetScreen({super.key});
+  final VoidCallback? onBudgetDeleted; // Callback budjetin poiston jälkeen
+  const BudgetScreen({super.key, this.onBudgetDeleted});
 
   @override
   State<BudgetScreen> createState() => _BudgetScreenState();
 }
 
 class _BudgetScreenState extends State<BudgetScreen> {
-  BudgetScreenController? _controller;
-  late ValueNotifier<int> _currentYear;
-  late ValueNotifier<int> _currentMonth;
-  List<Map<String, int>> _availableMonths = [];
-  final ValueNotifier<Map<String, int>?> _selectedMonth = ValueNotifier(null);
-  bool _isLoadingBudget = true;
+  late BudgetScreenController _controller; // Budjetin hallintaan käytettävä kontrolleri
+BudgetModel? _lastBudget; // Seurataan budjetin tilaa
 
   @override
   void initState() {
     super.initState();
     _controller = BudgetScreenController(
       context: context,
-      onStateChanged: () => setState(() {}),
-    );
-    _initializeBudget();
-  }
-
-  Future<void> _initializeBudget() async {
-    final budgetProvider = Provider.of<BudgetProvider>(context, listen: false);
-
-    if (budgetProvider.budget != null) {
-      _currentYear = ValueNotifier(budgetProvider.budget!.year);
-      _currentMonth = ValueNotifier(budgetProvider.budget!.month);
-    } else {
-      _currentYear = ValueNotifier(DateTime.now().year);
-      _currentMonth = ValueNotifier(DateTime.now().month);
-      final authProvider = Provider.of<AuthProvider>(context, listen: false);
-      if (authProvider.user != null) {
-        await _controller!.loadBudget(
-          userId: authProvider.user!.uid,
-          year: _currentYear.value,
-          month: _currentMonth.value,
-        );
-      }
-    }
-
-    if (mounted) {
-      setState(() {
-        _isLoadingBudget = false;
-      });
-    }
-  }
-
-  Future<void> _loadAvailableMonths() async {
-    final authProvider = Provider.of<AuthProvider>(context, listen: false);
-    if (authProvider.user != null) {
-      _availableMonths = await _controller!.loadAvailableMonths(
-        userId: authProvider.user!.uid,
-        selectedMonth: _selectedMonth,
-        currentYear: _currentYear,
-        currentMonth: _currentMonth,
-      );
-    }
-  }
-
-  Future<void> _resetBudgetExpenses() async {
-    final authProvider = Provider.of<AuthProvider>(context, listen: false);
-    if (authProvider.user != null) {
-      await _controller!.resetBudgetExpenses(
-        userId: authProvider.user!.uid,
-        year: _currentYear.value,
-        month: _currentMonth.value,
-      );
-    }
-  }
-
-  Future<void> _deleteBudget() async {
-    final authProvider = Provider.of<AuthProvider>(context, listen: false);
-    if (authProvider.user != null) {
-      _availableMonths = await _controller!.deleteBudget(
-        userId: authProvider.user!.uid,
-        year: _currentYear.value,
-        month: _currentMonth.value,
-        availableMonths: _availableMonths,
-        selectedMonth: _selectedMonth,
-        currentYear: _currentYear,
-        currentMonth: _currentMonth,
-      );
-
-      if (_availableMonths.isNotEmpty) {
-        final nextMonth = _availableMonths.first;
-        _selectedMonth.value = nextMonth;
-        _currentYear.value = nextMonth['year']!;
-        _currentMonth.value = nextMonth['month']!;
-        await _controller!.loadBudget(
-          userId: authProvider.user!.uid,
-          year: _currentYear.value,
-          month: _currentMonth.value,
-        );
-      } else {
-      if (context.mounted) {
-        Provider.of<NotificationProvider>(context, listen: false).clearNotification();
-          Navigator.of(context, rootNavigator: true).pushNamedAndRemoveUntil(
-            AppRouter.chatbotRoute,
-            (Route<dynamic> route) => false, // Poistaa kaikki aiemmat reitit
-          );
+      onStateChanged: () {
+        // Varmistetaan, että widget on vielä kiinnitetty ennen tilan päivitystä
+        if (mounted) {
+          setState(() {});
         }
-      }
-    }
+      },
+      onBudgetDeleted: widget.onBudgetDeleted, // Välitetään callback kontrollerille
+    );
   }
 
-  Future<void> _addCategory(String categoryName) async {
-    final authProvider = Provider.of<AuthProvider>(context, listen: false);
-    if (authProvider.user != null) {
-      final budgetProvider = Provider.of<BudgetProvider>(context, listen: false);
-      final now = DateTime.now();
-      await budgetProvider.addCategory(
-        userId: authProvider.user!.uid,
-        year: now.year,
-        month: now.month,
-        category: categoryName,
-      );
-    }
+  @override
+  void dispose() {
+    // Vapautetaan kontrollerin resurssit ja perutaan asynkroniset operaatiot
+    _controller.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    // Odota, että BudgetScreenController on alustettu ennen FutureBuilderin suorittamista
+    if (!_controller.isInitialized) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
     return FutureBuilder<void>(
-      future: _loadAvailableMonths(),
+      future: null, // loadAvailableMonths suoritetaan jo _initializeBudget-metodissa
       builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting || _isLoadingBudget) {
+        if (_controller.isLoadingBudget) {
           return const Center(child: CircularProgressIndicator());
-        }
-        if (snapshot.hasError) {
-          return Center(child: Text('Virhe latauksessa: ${snapshot.error}'));
         }
 
         return Consumer<BudgetProvider>(
           builder: (context, budgetProvider, child) {
+            // Päivitetään _lastBudget budjetin tilan seurantaan
+            if (_lastBudget != budgetProvider.budget) {
+              _lastBudget = budgetProvider.budget;
+              // Ei suoriteta budjetin latausta täällä, koska BudgetScreenController hoitaa sen
+            }
             final budget = budgetProvider.budget;
 
             if (budget == null) {
-              if (_availableMonths.isEmpty) {
+              if (_controller.availableMonths.isEmpty) {
                 return const Center(child: Text('Luo budjetti ensin!'));
               } else {
                 return const Center(child: CircularProgressIndicator());
               }
             }
-
-            final availableCategories = categoryMapping.keys
-                .where((category) => !budget.expenses.containsKey(category))
-                .toList();
 
             return SingleChildScrollView(
               child: Container(
@@ -208,17 +122,15 @@ class _BudgetScreenState extends State<BudgetScreen> {
                             ),
                             const SizedBox(height: 12),
                             BudgetMonthSelector(
-                              availableMonths: _availableMonths,
-                              selectedMonth: _selectedMonth.value,
-                              onMonthSelected: (value) {
+                              availableMonths: _controller.availableMonths,
+                              selectedMonth: _controller.selectedMonth.value,
+                              onMonthSelected: (value) async {
                                 if (value != null) {
-                                  _selectedMonth.value = value;
-                                  _currentYear.value = value['year']!;
-                                  _currentMonth.value = value['month']!;
-                                  _controller!.loadBudget(
-                                    userId: Provider.of<AuthProvider>(context, listen: false).user!.uid,
-                                    year: _currentYear.value,
-                                    month: _currentMonth.value,
+                                  final authProvider = Provider.of<AuthProvider>(context, listen: false);
+                                  await _controller.loadBudget(
+                                    userId: authProvider.user!.uid,
+                                    year: value['year']!,
+                                    month: value['month']!,
                                   );
                                 }
                               },
@@ -237,7 +149,12 @@ class _BudgetScreenState extends State<BudgetScreen> {
                                 onPressed: () async {
                                   final confirmed = await showResetConfirmationDialog(context);
                                   if (confirmed) {
-                                    await _resetBudgetExpenses();
+                                    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+                                    await _controller.resetBudgetExpenses(
+                                      userId: authProvider.user!.uid,
+                                      year: _controller.currentYear.value,
+                                      month: _controller.currentMonth.value,
+                                    );
                                   }
                                 },
                                 style: ElevatedButton.styleFrom(
@@ -267,13 +184,18 @@ class _BudgetScreenState extends State<BudgetScreen> {
                                 onPressed: () async {
                                   final confirmed = await showDeleteConfirmationDialog(
                                     context: context,
-                                    isLastBudget: _availableMonths.length == 1,
-                                    customMessage: _availableMonths.length == 1
+                                    isLastBudget: _controller.availableMonths.length == 1,
+                                    customMessage: _controller.availableMonths.length == 1
                                         ? 'Haluatko varmasti poistaa budjetin?\nKaikki siihen liittyvät tapahtumat poistetaan.\nKoska tämä on ainoa budjettisi, sinut ohjataan luomaan uusi.'
                                         : 'Haluatko varmasti poistaa tämän budjetin? Budjetin tulo- ja menotapahtumat poistetaan samalla.',
                                   );
                                   if (confirmed) {
-                                    await _deleteBudget();
+                                    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+                                    await _controller.deleteBudget(
+                                      userId: authProvider.user!.uid,
+                                      year: _controller.currentYear.value,
+                                      month: _controller.currentMonth.value,
+                                    );
                                   }
                                 },
                                 style: ElevatedButton.styleFrom(
@@ -332,38 +254,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
                                         color: Colors.black87,
                                       ),
                                 ),
-                                ElevatedButton(
-                                  onPressed: () async {
-                                    final selectedCategory = await showAddCategoryDialog(
-                                      context: context,
-                                      currentExpenses: budget.expenses,
-                                    );
-                                    if (selectedCategory != null) {
-                                      await _addCategory(selectedCategory);
-                                    }
-                                  },
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: availableCategories.isEmpty ? Colors.grey[400] : Colors.blueGrey[800],
-                                    foregroundColor: Colors.white,
-                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                    textStyle: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                                          color: Colors.white,
-                                          fontSize: 14,
-                                        ),
-                                    elevation: 2,
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                  ),
-                                  child: const Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(Icons.add, size: 16),
-                                      SizedBox(width: 4),
-                                      Text('Lisää kategoria'),
-                                    ],
-                                  ),
-                                ),
+                                const AddCategory(),
                               ],
                             ),
                             const SizedBox(height: 8),
