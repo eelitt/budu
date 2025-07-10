@@ -1,20 +1,21 @@
-import 'package:budu/features/budget/providers/budget_provider.dart';
+import 'package:budu/features/budget/providers/expense_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+/// Widget, joka tarjoaa suodattimet tapahtumahistorian tapahtumille: kategoria, tyyppi, budjetti ja hakukysely.
 class EventFilterSection extends StatefulWidget {
-  final List<String> availableMonths;
-  final Function(String?) onCategoryChanged;
-  final Function(String?) onTypeChanged;
-  final Function(String?) onMonthChanged;
-  final Function(String) onSearchQueryChanged;
+  final List<String> availableBudgets; // Lista budjettien aikaväleistä
+  final Function(String?) onCategoryChanged; // Callback kategorian muutokselle
+  final Function(String?) onTypeChanged; // Callback tyypin muutokselle
+  final Function(String?) onBudgetChanged; // Callback budjetin muutokselle
+  final Function(String) onSearchQueryChanged; // Callback hakukyselyn muutokselle
 
   const EventFilterSection({
     super.key,
-    required this.availableMonths,
+    required this.availableBudgets,
     required this.onCategoryChanged,
     required this.onTypeChanged,
-    required this.onMonthChanged,
+    required this.onBudgetChanged,
     required this.onSearchQueryChanged,
   });
 
@@ -25,7 +26,7 @@ class EventFilterSection extends StatefulWidget {
 class _EventFilterSectionState extends State<EventFilterSection> {
   String? _selectedCategory = 'Kaikki kategoriat';
   String? _selectedType = 'Kaikki';
-  String? _selectedMonth = 'Kaikki kuukaudet';
+  String? _selectedBudget = 'Kaikki budjetit';
   final TextEditingController _searchController = TextEditingController();
 
   @override
@@ -36,8 +37,12 @@ class _EventFilterSectionState extends State<EventFilterSection> {
 
   @override
   Widget build(BuildContext context) {
-    final budgetProvider = Provider.of<BudgetProvider>(context);
-    final categories = ['Kaikki kategoriat', 'Tulo', ...(budgetProvider.budget?.expenses.keys.toList() ?? [])];
+    // Käytetään kaikkia mahdollisia kategorioita ExpenseProvider:sta, jos budjetti ei ole valittuna
+    final expenseProvider = Provider.of<ExpenseProvider>(context);
+    final categories = [
+      'Kaikki kategoriat',
+      ...expenseProvider.expenses.map((e) => e.category).toSet().toList()..sort(),
+    ];
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -87,8 +92,8 @@ class _EventFilterSectionState extends State<EventFilterSection> {
                       );
                     }).toList();
                   },
-                  color: Colors.white, // Teeman mukainen taustaväri
-                  position: PopupMenuPosition.under, // Valikko avautuu alas
+                  color: Colors.white,
+                  position: PopupMenuPosition.under,
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -108,10 +113,10 @@ class _EventFilterSectionState extends State<EventFilterSection> {
                 ),
               ),
               const SizedBox(height: 16),
-              // Kuukausi-suodatin
+              // Budjetti-suodatin
               InputDecorator(
                 decoration: InputDecoration(
-                  labelText: 'Kuukausi',
+                  labelText: 'Budjetti',
                   labelStyle: Theme.of(context).textTheme.bodyLarge?.copyWith(
                         color: Theme.of(context).textTheme.bodyMedium?.color,
                       ),
@@ -121,29 +126,29 @@ class _EventFilterSectionState extends State<EventFilterSection> {
                 child: PopupMenuButton<String>(
                   onSelected: (value) {
                     setState(() {
-                      _selectedMonth = value;
-                      widget.onMonthChanged(value);
+                      _selectedBudget = value;
+                      widget.onBudgetChanged(value);
                     });
                   },
                   itemBuilder: (BuildContext context) {
-                    return widget.availableMonths.map((month) {
+                    return widget.availableBudgets.map((budget) {
                       return PopupMenuItem<String>(
-                        value: month,
+                        value: budget,
                         child: Text(
-                          month,
+                          budget,
                           style: Theme.of(context).textTheme.bodyMedium,
                         ),
                       );
                     }).toList();
                   },
-                  color: Colors.white, // Teeman mukainen taustaväri
-                  position: PopupMenuPosition.under, // Valikko avautuu alas
+                  color: Colors.white,
+                  position: PopupMenuPosition.under,
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Expanded(
                         child: Text(
-                          _selectedMonth ?? 'Kaikki kuukaudet',
+                          _selectedBudget ?? 'Kaikki budjetit',
                           style: Theme.of(context).textTheme.bodyMedium,
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -186,6 +191,7 @@ class _EventFilterSectionState extends State<EventFilterSection> {
                         widget.onTypeChanged('Tulot');
                       });
                     },
+                    selectedColor: Colors.green,
                   ),
                   ChoiceChip(
                     label: Text(

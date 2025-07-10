@@ -1,21 +1,28 @@
 import 'package:budu/core/utils.dart';
+import 'package:budu/features/budget/models/budget_model.dart';
 import 'package:budu/features/budget/providers/budget_provider.dart';
 import 'package:budu/features/budget/providers/expense_provider.dart';
-import 'package:budu/features/budget/screens/budget/utils/month_utils.dart'; // Lisätty tuonti
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:intl/intl.dart';
 
 class SummarySection extends StatelessWidget {
-  final Map<String, int>? selectedMonth; // Parametri valitulle kuukaudelle
+  final BudgetModel? selectedBudget; // Parametri valitulle budjetille
 
-  const SummarySection({super.key, this.selectedMonth});
+  const SummarySection({super.key, this.selectedBudget});
+
+  /// Muotoilee budjetin aikavälin näyttöä varten (esim. "1.5.2025 - 31.5.2025").
+  String _formatBudgetPeriod(BudgetModel budget) {
+    final dateFormat = DateFormat('d.M.yyyy');
+    return '${dateFormat.format(budget.startDate)} - ${dateFormat.format(budget.endDate)}';
+  }
 
   @override
   Widget build(BuildContext context) {
     final budgetProvider = Provider.of<BudgetProvider>(context);
     final expenseProvider = Provider.of<ExpenseProvider>(context);
-    
- // Tarkistetaan, onko budjetti olemassa
+
+    // Tarkistetaan, onko budjetti olemassa
     if (budgetProvider.budget == null) {
       // Näytetään viesti, jos budjettia ei ole saatavilla
       return const Center(
@@ -98,11 +105,11 @@ class SummarySection extends StatelessWidget {
                         ],
                       ],
                     ),
-                    if (selectedMonth != null) // Näytetään vain, jos selectedMonth on määritelty
+                    if (selectedBudget != null) // Näytetään vain, jos selectedBudget on määritelty
                       Padding(
                         padding: const EdgeInsets.only(top: 2),
                         child: Text(
-                          '${getMonthName(selectedMonth!['month']!)} ${selectedMonth!['year']} budjetti',
+                          '${_formatBudgetPeriod(selectedBudget!)} budjetti',
                           style: Theme.of(context).textTheme.bodySmall?.copyWith(
                                 color: Colors.black54,
                                 fontSize: 12,

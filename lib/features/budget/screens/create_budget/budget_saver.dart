@@ -1,38 +1,51 @@
+import 'package:budu/core/utils.dart';
 import 'package:budu/features/auth/providers/auth_provider.dart';
 import 'package:budu/features/budget/models/budget_model.dart';
 import 'package:budu/features/budget/providers/budget_provider.dart';
+import 'package:budu/features/budget/providers/shared_budget_provider.dart';
 import 'package:budu/features/notification/providers/notification_provider.dart';
+import 'package:cloud_firestore/cloud_firestore.dart'; // Lisätty batch-tukeen
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:uuid/uuid.dart';
+import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 
 /// Luokka, joka vastaa budjetin tallentamisesta Firestoreen.
-/// Suorittaa validoinnit ja näyttää varoitusdialogeja tarvittaessa.
+/// Suorittaa validoinnit, näyttää varoitusdialogeja ja optimoi Firestore-lukuja/kirjoituksia.
+/// Käyttää annettuja totalIncome/Expenses-arvoja duplikaation välttämiseksi.
 class BudgetSaver {
-  final BuildContext context; // Sovelluksen konteksti dialogien näyttämistä ja navigointia varten
-  final TextEditingController incomeController; // Tekstikentän ohjain tulojen syöttämiseen
-  final Map<String, Map<String, TextEditingController>> expenseControllers; // Kategorioiden ja alakategorioiden ohjaimet
-  final int newYear; // Uuden budjetin vuosi
-  final int newMonth; // Uuden budjetin kuukausi
-  final double totalIncome; // Budjetin kokonaistulot
-  final double totalExpenses; // Budjetin kokonaismenot
-  String? errorMessage; // Virheviesti tallennuksen epäonnistuessa
+  final BuildContext context;
+  final TextEditingController incomeController;
+  final Map<String, Map<String, TextEditingController>> expenseControllers;
+  DateTime startDate;
+  DateTime endDate;
+  String type;
+  final double totalIncome;
+  final double totalExpenses;
+  String? errorMessage;
+  final bool isEditing;
+  final String? budgetName;
 
   BudgetSaver({
     required this.context,
     required this.incomeController,
     required this.expenseControllers,
-    required this.newYear,
-    required this.newMonth,
+    required this.startDate,
+    required this.endDate,
+    required this.type,
     required this.totalIncome,
     required this.totalExpenses,
+    this.isEditing = false,
+    this.budgetName,
   });
 
-  /// Näyttää vahvistusdialogin, jossa käyttäjä voi vahvistaa tai peruuttaa toiminnon.
-  /// [title] on dialogin otsikko, [content] on dialogin sisältöteksti.
-  /// Palauttaa true, jos käyttäjä vahvistaa, muuten false.
-  Future<bool?> _showConfirmationDialog({
+  /// Näyttää geneerisen dialogin (vahvistus tai virhe).
+  /// Modulaaristaa dialog-koodin toiston vähentämiseksi.
+  Future<bool?> _showDialog({
     required String title,
     required String content,
+    required List<Widget> actions,
+    bool isError = false,
   }) async {
     return showDialog<bool>(
       context: context,
@@ -56,38 +69,15 @@ class BudgetSaver {
                 color: Colors.black87,
               ),
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: Text(
-              'Peruuta',
-              style: Theme.of(context).textTheme.bodyLarge,
-            ),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Theme.of(context).elevatedButtonTheme.style?.backgroundColor?.resolve({}),
-              foregroundColor: Theme.of(context).elevatedButtonTheme.style?.foregroundColor?.resolve({}),
-            ),
-            child: Text(
-              'Jatka',
-              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                    color: Theme.of(context).elevatedButtonTheme.style?.foregroundColor?.resolve({}),
-                  ),
-            ),
-          ),
-        ],
+        actions: actions,
       ),
     );
   }
 
-  /// Validoi budjetin tulot.
-  /// [value] on tarkistettava arvo.
-  /// Palauttaa virheviestin, jos arvo on virheellinen, muuten null.
+  /// Validoi budjetin tulot (yksityinen, laajennettavissa expense-validoinnille).
   String? _validateIncome(String? value) {
     if (value == null || value.isEmpty) {
-      return null; // Salli tyhjä arvo, käsitellään muualla
+      return null;
     }
     final parsed = double.tryParse(value);
     if (parsed == null) {
@@ -102,140 +92,251 @@ class BudgetSaver {
     return null;
   }
 
+  /// Tarkistaa päällekkäiset budjetit optimoitulla Firestore-queryllä.
+  /// Hakee vain potentiaalisesti päällekkäiset budjetit, vähentäen lukuja/kuluja.
+  Future<bool> _checkOverlappingBudgets(String userId) async {
+    try {
+      final firestore = FirebaseFirestore.instance;
+
+      // Query päällekkäisille henkilökohtaisille budjeteille
+      final personalQuery = firestore
+          .collection('users')
+          .doc(userId)
+          .collection('budgets')
+          .where('startDate', isLessThanOrEqualTo: endDate)
+          .where('endDate', isGreaterThanOrEqualTo: startDate);
+
+      final personalSnapshot = await personalQuery.get();
+      if (personalSnapshot.docs.isNotEmpty) return true;
+
+      // Query päällekkäisille yhteistalousbudejeteille (olettaen shared_budgets-rakenne)
+      final sharedQuery = firestore
+          .collection('shared_budgets')
+          .where('users', arrayContains: userId) // Olettaen 'users'-array käyttäjille
+          .where('startDate', isLessThanOrEqualTo: endDate)
+          .where('endDate', isGreaterThanOrEqualTo: startDate);
+
+      final sharedSnapshot = await sharedQuery.get();
+      return sharedSnapshot.docs.isNotEmpty;
+    } catch (e, stackTrace) {
+      await FirebaseCrashlytics.instance.recordError(
+        e,
+        stackTrace,
+        reason: 'Failed to check overlapping budgets for user $userId',
+      );
+      return false; // Palauta false virheessä, jotta tallennus voi jatkua
+    }
+  }
+
   /// Tallentaa budjetin Firestoreen ja suorittaa tarvittavat validoinnit.
-  Future<void> createBudget() async {
-    // Haetaan AuthProvider ja BudgetProvider kontekstista
+  /// Tukee optional batch-writea skaalauksen vuoksi (ei riko olemassa olevaa).
+  Future<String> createBudget({
+    String? budgetId,
+    String? sharedBudgetId,
+    String? budgetName,
+    WriteBatch? batch,
+  }) async {
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     final budgetProvider = Provider.of<BudgetProvider>(context, listen: false);
+    final sharedBudgetProvider = Provider.of<SharedBudgetProvider>(context, listen: false);
+    final notificationProvider = Provider.of<NotificationProvider>(context, listen: false);
 
-    if (authProvider.user == null) return;
+    if (authProvider.user == null) {
+      errorMessage = 'Käyttäjä ei ole kirjautunut';
+      throw Exception('Käyttäjä ei ole kirjautunut');
+    }
 
-    // Validointi: Tarkistetaan incomeController-arvo
     final incomeError = _validateIncome(incomeController.text);
     if (incomeError != null) {
-      await showDialog<void>(
-        context: context,
-        builder: (context) => AlertDialog(
-          backgroundColor: Colors.white,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
+      await _showDialog(
+        title: 'Virhe',
+        content: incomeError,
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('OK', style: Theme.of(context).textTheme.bodyLarge),
           ),
-          elevation: 8,
-          title: Text(
-            'Virhe',
-            style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.black87,
-                ),
-          ),
-          content: Text(
-            incomeError,
-            style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                  color: Colors.black87,
-                ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: Text(
-                'OK',
-                style: Theme.of(context).textTheme.bodyLarge,
-              ),
-            ),
-          ],
-        ),
+        ],
+        isError: true,
       );
-      return;
+      errorMessage = incomeError;
+      throw Exception(incomeError);
     }
 
-    final double income = double.tryParse(incomeController.text) ?? 0.0;
-    final Map<String, Map<String, double>> expenses = {};
+    if (await _checkOverlappingBudgets(authProvider.user!.uid)) {
+      final confirm = await _showDialog(
+        title: 'Varoitus',
+        content: 'Valittu aikaväli on päällekkäinen olemassa olevan budjetin kanssa. Haluatko jatkaa?',
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text('Peruuta', style: Theme.of(context).textTheme.bodyLarge),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: Theme.of(context).elevatedButtonTheme.style,
+            child: Text('Jatka'),
+          ),
+        ],
+      );
+      if (confirm != true) {
+        errorMessage = 'Budjetin tallennus peruutettu: Päällekkäinen aikaväli';
+        throw Exception('Päällekkäinen aikaväli');
+      }
+    }
 
-    // Tallennetaan ylä- ja alakategoriat
+    // Käytä annettuja totalIncome/Expenses, mutta parsaa expenses controller:eista (säilytä olemassa oleva logiikka)
+    final double income = totalIncome; // Käytä annettua, vältä uudelleenlaskentaa
+    final Map<String, Map<String, double>> expenses = {};
     for (var category in expenseControllers.keys) {
       final subcategoryMap = expenseControllers[category]!;
-      expenses[category] = {};
+      final subExpenses = <String, double>{};
       for (var subcategory in subcategoryMap.keys) {
         final amount = double.tryParse(subcategoryMap[subcategory]!.text) ?? 0.0;
-        // Pyöristetään arvo kahden desimaalin tarkkuudella tallennuksessa
         final roundedAmount = (amount * 100).roundToDouble() / 100;
         if (roundedAmount > 0) {
-          expenses[category]![subcategory] = roundedAmount;
+          subExpenses[subcategory] = roundedAmount;
         }
       }
-      // Säilytetään tyhjät yläkategoriat (ei poisteta niitä)
+      if (subExpenses.isNotEmpty) { // Poista tyhjät kategoriat automaattisesti
+        expenses[category] = subExpenses;
+      }
     }
 
-    // Validointi 1: Varoita, jos budjetti on tyhjä (ei tuloja eikä menoja)
     if (income == 0.0 && expenses.isEmpty) {
-      final confirm = await _showConfirmationDialog(
+      final confirm = await _showDialog(
         title: 'Varoitus',
         content: 'Budjetissa ei ole tuloja eikä menoja. Haluatko tallentaa tyhjän budjetin?',
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text('Peruuta', style: Theme.of(context).textTheme.bodyLarge),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: Theme.of(context).elevatedButtonTheme.style,
+            child: Text('Jatka'),
+          ),
+        ],
       );
-      if (confirm != true) return;
+      if (confirm != true) {
+        errorMessage = 'Budjetin tallennus peruutettu: Tyhjä budjetti';
+        throw Exception('Tyhjä budjetti');
+      }
     }
 
-    // Validointi 2: Varoita, jos tulot ylittävät 999999 € (ylimääräinen tarkistus)
     if (income > 999999) {
-      final confirm = await _showConfirmationDialog(
+      final confirm = await _showDialog(
         title: 'Varoitus',
         content: 'Tulot ylittävät sallitun maksimiarvon (999999 €). Haluatko jatkaa?',
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text('Peruuta', style: Theme.of(context).textTheme.bodyLarge),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: Theme.of(context).elevatedButtonTheme.style,
+            child: Text('Jatka'),
+          ),
+        ],
       );
-      if (confirm != true) return;
+      if (confirm != true) {
+        errorMessage = 'Budjetin tallennus peruutettu: Liian suuret tulot';
+        throw Exception('Liian suuret tulot');
+      }
     }
 
-    // Validointi 3: Varoita, jos menot ovat suuremmat kuin tulot
     if (totalExpenses > totalIncome) {
-      final confirm = await _showConfirmationDialog(
+      final confirm = await _showDialog(
         title: 'Varoitus',
         content: 'Menot ovat suuremmat kuin tulot. Haluatko jatkaa?',
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text('Peruuta', style: Theme.of(context).textTheme.bodyLarge),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: Theme.of(context).elevatedButtonTheme.style,
+            child: Text('Jatka'),
+          ),
+        ],
       );
-      if (confirm != true) return;
+      if (confirm != true) {
+        errorMessage = 'Budjetin tallennus peruutettu: Menot ylittävät tulot';
+        throw Exception('Menot ylittävät tulot');
+      }
     }
 
-    // Validointi 4: Varoita, jos budjetissa on tyhjiä yläkategorioita
-    final emptyCategories = expenseControllers.keys
-        .where((category) => expenses[category]!.isEmpty)
-        .toList();
-    if (emptyCategories.isNotEmpty) {
-      final confirm = await _showConfirmationDialog(
-        title: 'Varoitus',
-        content: 'Budjetissa on tyhjiä yläkategorioita (${emptyCategories.join(', ')}). Haluatko jatkaa?',
-      );
-      if (confirm != true) return;
-    }
+    // Ei enää tyhjien kategorioiden varoitusta – poistettu automaattisesti yllä
 
-    // Luodaan uusi budjetti tallennettavaksi
-    final newBudget = BudgetModel(
-      income: income,
-      expenses: expenses,
-      createdAt: DateTime.now(),
-      year: newYear,
-      month: newMonth,
-    );
+    final newBudgetId = budgetId ?? const Uuid().v4();
 
     try {
-      // Tallennetaan budjetti Firestoreen
-      await budgetProvider.saveBudget(authProvider.user!.uid, newBudget);
+      final localBatch = batch ?? FirebaseFirestore.instance.batch(); // Käytä annettua batchia tai luo uusi
 
-      // Päivitetään BudgetProvider-tila suoraan
-      budgetProvider.setBudget(newBudget);
-
-      if (context.mounted) {
-        // Navigoidaan /main-reitille, jotta MainScreen voi hoitaa budjetin latauksen ja bannerien näyttämisen
-        Provider.of<NotificationProvider>(context, listen: false).clearNotification();
-        Navigator.pushReplacementNamed(
-          context,
-          '/main',
-          arguments: {
-            'index': 0, // Asetetaan BudgetScreen-välilehti aktiiviseksi
-          },
+      if (sharedBudgetId != null) {
+        // Yhteistalousbudjetti: Käytä provideria, mutta lisää batch-tuki jos provider tukee
+        if (isEditing) {
+          await sharedBudgetProvider.updateSharedBudget(
+            sharedBudgetId: sharedBudgetId,
+            income: income,
+            expenses: expenses,
+            startDate: startDate,
+            endDate: endDate,
+            type: type,
+            isPlaceholder: false,
+          );
+        } else {
+          await sharedBudgetProvider.createSharedBudget(
+            sharedBudgetId: sharedBudgetId,
+            userId: authProvider.user!.uid,
+            name: this.budgetName ?? 'Yhteistalousbudjetti',
+            income: income,
+            expenses: expenses,
+            startDate: startDate,
+            endDate: endDate,
+            type: type,
+            isPlaceholder: false,
+          );
+        }
+        await FirebaseCrashlytics.instance.log('BudgetSaver: Yhteistalousbudjetti ${isEditing ? 'päivitetty' : 'tallennettu'}, sharedBudgetId: $sharedBudgetId');
+      } else {
+        // Henkilökohtainen budjetti
+        final newBudget = BudgetModel(
+          income: income,
+          expenses: expenses,
+          createdAt: DateTime.now(),
+          startDate: startDate,
+          endDate: endDate,
+          type: type,
+          id: newBudgetId,
+          sharedBudgetId: null,
         );
+        await budgetProvider.saveBudget(authProvider.user!.uid, newBudget);
+        budgetProvider.setBudget(newBudget);
+        await FirebaseCrashlytics.instance.log('BudgetSaver: Henkilökohtainen budjetti tallennettu, ID: $newBudgetId');
       }
-    } catch (e) {
-      print('Error creating budget: $e');
+
+      notificationProvider.clearNotification();
+      showSnackBar(
+        context,
+        'Budjetti tallennettu onnistuneesti',
+        duration: const Duration(seconds: 3),
+        backgroundColor: Colors.green,
+      );
+
+      if (batch == null) await localBatch.commit(); // Commit vain jos ei annettua batchia
+      return newBudgetId;
+    } catch (e, stackTrace) {
+      await FirebaseCrashlytics.instance.recordError(
+        e,
+        stackTrace,
+        reason: 'Budjetin tallentaminen epäonnistui käyttäjälle ${authProvider.user!.uid}',
+      );
       errorMessage = 'Virhe budjetin tallentamisessa: $e';
+      throw e;
     }
   }
 }

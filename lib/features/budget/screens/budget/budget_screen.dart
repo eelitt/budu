@@ -1,19 +1,26 @@
 import 'package:budu/features/auth/providers/auth_provider.dart';
 import 'package:budu/features/budget/models/budget_model.dart';
 import 'package:budu/features/budget/providers/budget_provider.dart';
+import 'package:budu/features/budget/providers/shared_budget_provider.dart';
 import 'package:budu/features/budget/screens/budget/controllers/budget_screen_controller.dart';
+import 'package:budu/features/budget/screens/budget/controllers/shared_budget_screen_controller.dart';
 import 'package:budu/features/budget/screens/budget/income_section.dart';
 import 'package:budu/features/budget/screens/budget/widgets/add_category.dart';
 import 'package:budu/features/budget/screens/budget/widgets/budget_month_selector.dart';
-import 'package:budu/features/budget/screens/budget/widgets/category_list_wrapper.dart';
 import 'package:budu/features/budget/screens/budget/widgets/budget_confirmation_dialogs.dart';
+import 'package:budu/features/budget/screens/budget/widgets/category_list_wrapper.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:firebase_crashlytics/firebase_crashlytics.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// Budjettinäkymä, joka näyttää budjetin tiedot, tulot ja kategoriat.
-/// Delegoi budjetin tilan hallinnan BudgetScreenController:ille ja keskittyy käyttöliittymän renderöintiin.
+/// Delegoi budjetin tilan hallinnan BudgetScreenController:ille ja SharedBudgetScreenController:ille.
+/// Näyttää toggle-painikkeen vain, jos yhteistalousbudjetteja on saatavilla.
+/// Tallentaa toggle-painikkeen valinnan (isSharedBudget) SharedPreferences:iin.
+/// Näyttää BudgetMonthSelector:n sekä henkilökohtaisille että yhteistalousbudjeteille.
 class BudgetScreen extends StatefulWidget {
-  final VoidCallback? onBudgetDeleted; // Callback budjetin poiston jälkeen
+  final VoidCallback? onBudgetDeleted;
   const BudgetScreen({super.key, this.onBudgetDeleted});
 
   @override
@@ -21,56 +28,133 @@ class BudgetScreen extends StatefulWidget {
 }
 
 class _BudgetScreenState extends State<BudgetScreen> {
-  late BudgetScreenController _controller; // Budjetin hallintaan käytettävä kontrolleri
-BudgetModel? _lastBudget; // Seurataan budjetin tilaa
+  late BudgetScreenController _personalController;
+  late SharedBudgetScreenController _sharedController;
+  bool _isSharedBudget = false;
+  BudgetModel? _selectedSharedBudget;
+  bool _isLoadingBudgets = true;
+  bool _hasSharedBudgets = false;
+  bool _isLoadingSharedBudget = false; // Seuraa yhteistalousbudjetin lataustilaa
 
   @override
   void initState() {
     super.initState();
-    _controller = BudgetScreenController(
+    // Alustetaan kontrollerit henkilökohtaisille ja yhteistalousbudjeteille
+    _personalController = BudgetScreenController(
       context: context,
       onStateChanged: () {
-        // Varmistetaan, että widget on vielä kiinnitetty ennen tilan päivitystä
-        if (mounted) {
-          setState(() {});
-        }
+        if (mounted) setState(() {});
       },
-      onBudgetDeleted: widget.onBudgetDeleted, // Välitetään callback kontrollerille
+      onBudgetDeleted: widget.onBudgetDeleted,
     );
+    _sharedController = SharedBudgetScreenController(
+      context: context,
+      onStateChanged: () {
+        if (mounted) setState(() {});
+      },
+      onBudgetDeleted: widget.onBudgetDeleted,
+    );
+    // Ladataan budjetit ja toggle-painikkeen valinta build-vaiheen jälkeen
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadPreferencesAndBudgets();
+    });
+  }
+
+  /// Lataa SharedPreferences:stä toggle-painikkeen valinnan ja budjetit
+  Future<void> _loadPreferencesAndBudgets() async {
+    final prefs = await SharedPreferences.getInstance();
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    final sharedBudgetProvider = Provider.of<SharedBudgetProvider>(context, listen: false);
+
+    try {
+      // Lue isSharedBudget SharedPreferences:stä, oletusarvo false
+      final savedIsSharedBudget = prefs.getBool('isSharedBudget') ?? false;
+
+      // Lataa budjetit
+      await sharedBudgetProvider.fetchSharedBudgets(authProvider.user!.uid);
+      if (mounted) {
+        setState(() {
+          _isLoadingBudgets = false;
+          _hasSharedBudgets = sharedBudgetProvider.sharedBudgets.isNotEmpty;
+          // Aseta _isSharedBudget vain, jos yhteistalousbudjetteja on
+          _isSharedBudget = _hasSharedBudgets && savedIsSharedBudget;
+          if (_hasSharedBudgets) {
+            _selectedSharedBudget = sharedBudgetProvider.sharedBudgets.first;
+            // Ladataan yhteistalousbudjetti, jos valittuna
+            if (_isSharedBudget && _selectedSharedBudget != null) {
+              _isLoadingSharedBudget = true;
+              _sharedController.loadBudget(
+                userId: authProvider.user!.uid,
+                sharedBudgetId: _selectedSharedBudget!.id.toString(),
+              ).then((_) {
+                if (mounted) {
+                  setState(() {
+                    _isLoadingSharedBudget = false;
+                  });
+                }
+              });
+            }
+          }
+        });
+      }
+    } catch (e, stackTrace) {
+      await FirebaseCrashlytics.instance.recordError(
+        e,
+        stackTrace,
+        reason: 'Failed to load shared budgets or preferences',
+      );
+      if (mounted) {
+        setState(() {
+          _isLoadingBudgets = false;
+        });
+      }
+    }
+  }
+
+  /// Tallentaa toggle-painikkeen valinnan SharedPreferences:iin
+  Future<void> _saveBudgetPreference(bool isSharedBudget) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('isSharedBudget', isSharedBudget);
   }
 
   @override
   void dispose() {
-    // Vapautetaan kontrollerin resurssit ja perutaan asynkroniset operaatiot
-    _controller.dispose();
+    _personalController.dispose();
+    _sharedController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    // Odota, että BudgetScreenController on alustettu ennen FutureBuilderin suorittamista
-    if (!_controller.isInitialized) {
+    if (_isLoadingBudgets || !_personalController.isInitialized || _isLoadingSharedBudget || _sharedController.isLoadingBudget) {
       return const Center(child: CircularProgressIndicator());
     }
 
-    return FutureBuilder<void>(
-      future: null, // loadAvailableMonths suoritetaan jo _initializeBudget-metodissa
-      builder: (context, snapshot) {
-        if (_controller.isLoadingBudget) {
-          return const Center(child: CircularProgressIndicator());
+    return Consumer2<BudgetProvider, SharedBudgetProvider>(
+      builder: (context, budgetProvider, sharedBudgetProvider, child) {
+        // Päivitä _selectedSharedBudget uusimmalla versiolla _sharedBudgets-listasta
+        if (_isSharedBudget && _selectedSharedBudget != null) {
+          final newSelectedBudget = sharedBudgetProvider.sharedBudgets.firstWhere(
+            (budget) => budget.id == _selectedSharedBudget!.id,
+            orElse: () => _selectedSharedBudget!,
+          );
+          // Aina päivitä, jos objekti on eri (uusi instanssi expenses-muutoksella)
+          if (newSelectedBudget != _selectedSharedBudget) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              setState(() {
+                _selectedSharedBudget = newSelectedBudget;
+              });
+            });
+          }
         }
 
-        return Consumer<BudgetProvider>(
-          builder: (context, budgetProvider, child) {
-            // Päivitetään _lastBudget budjetin tilan seurantaan
-            if (_lastBudget != budgetProvider.budget) {
-              _lastBudget = budgetProvider.budget;
-              // Ei suoriteta budjetin latausta täällä, koska BudgetScreenController hoitaa sen
-            }
-            final budget = budgetProvider.budget;
+        return StreamBuilder<BudgetModel?>(
+          stream: _sharedController.selectedBudget,
+          builder: (context, snapshot) {
+            final budget = _isSharedBudget ? snapshot.data : budgetProvider.budget;
 
             if (budget == null) {
-              if (_controller.availableMonths.isEmpty) {
+              if (_personalController.availableBudgets.isEmpty && !_hasSharedBudgets) {
                 return const Center(child: Text('Luo budjetti ensin!'));
               } else {
                 return const Center(child: CircularProgressIndicator());
@@ -85,6 +169,59 @@ BudgetModel? _lastBudget; // Seurataan budjetin tilaa
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      // Näytä toggle-painike vain, jos yhteistalousbudjetteja on
+                      if (_hasSharedBudgets) ...[
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              'Henkilökohtainen',
+                              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                                    fontSize: 16,
+                                    fontWeight: _isSharedBudget ? FontWeight.normal : FontWeight.bold,
+                                  ),
+                            ),
+                            Switch(
+                              value: _isSharedBudget,
+                              onChanged: (value) async {
+                                WidgetsBinding.instance.addPostFrameCallback((_) async {
+                                  setState(() {
+                                    _isSharedBudget = value;
+                                    if (value && _selectedSharedBudget != null) {
+                                      _isLoadingSharedBudget = true;
+                                    }
+                                  });
+                                  // Tallenna toggle-painikkeen valinta
+                                  await _saveBudgetPreference(value);
+                                  // Ladataan yhteistalousbudjetti, jos valittu
+                                  if (value && _selectedSharedBudget != null) {
+                                    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+                                    await _sharedController.loadBudget(
+                                      userId: authProvider.user!.uid,
+                                      sharedBudgetId: _selectedSharedBudget!.id.toString(),
+                                    );
+                                    if (mounted) {
+                                      setState(() {
+                                        _isLoadingSharedBudget = false;
+                                      });
+                                    }
+                                  }
+                                });
+                              },
+                              activeColor: Colors.blueGrey[700],
+                              inactiveThumbColor: Colors.blueGrey[300],
+                            ),
+                            Text(
+                              'Yhteistalous',
+                              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                                    fontSize: 16,
+                                    fontWeight: _isSharedBudget ? FontWeight.bold : FontWeight.normal,
+                                  ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                      ],
                       Container(
                         width: double.infinity,
                         decoration: BoxDecoration(
@@ -92,7 +229,7 @@ BudgetModel? _lastBudget; // Seurataan budjetin tilaa
                           borderRadius: BorderRadius.circular(12),
                           boxShadow: [
                             BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.15),
+                              color: Colors.black.withOpacity(0.15),
                               blurRadius: 8,
                               offset: const Offset(0, 4),
                             ),
@@ -111,27 +248,46 @@ BudgetModel? _lastBudget; // Seurataan budjetin tilaa
                                 ),
                                 const SizedBox(width: 12),
                                 Text(
-                                  'Muokkaa budjettia',
+                                  _isSharedBudget ? 'Muokkaa yhteistalousbudjettia' : 'Muokkaa budjettia',
                                   style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                                        fontSize: 18,
+                                        fontSize: _isSharedBudget ? 15 : 18,
                                         fontWeight: FontWeight.w800,
                                         color: Colors.black87,
                                       ),
+                                      maxLines: _isSharedBudget ? 2 : 1,
                                 ),
                               ],
                             ),
                             const SizedBox(height: 12),
                             BudgetMonthSelector(
-                              availableMonths: _controller.availableMonths,
-                              selectedMonth: _controller.selectedMonth.value,
-                              onMonthSelected: (value) async {
+                              isSharedBudget: _isSharedBudget,
+                              availableBudgets: _personalController.availableBudgets,
+                              availableSharedBudgets: sharedBudgetProvider.sharedBudgets,
+                              selectedBudget: budgetProvider.budget,
+                              selectedSharedBudget: _selectedSharedBudget ?? sharedBudgetProvider.sharedBudgets.firstOrNull, // Null-tarkistus: Käytä ensimmäistä saatavilla olevaa, jos null
+                              onBudgetSelected: (value) async {
                                 if (value != null) {
                                   final authProvider = Provider.of<AuthProvider>(context, listen: false);
-                                  await _controller.loadBudget(
-                                    userId: authProvider.user!.uid,
-                                    year: value['year']!,
-                                    month: value['month']!,
-                                  );
+                                  if (_isSharedBudget && value is BudgetModel) {
+                                    setState(() {
+                                      _isLoadingSharedBudget = true;
+                                      _selectedSharedBudget = value;
+                                    });
+                                    await _sharedController.loadBudget(
+                                      userId: authProvider.user!.uid,
+                                      sharedBudgetId: value.id.toString(),
+                                    );
+                                    if (mounted) {
+                                      setState(() {
+                                        _isLoadingSharedBudget = false;
+                                      });
+                                    }
+                                  } else if (!_isSharedBudget && value is BudgetModel) {
+                                    await _personalController.loadBudget(
+                                      userId: authProvider.user!.uid,
+                                      budgetId: value.id!,
+                                    );
+                                  }
                                 }
                               },
                             ),
@@ -150,11 +306,17 @@ BudgetModel? _lastBudget; // Seurataan budjetin tilaa
                                   final confirmed = await showResetConfirmationDialog(context);
                                   if (confirmed) {
                                     final authProvider = Provider.of<AuthProvider>(context, listen: false);
-                                    await _controller.resetBudgetExpenses(
-                                      userId: authProvider.user!.uid,
-                                      year: _controller.currentYear.value,
-                                      month: _controller.currentMonth.value,
-                                    );
+                                    if (_isSharedBudget) {
+                                      await _sharedController.resetBudgetExpenses(
+                                        userId: authProvider.user!.uid,
+                                        sharedBudgetId: _selectedSharedBudget?.id.toString() ?? '', // Null-tarkistus: Tyhjä string, jos null (virheenkäsittely)
+                                      );
+                                    } else {
+                                      await _personalController.resetBudgetExpenses(
+                                        userId: authProvider.user!.uid,
+                                        budgetId: budget.id!,
+                                      );
+                                    }
                                   }
                                 },
                                 style: ElevatedButton.styleFrom(
@@ -184,18 +346,44 @@ BudgetModel? _lastBudget; // Seurataan budjetin tilaa
                                 onPressed: () async {
                                   final confirmed = await showDeleteConfirmationDialog(
                                     context: context,
-                                    isLastBudget: _controller.availableMonths.length == 1,
-                                    customMessage: _controller.availableMonths.length == 1
-                                        ? 'Haluatko varmasti poistaa budjetin?\nKaikki siihen liittyvät tapahtumat poistetaan.\nKoska tämä on ainoa budjettisi, sinut ohjataan luomaan uusi.'
+                                    isLastBudget: _isSharedBudget
+                                        ? _hasSharedBudgets && sharedBudgetProvider.sharedBudgets.length == 1
+                                        : _personalController.availableBudgets.length == 1,
+                                    customMessage: _isSharedBudget
+                                        ? 'Haluatko varmasti poistaa yhteistalousbudjetin? Kaikki siihen liittyvät tapahtumat poistetaan.'
                                         : 'Haluatko varmasti poistaa tämän budjetin? Budjetin tulo- ja menotapahtumat poistetaan samalla.',
                                   );
                                   if (confirmed) {
                                     final authProvider = Provider.of<AuthProvider>(context, listen: false);
-                                    await _controller.deleteBudget(
-                                      userId: authProvider.user!.uid,
-                                      year: _controller.currentYear.value,
-                                      month: _controller.currentMonth.value,
-                                    );
+                                    if (_isSharedBudget) {
+                                      await _sharedController.deleteBudget(
+                                        userId: authProvider.user!.uid,
+                                        sharedBudgetId: _selectedSharedBudget?.id.toString() ?? '', // Null-tarkistus: Tyhjä string, jos null (virheenkäsittely)
+                                      );
+                                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                                        setState(() {
+                                          _hasSharedBudgets = sharedBudgetProvider.sharedBudgets.isNotEmpty;
+                                          if (!_hasSharedBudgets) {
+                                            _isSharedBudget = false;
+                                            _selectedSharedBudget = null;
+                                            // Nollataan isSharedBudget SharedPreferences:ssä
+                                            _saveBudgetPreference(false);
+                                          } else {
+                                            // Valitse ensimmäinen jäljellä oleva yhteistalousbudjetti
+                                            _selectedSharedBudget = sharedBudgetProvider.sharedBudgets.first;
+                                            _sharedController.loadBudget(
+                                              userId: authProvider.user!.uid,
+                                              sharedBudgetId: _selectedSharedBudget!.id.toString(),
+                                            );
+                                          }
+                                        });
+                                      });
+                                    } else {
+                                      await _personalController.deleteBudget(
+                                        userId: authProvider.user!.uid,
+                                        budgetId: budget.id!,
+                                      );
+                                    }
                                   }
                                 },
                                 style: ElevatedButton.styleFrom(
@@ -225,7 +413,10 @@ BudgetModel? _lastBudget; // Seurataan budjetin tilaa
                         ],
                       ),
                       const SizedBox(height: 16),
-                      const IncomeSection(),
+                      IncomeSection(
+                        isSharedBudget: _isSharedBudget,
+                        selectedSharedBudget: _selectedSharedBudget,
+                      ),
                       const SizedBox(height: 16),
                       Container(
                         decoration: BoxDecoration(
@@ -233,7 +424,7 @@ BudgetModel? _lastBudget; // Seurataan budjetin tilaa
                           borderRadius: BorderRadius.circular(12),
                           boxShadow: [
                             BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.15),
+                              color: Colors.black.withOpacity(0.15),
                               blurRadius: 8,
                               offset: const Offset(0, 4),
                             ),
@@ -254,11 +445,28 @@ BudgetModel? _lastBudget; // Seurataan budjetin tilaa
                                         color: Colors.black87,
                                       ),
                                 ),
-                                const AddCategory(),
+                                AddCategory(
+                                  isSharedBudget: _isSharedBudget,
+                                  selectedSharedBudget: _selectedSharedBudget,
+                                  sharedController: _sharedController,
+                                ),
                               ],
                             ),
                             const SizedBox(height: 8),
-                            CategoryListWrapper(budget: budget),
+                            CategoryListWrapper(
+                              isSharedBudget: _isSharedBudget,
+                              budget: budget,
+                              sharedBudget: _selectedSharedBudget ?? BudgetModel( // Null-tarkistus: Luo tyhjä oletus-BudgetModel, jos null (virheenkäsittely)
+                                income: 0.0,
+                                expenses: {},
+                                createdAt: DateTime.now(),
+                                startDate: DateTime.now(),
+                                endDate: DateTime.now(),
+                                type: 'custom',
+                                isPlaceholder: true,
+                              ),
+                              sharedController: _sharedController,
+                            ),
                           ],
                         ),
                       ),

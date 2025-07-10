@@ -1,22 +1,35 @@
-import 'package:budu/core/utils.dart';
+import 'package:budu/features/budget/models/budget_model.dart';
 import 'package:budu/features/budget/providers/budget_provider.dart';
 import 'package:budu/features/budget/screens/budget/controllers/budget_category_controller.dart';
+import 'package:budu/features/budget/screens/budget/controllers/shared_budget_screen_controller.dart';
 import 'package:budu/features/budget/screens/budget/utils/category_icon_utils.dart';
 import 'package:budu/features/budget/screens/budget/utils/delete_dialog_state_manager.dart';
 import 'package:budu/features/budget/screens/budget/utils/expansion_state_manager.dart';
 import 'package:budu/features/budget/screens/budget/widgets/add_subcategory_form.dart';
 import 'package:budu/features/budget/screens/budget/widgets/budget_custom_category_tile.dart';
-import 'package:budu/features/budget/screens/budget/widgets/budget_sub_category_list.dart';
 import 'package:budu/features/budget/screens/budget/widgets/budget_confirmation_dialogs.dart';
+import 'package:budu/features/budget/screens/budget/widgets/budget_sub_category_list.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 /// Widget, joka näyttää budjettikategorian ja sen alakategoriat laajennettavassa muodossa.
 /// Mahdollistaa kategorian ja alakategorioiden hallinnan, kuten lisäämisen, muokkaamisen ja poistamisen.
+/// Tukee sekä henkilökohtaisia (BudgetProvider) että yhteistalousbudjetteja (SharedBudget).
 class BudgetCategorySection extends StatefulWidget {
   final String categoryName; // Kategorian nimi, joka näytetään ja jota hallitaan
+  final bool isSharedBudget; // Määrittää, onko budjetti yhteistalousbudjetti
+  final BudgetModel budget; // Budjetti (henkilökohtainen tai yhteistalous)
+  final BudgetModel sharedBudget; // Yhteistalousbudjetti, jos valittuna
+  final SharedBudgetScreenController sharedController; // Kontrolleri yhteistalousbudjetin tilan hallintaan
 
-  const BudgetCategorySection({super.key, required this.categoryName});
+  const BudgetCategorySection({
+    super.key,
+    required this.categoryName,
+    required this.isSharedBudget,
+    required this.budget,
+    required this.sharedBudget,
+    required this.sharedController,
+  });
 
   @override
   State<BudgetCategorySection> createState() => _BudgetCategorySectionState();
@@ -54,16 +67,15 @@ class _BudgetCategorySectionState extends State<BudgetCategorySection> {
     super.dispose();
   }
 
-  /// Aloittaa uuden alakategorian lisäämisen ja laajentaa kategorian ohjelmallisesti.
+  /// Aloittaa uuden alakategorian lisäämisen ja laajentaa kategorian ohjelmallisesti
   void _handleStartAdding() {
-    _controller.startAdding(context, widget.categoryName);
+    _controller.startAdding(context, widget.categoryName, widget.isSharedBudget, widget.sharedBudget);
     _expansionStateManager.expandProgrammatically();
   }
 
-  /// Aloittaa olemassa olevan alakategorian muokkauksen ja laajentaa kategorian ohjelmallisesti.
-  /// [subcategory] on muokattavan alakategorian nimi.
+  /// Aloittaa olemassa olevan alakategorian muokkauksen ja laajentaa kategorian ohjelmallisesti
   void _handleStartEditing(String subcategory, BuildContext context) {
-    _controller.startEditing(subcategory, context);
+    _controller.startEditing(subcategory, context, widget.isSharedBudget, widget.sharedBudget);
     _expansionStateManager.expandProgrammatically();
   }
 
@@ -74,9 +86,8 @@ class _BudgetCategorySectionState extends State<BudgetCategorySection> {
       value: _controller,
       child: Consumer2<BudgetCategoryController, BudgetProvider>(
         builder: (context, controller, budgetProvider, child) {
-          final budget = budgetProvider.budget;
-          // Haetaan kategorian menot budjetista, oletusarvoisesti tyhjä Map
-          final expenses = budget?.expenses[widget.categoryName] ?? {};
+          // Haetaan kategorian menot budjettityypin perusteella
+          final expenses = widget.budget?.expenses[widget.categoryName] ?? {};
           final Map<String, double> displayedExpenses = {};
           // Muunnetaan menot näyttömuotoon: 'default'-alakategoria korvataan kategorian nimellä
           expenses.forEach((subcategory, value) {
@@ -191,11 +202,12 @@ class _BudgetCategorySectionState extends State<BudgetCategorySection> {
                                 final shouldShowDialog = await _deleteDialogStateManager.shouldShowDeleteDialog();
                                 if (!shouldShowDialog) {
                                   // Poistetaan kategoria suoraan, jos dialogia ei näytetä
-                                  await controller.deleteCategory(context, widget.categoryName);
-                                  showSnackBar(
+                                  await controller.deleteCategory(
                                     context,
-                                    'Kategoria "${widget.categoryName}" poistettu onnistuneesti!',
-                                    duration: const Duration(seconds: 2),
+                                    widget.categoryName,
+                                    widget.isSharedBudget,
+                                    widget.sharedBudget,
+                                    widget.sharedController,
                                   );
                                   return;
                                 }
@@ -212,12 +224,13 @@ class _BudgetCategorySectionState extends State<BudgetCategorySection> {
 
                                 if (result == true) {
                                   // Poistetaan kategoria, jos käyttäjä vahvistaa
-                                  await controller.deleteCategory(context, widget.categoryName);
-                                  showSnackBar(
+                                  await controller.deleteCategory(
                                     context,
-                                    'Kategoria "${widget.categoryName}" poistettu onnistuneesti!',
-                                    duration: const Duration(seconds: 2),
-                                  );
+                                    widget.categoryName,
+                                    widget.isSharedBudget,
+                                    widget.sharedBudget,
+                                    widget.sharedController,
+                                  );                                
                                 }
                               },
                               tooltip: 'Poista kategoria',
@@ -240,8 +253,17 @@ class _BudgetCategorySectionState extends State<BudgetCategorySection> {
                     child: AddSubcategoryForm(
                       controller: controller.subcategoryController,
                       errorMessage: controller.errorMessage,
-                      onAdd: () => controller.addSubcategory(context, widget.categoryName),
+                      onAdd: () => controller.addSubcategory(
+                        context,
+                        widget.categoryName,
+                        widget.isSharedBudget,
+                        widget.sharedBudget,
+                        sharedController: widget.sharedController,
+                      ),
                       onCancel: controller.cancelAdding,
+                      isSharedBudget: widget.isSharedBudget,
+                      sharedBudget: widget.sharedBudget,
+                      categoryName: widget.categoryName,
                     ),
                   ),
                 // Näytetään alakategorioiden lista ja muokkausmahdollisuudet
@@ -258,8 +280,18 @@ class _BudgetCategorySectionState extends State<BudgetCategorySection> {
                   service: controller,
                   onCancelEditing: controller.cancelEditing,
                   onStartEditing: _handleStartEditing,
-                  onUpdateSubcategory: (oldSubcategory) =>
-                      controller.updateSubcategory(context, widget.categoryName, oldSubcategory),
+                  onUpdateSubcategory: (oldSubcategory) => controller.updateSubcategory(
+                    context,
+                    widget.categoryName,
+                    oldSubcategory,
+                    widget.isSharedBudget,
+                    widget.sharedBudget,
+                    sharedController: widget.sharedController,
+                  ),
+                  isSharedBudget: widget.isSharedBudget,
+                  sharedBudget: widget.sharedBudget,
+                  budget: widget.budget,
+                  sharedController: widget.sharedController,
                 ),
               ],
             ),

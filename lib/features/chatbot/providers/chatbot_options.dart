@@ -9,6 +9,9 @@ class ChatbotOptions {
 
   List<String> getOptionsForStep() {
     if (step < questions.length) {
+      if (questions[step] == "Haluatko luoda kuukausibudjetin vai 2 viikon budjetin?") {
+        return ["Kuukausi", "2 viikkoa"];
+      }
       if (questions[step] == "Maksatko muita kuukausittaisia velkoja autorahoituksen ja asuntolainan lisäksi?" ||
           questions[step] == "Maksatko asuntolainan lisäksi muita velkoja?" ||
           questions[step] == "Maksatko muita kuukausittaisia velkoja autorahoituksen lisäksi?" ||

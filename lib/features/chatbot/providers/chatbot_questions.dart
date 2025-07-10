@@ -1,4 +1,5 @@
 class ChatbotQuestions {
+  final String? budgetType; // monthly, biweekly
   final String? housingType;
   final String? carOwnership;
   final bool rentsParkingSpace;
@@ -11,6 +12,7 @@ class ChatbotQuestions {
   final Map<String, Map<String, double>> expenses;
 
   ChatbotQuestions({
+    required this.budgetType,
     required this.housingType,
     required this.carOwnership,
     required this.rentsParkingSpace,
@@ -25,38 +27,39 @@ class ChatbotQuestions {
 
   List<String> getQuestions() {
     List<String> questions = [
-      "Paljonko saat tuloja kuukaudessa (esim. palkka, tuet, pääomatulot)?",
+      "Haluatko luoda kuukausibudjetin vai 2 viikon budjetin?",
+      "Paljonko saat tuloja ${budgetType == 'monthly' ? 'kuukaudessa' : '2 viikon jaksolla'} (esim. palkka, tuet, pääomatulot)?",
       "Mikä seuraavista kuvaa parhaiten asumistasi?",
     ];
 
     // Kysymykset asumistilanteen mukaan
     if (housingType == "Vuokra-asunto") {
       questions.addAll([
-        "Paljonko maksat vuokraa kuukaudessa?",
-        "Paljonko maksat vesimaksua kuukaudessa (jos sisältyy vuokraan, syötä 0)?",
+        "Paljonko maksat vuokraa ${budgetType == 'monthly' ? 'kuukaudessa' : '2 viikon jaksolla'}?",
+        "Paljonko maksat vesimaksua ${budgetType == 'monthly' ? 'kuukaudessa' : '2 viikon jaksolla'} (jos sisältyy vuokraan, syötä 0)?",
         "Paljonko kotivakuutuksesi maksaa vuodessa?",
       ]);
     } else if (housingType == "Omistusasunto omakotitalossa") {
       questions.addAll([
-        "Paljonko maksat asuntolainaa kuukaudessa? (jos ei lainaa, syötä 0)?",
+        "Paljonko maksat asuntolainaa ${budgetType == 'monthly' ? 'kuukaudessa' : '2 viikon jaksolla'}? (jos ei lainaa, syötä 0)?",
         "Paljonko kiinteistöverosi on vuodessa?",
-        "Paljonko maksat jätehuollosta (Esim. Roskien tyhjennys) kuukaudessa?",
+        "Paljonko maksat jätehuollosta (esim. roskien tyhjennys) ${budgetType == 'monthly' ? 'kuukaudessa' : '2 viikon jaksolla'}?",
         "Paljonko kotivakuutuksesi maksaa vuodessa?",
-        "Paljonko maksat vesimaksua kuukaudessa (vesi + jätevesi)?",
+        "Paljonko maksat vesimaksua ${budgetType == 'monthly' ? 'kuukaudessa' : '2 viikon jaksolla'} (vesi + jätevesi)?",
       ]);
     } else if (housingType == "Omistusasunto kerros-/rivitalossa (esim. yhtiövastiketta maksava)") {
       questions.addAll([
-        "Paljonko maksat yhtiövastiketta kuukaudessa?",
-        "Paljonko maksat vesimaksua kuukaudessa (jos sisältyy vastikkeeseen, syötä 0)?",
+        "Paljonko maksat yhtiövastiketta ${budgetType == 'monthly' ? 'kuukaudessa' : '2 viikon jaksolla'}?",
+        "Paljonko maksat vesimaksua ${budgetType == 'monthly' ? 'kuukaudessa' : '2 viikon jaksolla'} (jos sisältyy vastikkeeseen, syötä 0)?",
         "Paljonko kotivakuutuksesi maksaa vuodessa?",
       ]);
     }
 
     // Yleiset laskut
     questions.addAll([
-      "Paljonko maksat sähkölaskua kuukaudessa?",
-      "Paljonko maksat puhelinlaskua kuukaudessa?",
-      "Paljonko maksat nettiliittymästä kuukaudessa (Syötä 0, jos ei ole nettiliittymää)?",
+      "Paljonko maksat sähkölaskua ${budgetType == 'monthly' ? 'kuukaudessa' : '2 viikon jaksolla'}?",
+      "Paljonko maksat puhelinlaskua ${budgetType == 'monthly' ? 'kuukaudessa' : '2 viikon jaksolla'}?",
+      "Paljonko maksat nettiliittymästä ${budgetType == 'monthly' ? 'kuukaudessa' : '2 viikon jaksolla'} (syötä 0, jos ei ole nettiliittymää)?",
     ]);
 
     // Autokysymykset
@@ -64,36 +67,35 @@ class ChatbotQuestions {
     if (carOwnership == "Kyllä") {
       questions.add("Onko autosi oma vai maksatko siitä rahoitusta?");
       if (hasCarLoan) {
-        questions.add("Paljonko maksat auton rahoitusta kuukaudessa?");
+        questions.add("Paljonko maksat auton rahoitusta ${budgetType == 'monthly' ? 'kuukaudessa' : '2 viikon jaksolla'}?");
       }
-      // Lisätään autopaikan vuokrauskysymys, jos asuu vuokralla
       if (housingType == "Vuokra-asunto") {
         questions.add("Vuokraatko autopaikkaa?");
         if (rentsParkingSpace) {
-          questions.add("Paljonko maksat autopaikasta kuukaudessa?");
+          questions.add("Paljonko maksat autopaikasta ${budgetType == 'monthly' ? 'kuukaudessa' : '2 viikon jaksolla'}?");
         }
       }
       questions.addAll([
-        "Paljonko auton polttoainekulut ovat kuukaudessa?",
+        "Paljonko auton polttoainekulut ovat ${budgetType == 'monthly' ? 'kuukaudessa' : '2 viikon jaksolla'}?",
         "Paljonko auton vakuutukset maksavat vuodessa?",
         "Paljonko maksat käyttövoima- ja ajoneuvoveroa vuodessa?",
-        "Paljonko maksat autosta muita kuluja vuodessa (Esim. Renkaiden säilytys, huolto (Suomessa huolto keskim. 600-1000€/vuosi))?",
+        "Paljonko maksat autosta muita kuluja vuodessa (esim. renkaiden säilytys, huolto, keskim. 600-1000 €/vuosi)?",
       ]);
     }
 
     // Ruoka
-    questions.add("Paljonko varaat ruokaan kuukaudessa?");
+    questions.add("Paljonko varaat ruokaan ${budgetType == 'monthly' ? 'kuukaudessa' : '2 viikon jaksolla'}?");
 
     // Terveys
-    questions.add("Paljonko käytät rahaa terveyteen liittyviin kuluihin kuukaudessa (Lääkkeet, lääkärikäynnit)?");
+    questions.add("Paljonko käytät rahaa terveyteen liittyviin kuluihin ${budgetType == 'monthly' ? 'kuukaudessa' : '2 viikon jaksolla'} (lääkkeet, lääkärikäynnit)?");
 
     // Hygienia
-    questions.add("Paljonko käytät rahaa hygieniaan liittyviin kuluihin kuukaudessa (Kosmetiikka, Siivous- ja wc-tarvikkeet)?");
+    questions.add("Paljonko käytät rahaa hygieniaan liittyviin kuluihin ${budgetType == 'monthly' ? 'kuukaudessa' : '2 viikon jaksolla'} (kosmetiikka, siivous- ja wc-tarvikkeet)?");
 
     // Sijoittaminen ja säästäminen
     questions.addAll([
-      "Paljonko varaat sijoittamiseen kuukaudessa (esim. osakkeet, rahastot, kryptovaluutat)?",
-      "Paljonko varaat säästämiseen kuukaudessa (esim. pahanpäivän kassa, lomareissut)?",
+      "Paljonko varaat sijoittamiseen ${budgetType == 'monthly' ? 'kuukaudessa' : '2 viikon jaksolla'} (esim. osakkeet, rahastot, kryptovaluutat)?",
+      "Paljonko varaat säästämiseen ${budgetType == 'monthly' ? 'kuukaudessa' : '2 viikon jaksolla'} (esim. pahan päivän kassa, lomareissut)?",
     ]);
 
     // Velat
@@ -119,22 +121,22 @@ class ChatbotQuestions {
       }
     }
     if (hasOtherDebts) {
-      questions.add("Paljonko maksat velkaa kuukaudessa?");
+      questions.add("Paljonko maksat velkaa ${budgetType == 'monthly' ? 'kuukaudessa' : '2 viikon jaksolla'}?");
     }
 
     // Harrastukset
-    questions.add("Paljonko varaat harrastuksiin kuukaudessa (esim. kuntosali, välineet, tapahtumat)?");
+    questions.add("Paljonko varaat harrastuksiin ${budgetType == 'monthly' ? 'kuukaudessa' : '2 viikon jaksolla'} (esim. kuntosali, välineet, tapahtumat)?");
 
     // Viihde
     questions.addAll([
-      "Paljonko käytät rahaa suoratoistopalveluihin kuukaudessa (esim. Spotify, Netflix)?",
-      "Paljonko käytät rahaa muuhun viihteeseen kuukaudessa (esim. pelit, elokuvat, lehdet, konsertit)?",
+      "Paljonko käytät rahaa suoratoistopalveluihin ${budgetType == 'monthly' ? 'kuukaudessa' : '2 viikon jaksolla'} (esim. Spotify, Netflix)?",
+      "Paljonko käytät rahaa muuhun viihteeseen ${budgetType == 'monthly' ? 'kuukaudessa' : '2 viikon jaksolla'} (esim. pelit, elokuvat, lehdet, konsertit)?",
     ]);
 
     // Lemmikit
     questions.add("Onko sinulla lemmikki/lemmikkejä?");
     if (hasPets) {
-      questions.add("Paljonko varaat lemmikkikuluihin kuukaudessa (Ruoka, tarvikkeet, Lääkärikäynnit)?");
+      questions.add("Paljonko varaat lemmikkikuluihin ${budgetType == 'monthly' ? 'kuukaudessa' : '2 viikon jaksolla'} (ruoka, tarvikkeet, lääkärikäynnit)?");
     }
 
     return questions;

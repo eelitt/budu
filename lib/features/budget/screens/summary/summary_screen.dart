@@ -1,4 +1,5 @@
 import 'package:budu/features/auth/providers/auth_provider.dart';
+import 'package:budu/features/budget/models/budget_model.dart';
 import 'package:budu/features/budget/providers/budget_provider.dart';
 import 'package:budu/features/budget/providers/expense_provider.dart';
 import 'package:budu/features/budget/screens/budget/widgets/budget_month_selector.dart';
@@ -20,19 +21,15 @@ class _SummaryScreenState extends State<SummaryScreen> {
   late Future<Map<String, dynamic>> _loadDataFuture;
   late BudgetProvider budgetProvider;
   late ExpenseProvider expenseProvider;
-  late int currentYear;
-  late int currentMonth;
-  List<Map<String, int>> availableMonths = [];
-  Map<String, int>? selectedMonth;
+  late BudgetModel? selectedBudget;
+  List<BudgetModel> availableBudgets = [];
 
   @override
   void initState() {
     super.initState();
-    final now = DateTime.now();
-    currentYear = now.year;
-    currentMonth = now.month;
     budgetProvider = Provider.of<BudgetProvider>(context, listen: false);
     expenseProvider = Provider.of<ExpenseProvider>(context, listen: false);
+    selectedBudget = null;
     _loadDataFuture = _loadInitialData();
   }
 
@@ -42,30 +39,28 @@ class _SummaryScreenState extends State<SummaryScreen> {
       throw Exception('Käyttäjä ei ole kirjautunut');
     }
 
-    // Ladataan saatavilla olevat budjettikuukaudet
-    availableMonths = await budgetProvider.getAvailableBudgetMonths(authProvider.user!.uid);
+    // Ladataan saatavilla olevat budjetit
+    availableBudgets = await budgetProvider.getAvailableBudgets(authProvider.user!.uid);
 
-    if (availableMonths.isNotEmpty) {
-      selectedMonth = availableMonths.first;
-      currentYear = selectedMonth!['year']!;
-      currentMonth = selectedMonth!['month']!;
-      // Ladataan budjetti ja kulutustiedot valitulle kuukaudelle
-      await budgetProvider.loadBudget(authProvider.user!.uid, currentYear, currentMonth);
-      await expenseProvider.loadExpenses(authProvider.user!.uid, currentYear, currentMonth);
+    if (availableBudgets.isNotEmpty) {
+      selectedBudget = availableBudgets.first;
+      // Ladataan budjetti ja kulutustiedot valitulle budjetille
+      await budgetProvider.loadBudget(authProvider.user!.uid, selectedBudget!.id!);
+      await expenseProvider.loadExpenses(authProvider.user!.uid, selectedBudget!.id!);
     }
 
     return {
-      'availableMonths': availableMonths,
-      'selectedMonth': selectedMonth,
+      'availableBudgets': availableBudgets,
+      'selectedBudget': selectedBudget,
     };
   }
 
   Future<void> _loadData() async {
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
-    if (authProvider.user != null) {
+    if (authProvider.user != null && selectedBudget != null) {
       await Future.wait([
-        budgetProvider.loadBudget(authProvider.user!.uid, currentYear, currentMonth),
-        expenseProvider.loadExpenses(authProvider.user!.uid, currentYear, currentMonth),
+        budgetProvider.loadBudget(authProvider.user!.uid, selectedBudget!.id!),
+        expenseProvider.loadExpenses(authProvider.user!.uid, selectedBudget!.id!),
       ]);
     }
   }
@@ -89,16 +84,17 @@ class _SummaryScreenState extends State<SummaryScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  if (availableMonths.isNotEmpty) ...[
+                  if (availableBudgets.isNotEmpty) ...[
                     BudgetMonthSelector(
-                      availableMonths: availableMonths,
-                      selectedMonth: selectedMonth,
-                      onMonthSelected: (value) async {
+                      isSharedBudget: false,
+                      availableBudgets: availableBudgets,
+                      availableSharedBudgets: [],
+                      selectedBudget: selectedBudget,
+                      selectedSharedBudget: selectedBudget!,
+                      onBudgetSelected: (value) async {
                         if (value != null) {
                           setState(() {
-                            selectedMonth = value;
-                            currentYear = value['year']!;
-                            currentMonth = value['month']!;
+                            selectedBudget = value;
                           });
                           await _loadData();
                         }
@@ -116,10 +112,12 @@ class _SummaryScreenState extends State<SummaryScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           SummarySection(
-                            selectedMonth: selectedMonth,
+                            selectedBudget: selectedBudget,
                           ),
                           const SizedBox(height: 24),
-                          BudgetTrackingSection(),
+                          BudgetTrackingSection(
+                            budget: budget,
+                          ),
                           const SizedBox(height: 24),
                           BudgetDistributionSection(),
                           const SizedBox(height: 24),

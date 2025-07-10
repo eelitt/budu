@@ -1,5 +1,8 @@
 import 'package:budu/features/auth/providers/auth_provider.dart';
+import 'package:budu/features/budget/models/budget_model.dart';
+import 'package:budu/features/budget/providers/budget_provider.dart';
 import 'package:budu/features/budget/screens/budget/controllers/budget_category_controller.dart';
+import 'package:budu/features/budget/screens/budget/controllers/shared_budget_screen_controller.dart';
 import 'package:budu/features/budget/screens/budget/widgets/budget_sub_category_dialogs.dart';
 import 'package:budu/features/budget/screens/budget/widgets/edit_subcategory_form.dart';
 import 'package:flutter/material.dart';
@@ -7,6 +10,7 @@ import 'package:provider/provider.dart';
 
 /// Widget, joka näyttää budjettikategorian alakategoriat listana.
 /// Mahdollistaa alakategorioiden muokkaamisen ja poistamisen, ja korostaa juuri lisätyt alakategoriat.
+/// Tukee sekä henkilökohtaisia (BudgetProvider) että yhteistalousbudjetteja (SharedBudget).
 class BudgetSubCategoryList extends StatelessWidget {
   final String categoryName; // Yläkategorian nimi, johon alakategoriat liittyvät
   final Map<String, double> displayedExpenses; // Alakategoriat ja niiden summat näyttömuodossa
@@ -21,6 +25,10 @@ class BudgetSubCategoryList extends StatelessWidget {
   final VoidCallback onCancelEditing; // Callback-funktio, jota kutsutaan, kun muokkaus peruutetaan
   final Function(String, BuildContext) onStartEditing; // Callback-funktio, jota kutsutaan, kun muokkaus aloitetaan
   final Function(String) onUpdateSubcategory; // Callback-funktio, jota kutsutaan, kun alakategoria päivitetään
+  final bool isSharedBudget; // Määrittää, onko budjetti yhteistalousbudjetti
+  final BudgetModel? sharedBudget; // Yhteistalousbudjetti, jos valittuna
+  final BudgetModel? budget; // Budjetti (henkilökohtainen tai yhteistalous)
+  final SharedBudgetScreenController sharedController; // Kontrolleri yhteistalousbudjetin tilan hallintaan
 
   const BudgetSubCategoryList({
     super.key,
@@ -37,6 +45,10 @@ class BudgetSubCategoryList extends StatelessWidget {
     required this.onCancelEditing,
     required this.onStartEditing,
     required this.onUpdateSubcategory,
+    required this.isSharedBudget,
+    this.sharedBudget,
+    this.budget,
+    required this.sharedController,
   });
 
   /// Muotoilee alakategorian nimen lisäämällä katkaisumerkin, jos nimi on pidempi kuin 13 merkkiä.
@@ -54,7 +66,8 @@ class BudgetSubCategoryList extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // Järjestetään alakategoriat aakkosjärjestykseen
-    final entries = displayedExpenses.entries.toList()..sort((a, b) => a.key.compareTo(b.key));
+    final expenses = budget?.expenses[categoryName] ?? displayedExpenses;
+    final entries = expenses.entries.toList()..sort((a, b) => a.key.compareTo(b.key));
 
     // Luodaan lista widgeteistä jokaiselle alakategorialle
     final List<Widget> subcategoryWidgets = entries.map((entry) {
@@ -90,15 +103,18 @@ class BudgetSubCategoryList extends StatelessWidget {
                       amountController: amountControllers[subcategory]!, // Summan ohjain muokkauslomakkeelle
                       onSave: () => onUpdateSubcategory(subcategory), // Päivitetään alakategoria
                       onCancel: onCancelEditing, // Peruutetaan muokkaus
+                      isSharedBudget: isSharedBudget,
+                      sharedBudget: sharedBudget,
+                      categoryName: categoryName,
                     )
                   : Padding(
                       padding: const EdgeInsets.only(left: 8.0, right: 4.0),
                       child: Text(
                         _formatSubcategoryName(subcategory), // Näyttää muotoillun alakategorian nimen
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: Colors.black54,
-                          fontSize: 14,
-                        ),
+                              color: Colors.black54,
+                              fontSize: 14,
+                            ),
                         softWrap: true, // Sallii tekstin rivittämisen
                       ),
                     ),
@@ -120,9 +136,9 @@ class BudgetSubCategoryList extends StatelessWidget {
                     Text(
                       '${amount.toStringAsFixed(2)} €', // Näyttää alakategorian summan kahden desimaalin tarkkuudella
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: Colors.black54,
-                        fontSize: 12,
-                      ),
+                            color: Colors.black54,
+                            fontSize: 12,
+                          ),
                     ),
                   // Muokkauspainike
                   IconButton(
@@ -147,17 +163,26 @@ class BudgetSubCategoryList extends StatelessWidget {
 
                       // Poistetaan alakategoria Firestoresta, jos käyttäjä vahvistaa
                       final authProvider = Provider.of<AuthProvider>(context, listen: false);
-                      if (authProvider.user != null) {
-                        final now = DateTime.now();
+                      final budgetProvider = Provider.of<BudgetProvider>(context, listen: false);
+                      if (authProvider.user != null && (isSharedBudget ? sharedBudget?.id != null : budgetProvider.budget?.id != null)) {
                         await service.deleteSubcategory(
                           context: context,
                           userId: authProvider.user!.uid,
-                          year: now.year,
-                          month: now.month,
+                          budgetId: isSharedBudget ? sharedBudget!.id.toString() : budgetProvider.budget!.id!,
                           categoryName: categoryName,
                           subcategory: subcategory,
                           deleteEvents: deleteEvents,
+                          isSharedBudget: isSharedBudget,
+                          sharedBudget: sharedBudget,
+                          sharedController: sharedController,
                         );
+                      } else {
+                        // Näytä virheilmoitus, jos käyttäjä tai budjetti puuttuu
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Käyttäjä ei ole kirjautunut tai budjettia ei ole valittu')),
+                          );
+                        }
                       }
                     },
                   ),

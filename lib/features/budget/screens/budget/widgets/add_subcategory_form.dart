@@ -1,13 +1,17 @@
-// lib/features/budget/screens/budget/widgets/add_subcategory_form.dart
+import 'package:budu/features/budget/models/budget_model.dart';
 import 'package:flutter/material.dart';
 
 /// Lomakewidget, joka mahdollistaa uuden alakategorian lisäämisen budjettikategoriaan.
 /// Näyttää tekstikentän alakategorian nimen syöttämistä varten sekä painikkeet lisäyksen vahvistamiseen ja peruuttamiseen.
+/// Tukee sekä henkilökohtaisia (BudgetProvider) että yhteistalousbudjetteja (SharedBudget).
 class AddSubcategoryForm extends StatelessWidget {
   final TextEditingController controller; // Tekstikentän ohjain alakategorian nimen syöttämistä varten
   final String? errorMessage; // Virheviesti, joka näytetään, jos syöte ei ole kelvollinen
   final VoidCallback onAdd; // Callback-funktio, jota kutsutaan, kun alakategoria lisätään
   final VoidCallback onCancel; // Callback-funktio, jota kutsutaan, kun lisäys peruutetaan
+  final bool isSharedBudget; // Määrittää, onko budjetti yhteistalousbudjetti
+  final BudgetModel sharedBudget; // Yhteistalousbudjetti, jos valittuna
+  final String categoryName; // Kategorian nimi, johon alakategoria lisätään
 
   const AddSubcategoryForm({
     super.key,
@@ -15,6 +19,9 @@ class AddSubcategoryForm extends StatelessWidget {
     required this.errorMessage,
     required this.onAdd,
     required this.onCancel,
+    required this.isSharedBudget,
+    required this.sharedBudget,
+    required this.categoryName,
   });
 
   @override

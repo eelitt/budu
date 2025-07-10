@@ -228,7 +228,7 @@ class _EventsSectionState extends State<EventsSection> {
                                                     );
                                                     if (confirm == true) {
                                                       try {
-                                                        await expenseProvider.deleteExpense(authProvider.user!.uid, expense.id, budgetProvider);
+                                                        await expenseProvider.deleteExpense(context, authProvider.user!.uid, expense.id, budgetProvider);
                                                       } catch (e) {
                                                         ScaffoldMessenger.of(context).showSnackBar(
                                                           SnackBar(content: Text('Virhe poistettaessa tapahtumaa: $e')),

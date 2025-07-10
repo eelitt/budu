@@ -13,6 +13,7 @@ class CategoryExpansionTile extends StatefulWidget {
   final List<MapEntry<String, double>>? categoryExpenses;
   final List<MapEntry<String, double>>? unmappedExpenses;
   final bool isUnmappedCategory;
+  final String budgetId; // Budjetin tunniste SummaryScreen:ltä
 
   const CategoryExpansionTile({
     super.key,
@@ -22,6 +23,7 @@ class CategoryExpansionTile extends StatefulWidget {
     this.categoryExpenses,
     this.unmappedExpenses,
     this.isUnmappedCategory = false,
+    required this.budgetId,
   });
 
   @override
@@ -30,6 +32,17 @@ class CategoryExpansionTile extends StatefulWidget {
 
 class _CategoryExpansionTileState extends State<CategoryExpansionTile> {
   bool _isExpanded = false;
+
+  @override
+  void didUpdateWidget(CategoryExpansionTile oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Tarkistetaan, onko categorySpent-arvo muuttunut
+    if (oldWidget.categorySpent != widget.categorySpent) {
+      setState(() {
+        // Päivitetään progress barin tila
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -212,7 +225,12 @@ class _CategoryExpansionTileState extends State<CategoryExpansionTile> {
                     final subCategory = entry.key;
                     final budgetAmount = entry.value;
                     final spentAmount = Provider.of<ExpenseProvider>(context, listen: false)
-                        .getCategoryTotals()[subCategory] ?? 0.0;
+                        .expenses
+                        .where((expense) =>
+                            expense.type == EventType.expense &&
+                            expense.budgetId == widget.budgetId &&
+                            expense.subcategory == subCategory)
+                        .fold<double>(0.0, (sum, expense) => sum + expense.amount);
                     return SubCategoryTile(
                       subCategory: subCategory,
                       subCategoryBudget: budgetAmount,
@@ -227,6 +245,7 @@ class _CategoryExpansionTileState extends State<CategoryExpansionTile> {
                         .expenses
                         .where((expense) =>
                             expense.type == EventType.expense &&
+                            expense.budgetId == widget.budgetId &&
                             expense.category == widget.categoryName &&
                             expense.subcategory == subCategory)
                         .fold<double>(0.0, (sum, expense) => sum + expense.amount);
@@ -243,17 +262,20 @@ class _CategoryExpansionTileState extends State<CategoryExpansionTile> {
                 padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 16.0),
                 child: ElevatedButton(
                   onPressed: () {
-                    // Avaa AddEventDialog esivalitulla kategorialla
+                    // Avaa AddEventDialog esivalitulla kategorialla ja budjetilla
                     showDialog(
                       context: context,
                       barrierDismissible: false,
                       builder: (dialogContext) => AddEventDialog(
                         initialCategory: widget.categoryName,
+                        initialBudgetId: widget.budgetId, // Välitetään budjetin ID
                       ),
                     );
                   },
-                  child: Text('Lisää meno',style: Theme.of(context).textTheme.bodyLarge?.copyWith(color: Colors.white)),
-                  
+                  child: Text(
+                    'Lisää meno',
+                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(color: Colors.white),
+                  ),
                 ),
               ),
           ],

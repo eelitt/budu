@@ -4,11 +4,11 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 /// Sovelluksen yläpalkki, joka näyttää sovelluksen nimen, käyttäjän nimen ja
-/// toimintovalikon (lisää tapahtuma, luo budjetti, asetukset, uloskirjautuminen).
+/// toimintovalikon (lisää tapahtuma, luo budjetti, luo yhteistalousbudjetti, asetukset, uloskirjautuminen).
 /// Näyttää kehittäjävalikon, jos käyttäjä on admin.
 class MainScreenAppBar extends StatelessWidget implements PreferredSizeWidget {
   final String userFirstName; // Käyttäjän etunimi näytettäväksi
-  final bool nextMonthBudgetExists; // Onko seuraavan kuukauden budjetti olemassa
+  final bool nextMonthBudgetExists; // Onko seuraavan ajanjakson budjetti olemassa
   final Function(String) onMenuSelected; // Toimintovalikon valintakäsittelijä
 
   const MainScreenAppBar({
@@ -21,7 +21,7 @@ class MainScreenAppBar extends StatelessWidget implements PreferredSizeWidget {
   @override
   Widget build(BuildContext context) {
     final userProvider = Provider.of<UserProvider>(context);
-    final appBarDebug = AppBarDebug(); // Luodaan AppBarDebug-instanssi
+    final appBarDebug = AppBarDebug();
 
     return AppBar(
       automaticallyImplyLeading: false,
@@ -34,7 +34,6 @@ class MainScreenAppBar extends StatelessWidget implements PreferredSizeWidget {
             fontSize: 20,
           ),
       actions: [
-        // Kehittäjävalikko (näkyy vain, jos isAdmin on true)
         if (userProvider.isAdmin)
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8.0),
@@ -140,7 +139,7 @@ class MainScreenAppBar extends StatelessWidget implements PreferredSizeWidget {
                   child: ListTile(
                     leading: const Icon(Icons.calendar_today, color: Colors.black),
                     title: Text(
-                      'Luo budjetti\nseuraavalle kuulle',
+                      'Luo uusi budjetti',
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                             color: Colors.black,
                             fontSize: 14,
@@ -149,6 +148,20 @@ class MainScreenAppBar extends StatelessWidget implements PreferredSizeWidget {
                   ),
                 ),
               ],
+              const PopupMenuDivider(height: 1),
+              PopupMenuItem(
+                value: 'create_shared_budget',
+                child: ListTile(
+                  leading: const Icon(Icons.group, color: Colors.black),
+                  title: Text(
+                    'Luo yhteistalousbudjetti',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Colors.black,
+                          fontSize: 14,
+                        ),
+                  ),
+                ),
+              ),
               const PopupMenuDivider(height: 1),
               PopupMenuItem(
                 value: 'settings',

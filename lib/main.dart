@@ -1,3 +1,4 @@
+import 'package:budu/features/budget/providers/shared_budget_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -42,6 +43,7 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => ExpenseProvider()),
         ChangeNotifierProvider(create: (_) => NotificationProvider()),
         ChangeNotifierProvider(create: (_) => UpdateProvider()),
+        ChangeNotifierProvider(create: (_) => SharedBudgetProvider()),
       ],
       child: MaterialApp(
         title: 'Budu',

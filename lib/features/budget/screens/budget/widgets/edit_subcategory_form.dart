@@ -1,13 +1,18 @@
+import 'package:budu/features/budget/models/budget_model.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 /// Lomakewidget, joka mahdollistaa budjettialakategorian nimen ja summan muokkaamisen.
 /// Näyttää tekstikentät nimeä ja summaa varten sekä painikkeet tallentamiseen ja peruuttamiseen.
+/// Tukee sekä henkilökohtaisia (BudgetProvider) että yhteistalousbudjetteja (SharedBudget).
 class EditSubcategoryForm extends StatelessWidget {
   final TextEditingController nameController; // Tekstikentän ohjain alakategorian nimen muokkaamiseen
   final TextEditingController amountController; // Tekstikentän ohjain alakategorian summan muokkaamiseen
   final VoidCallback onSave; // Callback-funktio, jota kutsutaan, kun muokkaukset tallennetaan
   final VoidCallback onCancel; // Callback-funktio, jota kutsutaan, kun muokkaus peruutetaan
+  final bool isSharedBudget; // Määrittää, onko budjetti yhteistalousbudjetti
+  final BudgetModel? sharedBudget; // Yhteistalousbudjetti, jos valittuna
+  final String categoryName; // Kategorian nimi, johon alakategoria kuuluu
 
   const EditSubcategoryForm({
     super.key,
@@ -15,6 +20,9 @@ class EditSubcategoryForm extends StatelessWidget {
     required this.amountController,
     required this.onSave,
     required this.onCancel,
+    required this.isSharedBudget,
+    this.sharedBudget,
+    required this.categoryName,
   });
 
   @override

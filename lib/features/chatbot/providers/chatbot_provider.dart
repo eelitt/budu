@@ -4,6 +4,7 @@ import 'chatbot_response_processor.dart';
 import 'chatbot_options.dart';
 import 'chatbot_budget_saver.dart';
 import '../models/chat_message.dart';
+import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 
 class ChatbotProvider with ChangeNotifier {
   List<ChatMessage> _messages = [];
@@ -13,6 +14,7 @@ class ChatbotProvider with ChangeNotifier {
   bool _isCompleted = false;
   bool _isMultipleChoice = false;
   List<String> _currentOptions = [];
+  String? _budgetType; // monthly, biweekly
   String? _housingType;
   String? _carOwnership;
   bool _rentsParkingSpace = false;
@@ -20,6 +22,8 @@ class ChatbotProvider with ChangeNotifier {
   bool _hasCarLoan = false;
   bool _hasOtherDebts = false;
   double _debtAmount = 0.0;
+  DateTime? _startDate;
+  DateTime? _endDate;
 
   List<ChatMessage> get messages => _messages;
   bool get isCompleted => _isCompleted;
@@ -33,25 +37,37 @@ class ChatbotProvider with ChangeNotifier {
 
   void _startChat() {
     _messages.add(ChatMessage(
-      text: "Paljonko saat tuloja kuukaudessa (esim. palkka, tuet, pääomatulot)?",
+      text: "Haluatko luoda kuukausibudjetin vai 2 viikon budjetin?",
       isUser: false,
       createdAt: DateTime.now(),
     ));
+    _isMultipleChoice = true;
+    _currentOptions = ["Kuukausi", "2 viikkoa"];
     notifyListeners();
   }
 
-  void handleUserResponse(String response) {
+  void handleUserResponse(String response, BuildContext context) {
     _messages.add(ChatMessage(
       text: response,
       isUser: true,
       createdAt: DateTime.now(),
     ));
-    notifyListeners(); // Ilmoitetaan viestin lisäyksestä
+    notifyListeners();
 
     final questions = _getQuestions();
     final currentQuestion = questions[_step];
+
     if (_isMultipleChoice) {
-      _processResponse(response);
+      if (!_currentOptions.contains(response)) {
+        _messages.add(ChatMessage(
+          text: "Valitse yksi vaihtoehdoista: ${_currentOptions.join(', ')}",
+          isUser: false,
+          createdAt: DateTime.now(),
+        ));
+        notifyListeners();
+        return;
+      }
+      _processResponse(response, context);
       _step++;
     } else {
       double? value = double.tryParse(response.replaceAll('€', '').trim());
@@ -61,25 +77,23 @@ class ChatbotProvider with ChangeNotifier {
           isUser: false,
           createdAt: DateTime.now(),
         ));
-        notifyListeners(); // Ilmoitetaan virheilmoituksen lisäyksestä
+        notifyListeners();
         return;
       }
 
       // Maksimiarvon validointi
-      double maxValue = currentQuestion == "Paljonko saat tuloja kuukaudessa (esim. palkka, tuet, pääomatulot)?"
-          ? 100000.0 // Tulot: maksimi 100 000 €
-          : 10000.0; // Muut kulut: maksimi 10 000 €
+      double maxValue = currentQuestion.contains("tuloja") ? 100000.0 : 10000.0;
       if (value > maxValue) {
         _messages.add(ChatMessage(
           text: "Syötä pienempi arvo (maksimi $maxValue €). Yritä uudelleen.",
           isUser: false,
           createdAt: DateTime.now(),
         ));
-        notifyListeners(); // Ilmoitetaan virheilmoituksen lisäyksestä
+        notifyListeners();
         return;
       }
 
-      _processResponse(response);
+      _processResponse(response, context);
       _step++;
     }
 
@@ -88,12 +102,18 @@ class ChatbotProvider with ChangeNotifier {
       _askNextQuestion();
     } else if (_step == updatedQuestions.length) {
       _isCompleted = true;
-      notifyListeners(); // Ilmoitetaan, että chatbot on valmis
+      _messages.add(ChatMessage(
+        text: "Budjetti valmis! Tallennetaan budjetti ajanjaksolle ${_budgetType == 'monthly' ? 'kuukausi' : '2 viikkoa'}.",
+        isUser: false,
+        createdAt: DateTime.now(),
+      ));
+      notifyListeners();
     }
   }
 
   List<String> _getQuestions() {
     return ChatbotQuestions(
+      budgetType: _budgetType,
       housingType: _housingType,
       carOwnership: _carOwnership,
       rentsParkingSpace: _rentsParkingSpace,
@@ -107,12 +127,13 @@ class ChatbotProvider with ChangeNotifier {
     ).getQuestions();
   }
 
-  void _processResponse(String response) {
+  void _processResponse(String response, BuildContext context) {
     final questions = _getQuestions();
     final processor = ChatbotResponseProcessor(
       questions: questions,
       expenses: _expenses,
       income: _income,
+      budgetType: _budgetType,
       housingType: _housingType,
       carOwnership: _carOwnership,
       rentsParkingSpace: _rentsParkingSpace,
@@ -123,9 +144,12 @@ class ChatbotProvider with ChangeNotifier {
       hasCarLoan: _hasCarLoan,
       hasOtherDebts: _hasOtherDebts,
       debtAmount: _debtAmount,
+      startDate: _startDate,
+      endDate: _endDate,
     );
-    processor.processResponse(response, _step);
+    processor.processResponse(response, _step, context);
     _income = processor.income;
+    _budgetType = processor.budgetType;
     _housingType = processor.housingType;
     _carOwnership = processor.carOwnership;
     _rentsParkingSpace = processor.rentsParkingSpace;
@@ -133,12 +157,15 @@ class ChatbotProvider with ChangeNotifier {
     _hasCarLoan = processor.hasCarLoan;
     _hasOtherDebts = processor.hasOtherDebts;
     _debtAmount = processor.debtAmount;
+    _startDate = processor.startDate;
+    _endDate = processor.endDate;
   }
 
   void _askNextQuestion() {
     final questions = _getQuestions();
     if (_step < questions.length) {
-      _isMultipleChoice = questions[_step] == "Mikä seuraavista kuvaa parhaiten asumistasi?" ||
+      _isMultipleChoice = questions[_step] == "Haluatko luoda kuukausibudjetin vai 2 viikon budjetin?" ||
+          questions[_step] == "Mikä seuraavista kuvaa parhaiten asumistasi?" ||
           questions[_step] == "Onko sinulla autoa?" ||
           questions[_step] == "Onko autosi oma vai maksatko siitä rahoitusta?" ||
           questions[_step] == "Vuokraatko autopaikkaa?" ||
@@ -153,15 +180,28 @@ class ChatbotProvider with ChangeNotifier {
         isUser: false,
         createdAt: DateTime.now(),
       ));
-      notifyListeners(); // Ilmoitetaan uuden kysymyksen lisäyksestä
+      notifyListeners();
     }
   }
 
   Future<void> saveBudget(BuildContext context, String userId) async {
+    if (_startDate == null || _endDate == null || _budgetType == null) {
+      await FirebaseCrashlytics.instance.log('Chatbot: Budjetin tallennus epäonnistui, aikaväli tai tyyppi puuttuu');
+      _messages.add(ChatMessage(
+        text: "Budjetin tallennus epäonnistui: Valitse budjetin tyyppi ja aikaväli.",
+        isUser: false,
+        createdAt: DateTime.now(),
+      ));
+      notifyListeners();
+      return;
+    }
     await ChatbotBudgetSaver(
       isCompleted: _isCompleted,
       income: _income,
       expenses: _expenses,
+      budgetType: _budgetType!,
+      startDate: _startDate!,
+      endDate: _endDate!,
     ).saveBudget(context, userId);
   }
 }

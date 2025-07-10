@@ -20,13 +20,15 @@ class BudgetInitializer {
   /// Alustaa budjetin tulot ja menot lähdebudjetin perusteella.
   void initialize() {
     // Alustetaan tyhjä budjetti, jos sourceBudget puuttuu
+    final now = DateTime.now();
     final BudgetModel budget = sourceBudget ??
         BudgetModel(
           income: 0.0,
           expenses: {},
-          createdAt: DateTime.now(),
-          year: DateTime.now().year,
-          month: DateTime.now().month,
+          createdAt: now,
+          startDate: DateTime(now.year, now.month, 1), // Kuukauden ensimmäinen päivä
+          endDate: DateTime(now.year, now.month + 1, 0), // Kuukauden viimeinen päivä
+          type: 'monthly',
         );
 
     // Pyöristetään tulot kahden desimaalin tarkkuudella
@@ -78,11 +80,11 @@ class BudgetInitializer {
   /// Vapauttaa resurssit ja poistaa kuuntelijat.
   void dispose() {
     incomeController.removeListener(updateSummary);
-    incomeController.dispose();
+    // Huom: incomeController.dispose() siirretty CreateBudgetScreen:iin, koska se hallitsee ohjainta
     expenseControllers.forEach((category, subcategoryMap) {
       subcategoryMap.forEach((subcategory, controller) {
         controller.removeListener(updateSummary);
-        controller.dispose();
+        // Huom: controller.dispose() siirretty CreateBudgetScreen:iin
       });
     });
   }

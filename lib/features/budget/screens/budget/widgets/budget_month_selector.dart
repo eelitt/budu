@@ -1,24 +1,49 @@
-import 'package:budu/features/budget/screens/budget/utils/month_utils.dart';
+import 'package:budu/features/budget/models/budget_model.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 
-/// Widget, joka näyttää pudotusvalikon budjettikuukausien valitsemiseen.
-/// Näyttää saatavilla olevat budjettikuukaudet ja vuoden, ja antaa käyttäjän valita niistä.
+/// Widget, joka näyttää pudotusvalikon budjettien valitsemiseen.
+/// Tukee sekä henkilökohtaisia (BudgetModel) että yhteistalousbudjetteja (BudgetModel).
+/// Näyttää saatavilla olevat budjetit aikaväleinä ja antaa käyttäjän valita niistä.
 class BudgetMonthSelector extends StatelessWidget {
-  final List<Map<String, int>> availableMonths; // Lista saatavilla olevista budjettikuukausista (kuukausi ja vuosi)
-  final Map<String, int>? selectedMonth; // Tällä hetkellä valittu budjettikuukausi
-  final Function(Map<String, int>?) onMonthSelected; // Callback-funktio, jota kutsutaan, kun kuukausi valitaan
+  final bool isSharedBudget; // Määrittää, onko valittuna yhteistalousbudjetti
+  final List<BudgetModel> availableBudgets; // Lista saatavilla olevista henkilökohtaisista budjeteista
+  final List<BudgetModel> availableSharedBudgets; // Lista saatavilla olevista yhteistalousbudjeteista
+  final BudgetModel? selectedBudget; // Tällä hetkellä valittu henkilökohtainen budjetti
+  final BudgetModel? selectedSharedBudget; // Tällä hetkellä valittu yhteistalousbudjetti
+  final Function(dynamic) onBudgetSelected; // Callback-funktio, jota kutsutaan, kun budjetti valitaan
 
   const BudgetMonthSelector({
     super.key,
-    required this.availableMonths,
-    required this.selectedMonth,
-    required this.onMonthSelected,
+    required this.isSharedBudget,
+    required this.availableBudgets,
+    required this.availableSharedBudgets,
+    this.selectedBudget,
+    this.selectedSharedBudget,
+    required this.onBudgetSelected,
   });
+
+  /// Muotoilee budjetin aikavälin näyttöä varten (esim. "1.5.2025 - 31.5.2025").
+  /// Tukee sekä BudgetModel- että SharedBudget-olioita.
+  String _formatBudgetPeriod(dynamic budget) {
+    if (budget == null) {
+      return 'Ei valittua budjettia'; // Null-tarkistus: Palauta oletusteksti, jos budget null
+    }
+    final dateFormat = DateFormat('d.M.yyyy');
+    if (budget is BudgetModel) {
+      return '${dateFormat.format(budget.startDate)} - ${dateFormat.format(budget.endDate)}';
+    } 
+    return 'Tuntematon aikaväli';
+  }
 
   @override
   Widget build(BuildContext context) {
-    // Jos saatavilla olevia budjettikuukausia ei ole, näytetään viesti
-    if (availableMonths.isEmpty) {
+    // Valitaan budjettien lista isSharedBudget-arvon perusteella
+    final budgets = isSharedBudget ? availableSharedBudgets : availableBudgets;
+    final selected = isSharedBudget ? selectedSharedBudget : selectedBudget;
+
+    // Jos saatavilla olevia budjetteja ei ole, näytetään viesti
+    if (budgets.isEmpty) {
       return const Text('Ei saatavilla olevia budjetteja');
     }
 
@@ -37,17 +62,17 @@ class BudgetMonthSelector extends StatelessWidget {
               color: Colors.blueGrey,
             ),
             const SizedBox(width: 8), // Väli ikonin ja pudotusvalikon välillä
-            // Pudotusvalikko budjettikuukausien valintaan
+            // Pudotusvalikko budjettien valintaan
             Expanded(
-              child: PopupMenuButton<Map<String, int>>(
-                onSelected: onMonthSelected, // Kutsutaan callbackia, kun kuukausi valitaan
+              child: PopupMenuButton<dynamic>(
+                onSelected: onBudgetSelected, // Kutsutaan callbackia, kun budjetti valitaan
                 itemBuilder: (BuildContext context) {
-                  // Luodaan pudotusvalikon kohteet saatavilla olevista budjettikuukausista
-                  return availableMonths.map((monthData) {
-                    return PopupMenuItem<Map<String, int>>(
-                      value: monthData,
+                  // Luodaan pudotusvalikon kohteet saatavilla olevista budjeteista
+                  return budgets.map((budget) {
+                    return PopupMenuItem<dynamic>(
+                      value: budget,
                       child: Text(
-                        '${getMonthName(monthData['month']!)} ${monthData['year']}', // Näyttää kuukauden nimen ja vuoden
+                        _formatBudgetPeriod(budget), // Näyttää budjetin aikavälin
                         style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                               color: Colors.black87,
                               fontSize: 15,
@@ -60,12 +85,12 @@ class BudgetMonthSelector extends StatelessWidget {
                 position: PopupMenuPosition.under, // Pudotusvalikko avautuu painikkeen alle
                 child: Row(
                   children: [
-                    // Näyttää valitun kuukauden tai oletustekstin
+                    // Näyttää valitun budjetin tai oletustekstin
                     Expanded(
                       child: Text(
-                        selectedMonth != null
-                            ? '${getMonthName(selectedMonth!['month']!)} ${selectedMonth!['year']}'
-                            : 'Valitse budjetti', // Oletusteksti, jos kuukautta ei ole valittu
+                        selected != null
+                            ? _formatBudgetPeriod(selected)
+                            : 'Valitse budjetti', // Oletusteksti, jos budjettia ei ole valittu
                         style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                               color: Colors.black87,
                               fontSize: 16,

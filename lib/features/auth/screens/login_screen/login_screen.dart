@@ -2,7 +2,8 @@ import 'package:budu/core/utils.dart';
 import 'package:budu/features/auth/screens/login_screen/login_button.dart';
 import 'package:budu/features/budget/providers/budget_provider.dart';
 import 'package:budu/features/budget/providers/expense_provider.dart';
-import 'package:budu/features/update/update_manager.dart'; // Korvattu UpdateHandler-import
+import 'package:budu/features/budget/providers/migrateBudgets.dart';
+import 'package:budu/features/update/update_manager.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -32,10 +33,7 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   void initState() {
     super.initState();
-  
-   
-   _updateManager = UpdateManager();
-     
+    _updateManager = UpdateManager();
     _initializeAuth();
   }
 
@@ -60,7 +58,7 @@ class _LoginScreenState extends State<LoginScreen> {
         print('LoginScreen: Automaattikirjautumista ei suoritettu, authState: ${authProvider.authState}');
       }
     } catch (e) {
-      // Raportoi kriittinen virhe Crashlyticsiin (esim. autentikoinnin epäonnistuminen)
+      // Raportoi kriittinen virhe Crashlyticsiin
       await FirebaseCrashlytics.instance.recordError(
         e,
         StackTrace.current,
@@ -107,43 +105,68 @@ class _LoginScreenState extends State<LoginScreen> {
     print('_navigateAfterLogin: Aloitetaan, UID: $userId');
 
     try {
+      // Tarkista ja suorita budjettien migraatio
+      final migrationCheck = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(userId)
+          .get();
+      if (migrationCheck.data()?['migration_completed'] != true) {
+        print('LoginScreen: Suoritetaan budjettien migraatio käyttäjälle $userId');
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Migroidaan budjetteja...'), duration: Duration(seconds: 2)),
+          );
+        }
+        try {
+          await migrateBudgets(userId);
+          await FirebaseFirestore.instance
+              .collection('users')
+              .doc(userId)
+              .set({'migration_completed': true}, SetOptions(merge: true));
+          await FirebaseCrashlytics.instance.log('Budjettien migraatio suoritettu käyttäjälle $userId');
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Budjettien migraatio onnistui!'), duration: Duration(seconds: 2)),
+            );
+          }
+        } catch (e) {
+          // Raportoi migraatiovirhe, mutta jatka budjettien lataamista
+          await FirebaseCrashlytics.instance.recordError(
+            e,
+            StackTrace.current,
+            reason: 'Budjettien migraatio epäonnistui käyttäjälle $userId',
+          );
+          print('LoginScreen: Migraatio epäonnistui: $e');
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Budjettien migraatio epäonnistui: $e'), duration: Duration(seconds: 2)),
+            );
+          }
+        }
+      } else {
+        print('LoginScreen: Migraatio jo suoritettu käyttäjälle $userId');
+      }
+
       final budgetProvider = Provider.of<BudgetProvider>(context, listen: false);
       final expenseProvider = Provider.of<ExpenseProvider>(context, listen: false);
 
-      final now = DateTime.now();
-      await budgetProvider.loadBudget(userId, now.year, now.month);
-      print('LoginScreen: Budjetti ladattu, budget == null: ${budgetProvider.budget == null}');
+      // Haetaan saatavilla olevat budjetit
+      final budgets = await budgetProvider.getAvailableBudgets(userId);
+      print('LoginScreen: Saatavilla olevat budjetit: ${budgets.length}');
 
       if (context.mounted) {
-        if (budgetProvider.budget == null) {
-          print('LoginScreen: Budjetti on null, tarkistetaan Firestore');
-          final budgetsSnapshot = await FirebaseFirestore.instance
-              .collection('budgets')
-              .doc(userId)
-              .collection('monthly_budgets')
-              .limit(1)
-              .get();
-          print('LoginScreen: Budjettidokumenttien määrä: ${budgetsSnapshot.docs.length}');
-
-          if (budgetsSnapshot.docs.isEmpty) {
-            print('LoginScreen: Ei budjetteja, ohjataan chatbot-sivulle');
-            Navigator.pushNamedAndRemoveUntil(
-              context,
-              AppRouter.chatbotRoute,
-              (route) => false,
-            );
-          } else {
-            print('LoginScreen: Budjetti löytyy, haetaan tapahtumat ja ohjataan pääsivulle');
-            await expenseProvider.loadAllExpenses(userId);
-            Navigator.pushNamedAndRemoveUntil(
-              context,
-              AppRouter.mainRoute,
-              (route) => false,
-            );
-          }
+        if (budgets.isEmpty) {
+          print('LoginScreen: Ei budjetteja, ohjataan chatbot-sivulle');
+          Navigator.pushNamedAndRemoveUntil(
+            context,
+            AppRouter.chatbotRoute,
+            (route) => false,
+          );
         } else {
-          print('LoginScreen: Nykyinen budjetti löytyy, haetaan tapahtumat ja ohjataan pääsivulle');
-          await expenseProvider.loadAllExpenses(userId);
+          print('LoginScreen: Budjetteja löytyy, ladataan viimeisin budjetti ja tapahtumat');
+          final latestBudget = budgets.first;
+          await budgetProvider.loadBudget(userId, latestBudget.id!);
+          await expenseProvider.loadExpenses(userId, latestBudget.id!);
           Navigator.pushNamedAndRemoveUntil(
             context,
             AppRouter.mainRoute,
@@ -152,7 +175,7 @@ class _LoginScreenState extends State<LoginScreen> {
         }
       }
     } catch (e) {
-      // Raportoi kriittinen virhe Crashlyticsiin (esim. Firestore-operaation epäonnistuminen)
+      // Raportoi kriittinen virhe Crashlyticsiin
       await FirebaseCrashlytics.instance.recordError(
         e,
         StackTrace.current,

@@ -1,5 +1,4 @@
 import 'package:budu/core/constants.dart';
-import 'package:budu/core/utils.dart';
 import 'package:flutter/material.dart';
 
 /// Näyttää dialogin kategorian lisäämistä varten.
@@ -187,15 +186,6 @@ Future<String?> showAddCategoryDialog({
       );
     },
   );
-
-  // Näytetään Snackbar, jos kategoria lisättiin
-  if (result != null) {
-    showSnackBar(
-      context,
-      'Kategoria "$result" lisätty!',
-      duration: const Duration(seconds: 2),
-    );
-  }
 
   return result;
 }

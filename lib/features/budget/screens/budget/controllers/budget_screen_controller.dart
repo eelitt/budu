@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:budu/core/app_router/app_router.dart';
 import 'package:budu/core/utils.dart';
 import 'package:budu/features/auth/providers/auth_provider.dart';
+import 'package:budu/features/budget/models/budget_model.dart';
 import 'package:budu/features/budget/providers/budget_provider.dart';
 import 'package:budu/features/budget/providers/expense_provider.dart';
 import 'package:budu/features/notification/providers/notification_provider.dart';
@@ -10,16 +11,15 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 /// Kontrolleri budjettinäkymän tilan ja Firestore-operaatioiden hallintaan.
-/// Käsittelee budjetin lataamista, kuukausien hallintaa, menojen nollaamista ja budjetin poistamista.
+/// Käsittelee budjetin lataamista, budjettien hallintaa, menojen nollaamista ja budjetin poistamista.
 class BudgetScreenController {
   final BuildContext context;
   final VoidCallback onStateChanged;
 
-  // Tilamuuttujat budjettikuukausien ja lataustilan hallintaan
-  ValueNotifier<int> currentYear; // Nykyinen budjettivuosi
-  ValueNotifier<int> currentMonth; // Nykyinen budjettikuukausi
-  List<Map<String, int>> availableMonths = []; // Lista saatavilla olevista budjettikuukausista
-  final ValueNotifier<Map<String, int>?> selectedMonth = ValueNotifier(null); // Valittu budjettikuukausi
+  // Tilamuuttujat budjettien ja lataustilan hallintaan
+  String? currentBudgetId; // Nykyinen budjetin tunniste
+  List<BudgetModel> availableBudgets = []; // Lista saatavilla olevista budjeteista
+  final ValueNotifier<BudgetModel?> selectedBudget = ValueNotifier(null); // Valittu budjetti
   bool isLoadingBudget = true; // Näyttääkö latausindikaattori budjetin latauksessa
   bool _isInitialized = false; // Lippu alustuksen tilan seurantaan
   bool _isDisposed = false; // Lippu tarkistamaan, onko kontrolleri jo poistettu käytöstä
@@ -30,35 +30,31 @@ class BudgetScreenController {
     required this.context,
     required this.onStateChanged,
     this.onBudgetDeleted, // Uusi callback budjetin poiston jälkeen
-  }) : currentYear = ValueNotifier(DateTime.now().year),
-       currentMonth = ValueNotifier(DateTime.now().month) {
+  }) {
     _cancelToken = Completer<void>();
     _initializeBudget(); // Alusta budjetti konstruktorissa
   }
 
-  /// Alustaa budjetin lataamisen ja asettaa nykyisen vuoden ja kuukauden.
+  /// Alustaa budjetin lataamisen ja asettaa nykyisen budjetin.
   Future<void> _initializeBudget() async {
     try {
       final budgetProvider = Provider.of<BudgetProvider>(context, listen: false);
       final authProvider = Provider.of<AuthProvider>(context, listen: false);
 
-      if (budgetProvider.budget != null) {
-        currentYear.value = budgetProvider.budget!.year;
-        currentMonth.value = budgetProvider.budget!.month;
-      } else if (authProvider.user != null) {
-        await loadBudget(
-          userId: authProvider.user!.uid,
-          year: currentYear.value,
-          month: currentMonth.value,
-        );
-      }
-
-      // Lataa saatavilla olevat budjettikuukaudet vasta, kun currentYear ja currentMonth on alustettu
       if (authProvider.user != null) {
-        await loadAvailableMonths(userId: authProvider.user!.uid);
+        await loadAvailableBudgets(userId: authProvider.user!.uid);
+        if (_isDisposed) return;
+
+        if (availableBudgets.isNotEmpty) {
+          final latestBudget = availableBudgets.first;
+          await loadBudget(
+            userId: authProvider.user!.uid,
+            budgetId: latestBudget.id!,
+          );
+        }
       }
     } catch (e) {
-      // Raportoi kriittinen virhe Crashlyticsiin (esim. Firestore-operaation epäonnistuminen)
+      // Raportoi kriittinen virhe Crashlyticsiin
       await FirebaseCrashlytics.instance.recordError(
         e,
         StackTrace.current,
@@ -78,13 +74,11 @@ class BudgetScreenController {
     }
   }
 
-  /// Lataa budjetin Firestoresta annetulle käyttäjälle ja ajanjaksolle.
-  /// Päivittää currentYear, currentMonth ja selectedMonth arvot.
-  /// Peruutetaan operaatio, jos cancelToken on aktivoitu.
+  /// Lataa budjetin Firestoresta annetulle käyttäjälle ja budjetin tunnisteelle.
+  /// Päivittää currentBudgetId ja selectedBudget arvot.
   Future<void> loadBudget({
     required String userId,
-    required int year,
-    required int month,
+    required String budgetId,
   }) async {
     try {
       isLoadingBudget = true;
@@ -94,20 +88,23 @@ class BudgetScreenController {
       final budgetProvider = Provider.of<BudgetProvider>(context, listen: false);
 
       // Suorita budjetin lataus
-      await budgetProvider.loadBudget(userId, year, month);
-      if (_isDisposed) return; // Lopetetaan, jos kontrolleri on jo poistettu
+      await budgetProvider.loadBudget(userId, budgetId);
+      if (_isDisposed) return;
 
-      // Päivitetään currentYear ja currentMonth valitun budjetin mukaan
-      currentYear.value = year;
-      currentMonth.value = month;
-
-      // Päivitetään selectedMonth valitun budjetin mukaan
-      selectedMonth.value = availableMonths.firstWhere(
-        (monthData) => monthData['year'] == year && monthData['month'] == month,
-        orElse: () => {'year': year, 'month': month},
+      // Päivitetään currentBudgetId ja selectedBudget
+      currentBudgetId = budgetId;
+      selectedBudget.value = availableBudgets.firstWhere(
+        (budget) => budget.id == budgetId,
+        orElse: () => budgetProvider.budget!,
       );
     } catch (e) {
       if (!_isDisposed) {
+        // Raportoi virhe Crashlyticsiin
+        await FirebaseCrashlytics.instance.recordError(
+          e,
+          StackTrace.current,
+          reason: 'Budjetin lataaminen epäonnistui BudgetScreenController:ssä',
+        );
         rethrow;
       }
     } finally {
@@ -120,25 +117,23 @@ class BudgetScreenController {
     }
   }
 
-  /// Lataa saatavilla olevat budjettikuukaudet Firestoresta.
-  Future<void> loadAvailableMonths({
+  /// Lataa saatavilla olevat budjetit Firestoresta.
+  Future<void> loadAvailableBudgets({
     required String userId,
   }) async {
     try {
       final budgetProvider = Provider.of<BudgetProvider>(context, listen: false);
-      final months = await budgetProvider.getAvailableBudgetMonths(userId);
+      final budgets = await budgetProvider.getAvailableBudgets(userId);
       if (_isDisposed) return;
 
-      availableMonths = months.toSet().toList();
-      if (availableMonths.isNotEmpty) {
-        // Asetetaan selectedMonth ensimmäiseen saatavilla olevaan kuukauteen, jos se ei ole vielä asetettu
-        if (selectedMonth.value == null) {
-          selectedMonth.value = availableMonths.first;
-          currentYear.value = selectedMonth.value!['year']!;
-          currentMonth.value = selectedMonth.value!['month']!;
-        }
-      } else {
-        selectedMonth.value = null;
+      availableBudgets = budgets.toSet().toList();
+      if (availableBudgets.isNotEmpty && selectedBudget.value == null) {
+        // Asetetaan selectedBudget ensimmäiseen saatavilla olevaan budjettiin
+        selectedBudget.value = availableBudgets.first;
+        currentBudgetId = selectedBudget.value!.id;
+      } else if (availableBudgets.isEmpty) {
+        selectedBudget.value = null;
+        currentBudgetId = null;
       }
       if (context.mounted && !_isDisposed) {
         onStateChanged();
@@ -146,11 +141,11 @@ class BudgetScreenController {
     } catch (e) {
       if (_isDisposed) return;
 
-      // Raportoi kriittinen virhe Crashlyticsiin (esim. Firestore-operaation epäonnistuminen)
+      // Raportoi kriittinen virhe Crashlyticsiin
       await FirebaseCrashlytics.instance.recordError(
         e,
         StackTrace.current,
-        reason: 'Saatavilla olevien budjettikuukausien lataaminen epäonnistui BudgetScreenController:ssä',
+        reason: 'Saatavilla olevien budjettien lataaminen epäonnistui BudgetScreenController:ssä',
       );
 
       // Heitä virhe eteenpäin, jotta FutureBuilder voi käsitellä sen
@@ -161,17 +156,16 @@ class BudgetScreenController {
   /// Nollaa budjetin menot Firestoreen.
   Future<void> resetBudgetExpenses({
     required String userId,
-    required int year,
-    required int month,
+    required String budgetId,
   }) async {
     try {
       final budgetProvider = Provider.of<BudgetProvider>(context, listen: false);
-      await budgetProvider.resetBudgetExpenses(userId, year, month);
+      await budgetProvider.resetBudgetExpenses(userId, budgetId);
       if (_isDisposed) return;
     } catch (e) {
       if (_isDisposed) return;
 
-      // Raportoi kriittinen virhe Crashlyticsiin (esim. Firestore-operaation epäonnistuminen)
+      // Raportoi kriittinen virhe Crashlyticsiin
       await FirebaseCrashlytics.instance.recordError(
         e,
         StackTrace.current,
@@ -188,40 +182,36 @@ class BudgetScreenController {
   /// Poistaa budjetin Firestoresta ja navigoi tarvittaessa.
   Future<void> deleteBudget({
     required String userId,
-    required int year,
-    required int month,
+    required String budgetId,
   }) async {
     try {
       final budgetProvider = Provider.of<BudgetProvider>(context, listen: false);
       final expenseProvider = Provider.of<ExpenseProvider>(context, listen: false);
-      // Poista kaikki meno- ja tulotapahtumat kyseiseltä ajanjaksolta
-      await expenseProvider.deleteAllExpensesForMonth(
+      // Poista kaikki meno- ja tulotapahtumat kyseiseltä budjetilta
+      await expenseProvider.deleteAllExpensesForBudget(
         userId: userId,
-        year: year,
-        month: month,
+        budgetId: budgetId,
       );
       if (_isDisposed) return;
 
       // Poista budjetti
-      await budgetProvider.deleteBudget(userId, year, month);
+      await budgetProvider.deleteBudget(userId, budgetId);
       if (_isDisposed) return;
 
-      // Päivitetään saatavilla olevat budjettikuukaudet poiston jälkeen
-      await loadAvailableMonths(userId: userId);
+      // Päivitetään saatavilla olevat budjetit poiston jälkeen
+      await loadAvailableBudgets(userId: userId);
       if (_isDisposed) return;
 
-      // Laukaistaan callback, jotta MainScreen voi tarkistaa seuraavan kuukauden budjetin tilan
+      // Laukaistaan callback, jotta MainScreen voi tarkistaa seuraavan budjetin tilan
       onBudgetDeleted?.call();
 
-      if (availableMonths.isNotEmpty) {
-        final nextMonth = availableMonths.first;
-        selectedMonth.value = nextMonth;
-        currentYear.value = nextMonth['year']!;
-        currentMonth.value = nextMonth['month']!;
+      if (availableBudgets.isNotEmpty) {
+        final nextBudget = availableBudgets.first;
+        selectedBudget.value = nextBudget;
+        currentBudgetId = nextBudget.id;
         await loadBudget(
           userId: userId,
-          year: currentYear.value,
-          month: currentMonth.value,
+          budgetId: nextBudget.id!,
         );
       } else {
         if (context.mounted && !_isDisposed) {
@@ -235,7 +225,7 @@ class BudgetScreenController {
     } catch (e) {
       if (_isDisposed) return;
 
-      // Raportoi kriittinen virhe Crashlyticsiin (esim. Firestore-operaation epäonnistuminen)
+      // Raportoi kriittinen virhe Crashlyticsiin
       await FirebaseCrashlytics.instance.recordError(
         e,
         StackTrace.current,
@@ -256,9 +246,7 @@ class BudgetScreenController {
     if (!_cancelToken!.isCompleted) {
       _cancelToken!.complete();
     }
-    currentYear.dispose();
-    currentMonth.dispose();
-    selectedMonth.dispose();
+    selectedBudget.dispose();
   }
 
   /// Palauttaa true, jos kontrolleri on alustettu (eli _initializeBudget on suoritettu).

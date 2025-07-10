@@ -4,6 +4,7 @@ import 'package:budu/core/app_router/app_router.dart';
 import 'package:budu/features/chatbot/providers/chatbot_provider.dart';
 import 'package:budu/features/chatbot/screens/chatbot/multiple_choice_buttons.dart';
 import 'package:budu/features/chatbot/screens/chatbot/text_field_with_number_keyboard.dart';
+import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 
 class ChatbotQuestionView extends StatefulWidget {
   final ChatbotProvider chatbotProvider;
@@ -95,6 +96,7 @@ class _ChatbotQuestionViewState extends State<ChatbotQuestionView> with TickerPr
 
   void _skipToManualBudget() {
     print('ChatbotQuestionView: Ohitetaan chatbot, navigoidaan budjetin luontisivulle');
+    FirebaseCrashlytics.instance.log('ChatbotQuestionView: Ohitetaan chatbot, navigoidaan budjetin luontisivulle');
     Navigator.pushReplacementNamed(context, AppRouter.createBudgetRoute);
   }
 
@@ -173,13 +175,19 @@ class _ChatbotQuestionViewState extends State<ChatbotQuestionView> with TickerPr
               child: Column(
                 children: [
                   widget.chatbotProvider.isMultipleChoice
-                      ? MultipleChoiceButtons(chatbotProvider: widget.chatbotProvider)
+                      ? MultipleChoiceButtons(
+                          chatbotProvider: widget.chatbotProvider,
+                          onOptionSelected: (option) {
+                            print('ChatbotQuestionView: Käyttäjä valitsi: $option');
+                            widget.chatbotProvider.handleUserResponse(option, context);
+                          },
+                        )
                       : TextFieldWithNumberKeyboard(
                           key: ValueKey(widget.chatbotProvider.step),
                           onSubmitted: (value) {
                             if (value.isNotEmpty) {
                               print('ChatbotQuestionView: Käyttäjä vastasi: $value');
-                              widget.chatbotProvider.handleUserResponse(value);
+                              widget.chatbotProvider.handleUserResponse(value, context);
                             }
                           },
                         ),

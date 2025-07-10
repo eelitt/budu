@@ -1,4 +1,5 @@
 import 'package:budu/features/auth/providers/auth_provider.dart';
+import 'package:budu/features/budget/providers/budget_provider.dart';
 import 'package:budu/features/budget/providers/expense_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -65,19 +66,18 @@ Future<bool> confirmDeleteSubcategory({
     return false; // Peruutettu, ei jatketa
   }
 
-  // Haetaan AuthProvider ja ExpenseProvider meno-tapahtumien tarkistamista varten
+  // Haetaan AuthProvider, BudgetProvider ja ExpenseProvider meno-tapahtumien tarkistamista varten
   final authProvider = Provider.of<AuthProvider>(context, listen: false);
+  final budgetProvider = Provider.of<BudgetProvider>(context, listen: false);
   final expenseProvider = Provider.of<ExpenseProvider>(context, listen: false);
-  if (authProvider.user == null) {
-    return false; // Jos käyttäjää ei ole, ei voida jatkaa
+  if (authProvider.user == null || budgetProvider.budget?.id == null) {
+    return false; // Jos käyttäjää tai budjettia ei ole, ei voida jatkaa
   }
 
   // Tarkistetaan, onko alakategorialla meno-tapahtumia
-  final now = DateTime.now();
   final hasEvents = await expenseProvider.hasSubcategoryEvents(
     userId: authProvider.user!.uid,
-    year: now.year,
-    month: now.month,
+    budgetId: budgetProvider.budget!.id!,
     category: categoryName,
     subcategory: subcategory,
   );

@@ -6,7 +6,7 @@ import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../providers/auth_provider.dart' as custom_auth; // Lisätty as-etuliite
+import '../../providers/auth_provider.dart' as custom_auth;
 
 /// Kirjautumispainike, joka käsittelee Google-kirjautumisen ja navigoi oikealle
 /// sivulle (chatbotRoute tai mainRoute) kirjautumisen jälkeen.
@@ -31,44 +31,30 @@ class LoginButton extends StatelessWidget {
   /// Navigoi käyttäjän oikealle sivulle kirjautumisen jälkeen.
   /// Jos budjettia ei ole, ohjaa chatbot-sivulle; muuten pääsivulle.
   Future<void> _navigateAfterLogin(BuildContext context) async {
-    print('_navigateAfterLogin: Aloitetaan');
+    print('LoginButton: _navigateAfterLogin: Aloitetaan');
     try {
-      final authProvider = context.read<custom_auth.AuthProvider>(); // Käytetään as-etuliitettä
+      final authProvider = context.read<custom_auth.AuthProvider>();
       final budgetProvider = context.read<BudgetProvider>();
       final expenseProvider = context.read<ExpenseProvider>();
 
-      if (authProvider.user != null) {
-        await Future.delayed(const Duration(seconds: 2));
-        print('_navigateAfterLogin: Käyttäjä löytyy.');
+      if (authProvider.user == null) {
+        throw Exception('Käyttäjä ei ole kirjautunut');
+      }
 
-        // Haetaan budjettidata vain tässä vaiheessa
-        final now = DateTime.now();
-        await budgetProvider.loadBudget(authProvider.user!.uid, now.year, now.month);
-        print('_navigateAfterLogin: Budjetti ladattu, budget == null: ${budgetProvider.budget == null}');
+      // Haetaan saatavilla olevat budjetit (migraatio on jo suoritettu LoginScreen:ssä)
+      final budgets = await budgetProvider.getAvailableBudgets(authProvider.user!.uid);
+      print('LoginButton: _navigateAfterLogin: Saatavilla olevat budjetit: ${budgets.length}');
 
-        if (context.mounted) {
-          if (budgetProvider.budget == null) {
-            print('_navigateAfterLogin: Budjetti on null, tarkistetaan Firestore');
-            final budgetsSnapshot = await FirebaseFirestore.instance
-                .collection('budgets')
-                .doc(authProvider.user!.uid)
-                .collection('monthly_budgets')
-                .limit(1)
-                .get();
-
-            if (budgetsSnapshot.docs.isEmpty) {
-              print('_navigateAfterLogin: Ei budjetteja, ohjataan chatbot-sivulle');
-              Navigator.pushReplacementNamed(context, AppRouter.chatbotRoute);
-            } else {
-              print('_navigateAfterLogin: Budjetti löytyy, haetaan tapahtumat ja ohjataan pääsivulle');
-              await expenseProvider.loadAllExpenses(authProvider.user!.uid);
-              Navigator.pushReplacementNamed(context, AppRouter.mainRoute);
-            }
-          } else {
-            print('_navigateAfterLogin: Nykyinen budjetti löytyy, haetaan tapahtumat ja ohjataan pääsivulle');
-            await expenseProvider.loadAllExpenses(authProvider.user!.uid);
-            Navigator.pushReplacementNamed(context, AppRouter.mainRoute);
-          }
+      if (context.mounted) {
+        if (budgets.isEmpty) {
+          print('LoginButton: _navigateAfterLogin: Ei budjetteja, ohjataan chatbot-sivulle');
+          Navigator.pushReplacementNamed(context, AppRouter.chatbotRoute);
+        } else {
+          print('LoginButton: _navigateAfterLogin: Budjetteja löytyy, ladataan viimeisin budjetti ja tapahtumat');
+          final latestBudget = budgets.first;
+          await budgetProvider.loadBudget(authProvider.user!.uid, latestBudget.id!);
+          await expenseProvider.loadExpenses(authProvider.user!.uid, latestBudget.id!);
+          Navigator.pushReplacementNamed(context, AppRouter.mainRoute);
         }
       }
     } catch (e) {
@@ -76,7 +62,7 @@ class LoginButton extends StatelessWidget {
       await FirebaseCrashlytics.instance.recordError(
         e,
         StackTrace.current,
-        reason: 'Failed to navigate after login',
+        reason: 'Failed to navigate after login in LoginButton',
       );
 
       // Tunnistetaan virhetyyppi ja lisätään kontekstia
@@ -85,7 +71,7 @@ class LoginButton extends StatelessWidget {
         await FirebaseCrashlytics.instance.setCustomKey('error_message', e.message ?? 'Unknown Firestore error');
       }
 
-      print('_navigateAfterLogin: Virhe navigoinnissa: $e');
+      print('LoginButton: _navigateAfterLogin: Virhe navigoinnissa: $e');
       onError(context, 'Navigointi epäonnistui: $e');
     }
   }
@@ -104,9 +90,9 @@ class LoginButton extends StatelessWidget {
                 : () async {
                     onLoginStart();
                     try {
-                      print('Aloitetaan Google-kirjautuminen');
-                      await context.read<custom_auth.AuthProvider>().signInWithGoogle(); // Käytetään as-etuliitettä
-                      print('Google-kirjautuminen onnistui, kutsutaan _navigateAfterLogin');
+                      print('LoginButton: Aloitetaan Google-kirjautuminen');
+                      await context.read<custom_auth.AuthProvider>().signInWithGoogle();
+                      print('LoginButton: Google-kirjautuminen onnistui, kutsutaan _navigateAfterLogin');
                       await _navigateAfterLogin(context);
                     } catch (e) {
                       // Raportoidaan virhe Crashlyticsiin, mutta vain jos se ei ole jo raportoitu AuthProviderissa
@@ -125,7 +111,7 @@ class LoginButton extends StatelessWidget {
                         }
                       }
 
-                      print('Google-kirjautumisvirhe: $e');
+                      print('LoginButton: Google-kirjautumisvirhe: $e');
                       onError(context, 'Google-kirjautuminen epäonnistui: $e');
                     } finally {
                       onLoginEnd();

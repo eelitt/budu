@@ -1,12 +1,19 @@
-import 'package:budu/core/constants.dart';
+import 'package:budu/features/auth/providers/auth_provider.dart';
+import 'package:budu/features/budget/models/budget_model.dart';
 import 'package:budu/features/budget/providers/budget_provider.dart';
 import 'package:budu/features/budget/providers/expense_provider.dart';
 import 'package:budu/features/budget/screens/summary/budget_tracking/category_expansion_tile.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 
 class BudgetTrackingSection extends StatefulWidget {
-  const BudgetTrackingSection({super.key});
+  final BudgetModel budget; // Valittu budjetti SummaryScreen:ltä
+
+  const BudgetTrackingSection({
+    super.key,
+    required this.budget,
+  });
 
   @override
   State<BudgetTrackingSection> createState() => _BudgetTrackingSectionState();
@@ -16,6 +23,39 @@ class _BudgetTrackingSectionState extends State<BudgetTrackingSection> {
   bool _isExpanded = true;
 
   @override
+  void initState() {
+    super.initState();
+   // Suorita tapahtumien lataus build-vaiheen jälkeen
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _loadExpenses();
+      }
+    });
+  }
+
+  /// Lataa tapahtumat oikealle budjetille
+  Future<void> _loadExpenses() async {
+    try {
+      final expenseProvider = Provider.of<ExpenseProvider>(context, listen: false);
+      final authProvider = Provider.of<AuthProvider>(context, listen: false);
+      if (authProvider.user != null) {
+        await expenseProvider.loadExpenses(authProvider.user!.uid, widget.budget.id!);
+      }
+    } catch (e, stackTrace) {
+      await FirebaseCrashlytics.instance.recordError(
+        e,
+        stackTrace,
+        reason: 'Failed to load expenses for budget ${widget.budget.id}',
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Tapahtumien lataus epäonnistui: $e')),
+        );
+      }
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     final budgetProvider = Provider.of<BudgetProvider>(context);
     final expenseProvider = Provider.of<ExpenseProvider>(context);
@@ -23,7 +63,6 @@ class _BudgetTrackingSectionState extends State<BudgetTrackingSection> {
     final categoryTotals = expenseProvider.getCategoryTotals();
     // Tarkistetaan, onko budjetti olemassa
     if (budgetProvider.budget == null) {
-      // Näytetään viesti, jos budjettia ei ole saatavilla
       return const Center(
         child: Text(
           'Budjettia ei ole saatavilla. Luo budjetti ensin.',
@@ -33,53 +72,17 @@ class _BudgetTrackingSectionState extends State<BudgetTrackingSection> {
     }
     final budget = budgetProvider.budget!;
 
-    // Haetaan budjetin kategoriat
-    final budgetCategories = budget.expenses.keys.toSet();
+    // Haetaan budjetin kategoriat suoraan budjetista
+    final budgetCategories = budget.expenses.keys.toList()..sort();
 
-    // Suodatetaan categoryMapping-kategoriat vain niihin, jotka ovat budjetissa
-    final List<MapEntry<String, List<String>>> filteredCategories = Constants.categoryMapping.entries
-        .where((entry) => budgetCategories.contains(entry.key))
-        .toList()
-      ..sort((a, b) => a.key.compareTo(b.key));
+    // Luo kategoriat widgetit
+    final List<Widget> categoryWidgets = budgetCategories.map((categoryName) {
+      final categoryExpenses = budget.expenses[categoryName]!.entries
+          .map((e) => MapEntry(e.key, e.value))
+          .toList()
+        ..sort((a, b) => a.key.compareTo(b.key));
 
-    // Haetaan unmapped-kategoriat (kategoriat, joita ei ole categoryMapping-rakenteessa)
-    final allMappedCategories = Constants.categoryMapping.values.expand((categories) => categories).toSet();
-    final mappedMainCategories = Constants.categoryMapping.keys.toSet();
-    final unmappedCategories = budget.expenses.keys
-        .where((key) => !allMappedCategories.contains(key) && !mappedMainCategories.contains(key))
-        .toList();
-
-    unmappedCategories.sort();
-
-    final Map<String, double> unmappedExpenses = {};
-    for (var category in unmappedCategories) {
-      final subcategories = budget.expenses[category]!;
-      final categoryTotal = subcategories.values.fold(0.0, (sum, value) => sum + value);
-      unmappedExpenses[category] = categoryTotal;
-    }
-    final double unmappedBudget = unmappedExpenses.values.fold(0.0, (sum, value) => sum + value);
-    final double unmappedSpent = categoryTotals.entries
-        .where((e) => unmappedCategories.contains(e.key))
-        .fold<double>(0.0, (sum, e) => sum + e.value);
-
-    final List<Widget> categoryWidgets = filteredCategories.map((categoryEntry) {
-      final categoryName = categoryEntry.key;
-      final subCategories = categoryEntry.value;
-
-      double directCategoryBudget = 0.0;
-      if (budget.expenses.containsKey(categoryName)) {
-        directCategoryBudget = budget.expenses[categoryName]!.values.fold(0.0, (sum, value) => sum + value);
-      }
-
-      final categoryExpenses = budget.expenses.containsKey(categoryName)
-          ? budget.expenses[categoryName]!.entries.map((e) => MapEntry(e.key, e.value)).toList()
-          : <MapEntry<String, double>>[];
-
-      categoryExpenses.sort((a, b) => a.key.compareTo(b.key));
-
-      final categoryBudget = subCategories.isNotEmpty
-          ? categoryExpenses.fold<double>(0.0, (sum, e) => sum + e.value)
-          : directCategoryBudget;
+      final categoryBudget = categoryExpenses.fold<double>(0.0, (sum, e) => sum + e.value);
       final categorySpent = categoryTotals[categoryName] ?? 0.0;
 
       return CategoryExpansionTile(
@@ -87,11 +90,15 @@ class _BudgetTrackingSectionState extends State<BudgetTrackingSection> {
         categoryBudget: categoryBudget,
         categorySpent: categorySpent,
         categoryExpenses: categoryExpenses,
+        budgetId: widget.budget.id!, // Välitetään budjetin ID
       );
     }).toList();
 
-    // Lasketaan kategorioiden kokonaismäärä (filtered + unmapped)
-    final totalCategories = categoryWidgets.length + (unmappedExpenses.isNotEmpty ? 1 : 0);
+    // Lasketaan kokonaisbudjetti ja käytetyt summat
+    final totalBudget = budgetCategories.fold<double>(
+        0.0, (sum, category) => sum + budget.expenses[category]!.values.fold(0.0, (s, v) => s + v));
+    final totalSpent = budgetCategories.fold<double>(
+        0.0, (sum, category) => sum + (categoryTotals[category] ?? 0.0));
 
     return Container(
       decoration: BoxDecoration(
@@ -111,9 +118,11 @@ class _BudgetTrackingSectionState extends State<BudgetTrackingSection> {
         child: ExpansionTile(
           initiallyExpanded: _isExpanded,
           onExpansionChanged: (bool expanded) {
-            setState(() {
-              _isExpanded = expanded;
-            });
+            if (mounted) {
+              setState(() {
+                _isExpanded = expanded;
+              });
+            }
           },
           tilePadding: EdgeInsets.zero,
           leading: const Padding(
@@ -129,11 +138,11 @@ class _BudgetTrackingSectionState extends State<BudgetTrackingSection> {
                   'Budjettiseuranta',
                   style: Theme.of(context).textTheme.headlineSmall,
                 ),
-                if (totalCategories > 0) // Näytetään vain, jos kategorioita on
+                if (budgetCategories.isNotEmpty) // Näytetään vain, jos kategorioita on
                   Padding(
                     padding: const EdgeInsets.only(top: 2),
                     child: Text(
-                      '$totalCategories kategoria${totalCategories == 1 ? '' : 'a'}',
+                      '${budgetCategories.length} kategoria${budgetCategories.length == 1 ? '' : 'a'}',
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                             color: Colors.black54,
                             fontSize: 12,
@@ -154,13 +163,16 @@ class _BudgetTrackingSectionState extends State<BudgetTrackingSection> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   ...categoryWidgets,
-                  if (unmappedExpenses.isNotEmpty)
-                    CategoryExpansionTile(
-                      categoryName: 'Muut',
-                      categoryBudget: unmappedBudget,
-                      categorySpent: unmappedSpent,
-                      unmappedExpenses: unmappedExpenses.entries.toList(),
-                      isUnmappedCategory: true,
+                  if (budgetCategories.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Text(
+                        'Yhteensä: ${totalSpent.toStringAsFixed(2)} / ${totalBudget.toStringAsFixed(2)} €',
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                              fontWeight: FontWeight.bold,
+                              color: totalSpent > totalBudget ? Colors.red : Colors.black87,
+                            ),
+                      ),
                     ),
                 ],
               ),
