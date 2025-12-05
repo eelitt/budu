@@ -4,6 +4,16 @@ A cross-platform budgeting app built with Flutter and Firebase.
 **Project**
 - **Name**: `budu` — a personal budgeting and expense-tracking mobile app.
 - **Stack**: Flutter (Dart), Firebase (Auth, Firestore, Crashlytics), Cloud Functions (Node.js).
+
+  **Functionality**
+- **User accounts & auth**: Sign up and sign in with Firebase Authentication (Google Sign-In is supported).
+- **Real-time sync**: User data and transactions synchronize across devices using Cloud Firestore.
+- **Transactions management**: Create, edit and delete income and expense entries with category, amount, date and optional notes.
+- **Budgets & alerts**: Set budget limits per category and receive visual indicators when spending approaches or exceeds limits.
+- **Reports & visualizations**: View spending breakdowns and trends with charts (pie, line, bar) powered by charting libraries.
+- **Categories & tags**: Organize transactions with categories.
+- **Offline support & connectivity**: Local caching and sync behavior when connectivity is restored (uses connectivity checks and local storage).
+- **Crash reporting**: Crashlytics integration captures and reports crashes for improved stability.
   
  ![Image (1)](https://github.com/user-attachments/assets/20536cc3-de5b-4ed2-8070-718787359f74)  ![Image](https://github.com/user-attachments/assets/ecee11dd-059c-48cc-a37e-3b772783156a)
 
