@@ -1,3 +1,6 @@
+import 'dart:async'; // Lisätty: Timer debounce:lle
+import 'package:budu/core/app_router/app_router.dart';
+import 'package:budu/core/utils.dart';
 import 'package:budu/features/auth/providers/auth_provider.dart';
 import 'package:budu/features/budget/models/budget_model.dart';
 import 'package:budu/features/budget/providers/budget_provider.dart';
@@ -35,6 +38,8 @@ class _BudgetScreenState extends State<BudgetScreen> {
   bool _isLoadingBudgets = true;
   bool _hasSharedBudgets = false;
   bool _isLoadingSharedBudget = false; // Seuraa yhteistalousbudjetin lataustilaa
+  Timer? _toggleCooldownTimer; // Lisätty: Timer delay:lle (5s debounce rämppäyksessä)
+  bool _toggleCooldown = false; // Lisätty: Lippu tarkistamaan delay (estää rämppääminen, UX-ystävällinen)
 
   @override
   void initState() {
@@ -119,6 +124,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
 
   @override
   void dispose() {
+    _toggleCooldownTimer?.cancel(); // Lisätty: Cancel timer dispose:ssa (vältä memory leak, virheenkäsittely)
     _personalController.dispose();
     _sharedController.dispose();
     super.dispose();
@@ -183,7 +189,12 @@ class _BudgetScreenState extends State<BudgetScreen> {
                             ),
                             Switch(
                               value: _isSharedBudget,
-                              onChanged: (value) async {
+                              onChanged: (value) {
+                                if (_toggleCooldown) {
+                                  // Näytä snackbar jos delay aktiivinen (UX-ystävällinen, estää rämppääminen)
+                                  showSnackBar(context, 'Odota hetki vaihtaaksesi budjettia', backgroundColor: Colors.orange);
+                                  return;
+                                }
                                 WidgetsBinding.instance.addPostFrameCallback((_) async {
                                   setState(() {
                                     _isSharedBudget = value;
@@ -206,6 +217,11 @@ class _BudgetScreenState extends State<BudgetScreen> {
                                       });
                                     }
                                   }
+                                  // Aktivoi delay 5s (debounce rämppäyksessä)
+                                  _toggleCooldown = true;
+                                  _toggleCooldownTimer = Timer(const Duration(seconds: 5), () {
+                                    _toggleCooldown = false;
+                                  });
                                 });
                               },
                               activeColor: Colors.blueGrey[700],
@@ -309,7 +325,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
                                     if (_isSharedBudget) {
                                       await _sharedController.resetBudgetExpenses(
                                         userId: authProvider.user!.uid,
-                                        sharedBudgetId: _selectedSharedBudget?.id.toString() ?? '', // Null-tarkistus: Tyhjä string, jos null (virheenkäsittely)
+                                        sharedBudgetId: _selectedSharedBudget!.id.toString(),
                                       );
                                     } else {
                                       await _personalController.resetBudgetExpenses(
@@ -358,7 +374,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
                                     if (_isSharedBudget) {
                                       await _sharedController.deleteBudget(
                                         userId: authProvider.user!.uid,
-                                        sharedBudgetId: _selectedSharedBudget?.id.toString() ?? '', // Null-tarkistus: Tyhjä string, jos null (virheenkäsittely)
+                                        sharedBudgetId: _selectedSharedBudget!.id.toString(),
                                       );
                                       WidgetsBinding.instance.addPostFrameCallback((_) {
                                         setState(() {

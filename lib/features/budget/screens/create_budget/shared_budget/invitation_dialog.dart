@@ -6,11 +6,12 @@ import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:firebase_auth/firebase_auth.dart' hide AuthProvider;
-import 'package:cloud_firestore/cloud_firestore.dart'; // Lisätty: Batch-write notifikaatiolle
-import 'package:budu/features/notification/data/notification_repository.dart'; // Lisätty: Käytä repositorya notifikaation luonnissa
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:budu/features/notification/data/notification_repository.dart';
 
 /// Dialogi yhteistalousbudjetin nimen ja valinnaisen kutsun syöttämiseen.
-/// Päivitetty: Käytä NotificationRepository:a notifikaation luonnissa (modulaarinen, batch atominen).
+/// Päivitetty: Normalisoi email lowercase:ksi queryä varten, lisätty tarkempi logging, parannettu virheenkäsittely indeksiongelmiin.
+/// Lisätty: Handle fields.size() epäonnistuminen as not found (fallback null, ei crash).
 class InvitationDialog extends StatefulWidget {
   const InvitationDialog({super.key});
 
@@ -24,7 +25,7 @@ class _InvitationDialogState extends State<InvitationDialog> {
   String? _errorMessage;
   bool _isLoading = false;
   bool _includeInvite = false;
-  final NotificationRepository _notificationRepository = NotificationRepository(); // Lisätty: Repository-instanssi
+  final NotificationRepository _notificationRepository = NotificationRepository();
 
   @override
   void dispose() {
@@ -34,23 +35,49 @@ class _InvitationDialogState extends State<InvitationDialog> {
   }
 
   /// Hakee userId:n annetulla email:llä (optimoitu limit=1).
+  /// Normalisoi email lowercase:ksi (case-insensitive haku).
+  /// Virheenkäsittely: Käsittelee permission-denied ja indeksi-virheet as not found (null return, ei crash).
   Future<String?> _getUserIdByEmail(String email) async {
     try {
+      final normalizedEmail = email.toLowerCase(); // Normalisoi lowercase
+      print('InvitationDialog: Haetaan userId email:llä $normalizedEmail');
+      await FirebaseCrashlytics.instance.log('InvitationDialog: Haetaan userId email:llä $normalizedEmail');
+
       final snapshot = await FirebaseFirestore.instance
           .collection('users')
-          .where('email', isEqualTo: email)
+          .where('email', isEqualTo: normalizedEmail)
           .limit(1)
           .get();
+      
       if (snapshot.docs.isNotEmpty) {
-        return snapshot.docs.first.id;
+        final userId = snapshot.docs.first.id;
+        final storedEmail = snapshot.docs.first.data()['email'] as String?;
+        print('InvitationDialog: Löydetty userId: $userId, stored email: $storedEmail');
+        await FirebaseCrashlytics.instance.log('InvitationDialog: Löydetty userId: $userId, stored email: $storedEmail');
+        return userId;
       }
+      print('InvitationDialog: Email $normalizedEmail ei löydy (snapshot size: ${snapshot.size})');
+      await FirebaseCrashlytics.instance.log('InvitationDialog: Email $normalizedEmail ei löydy (snapshot size: ${snapshot.size})');
       return null;
+    } on FirebaseException catch (e) {
+      if (e.code == 'permission-denied') {
+        await FirebaseCrashlytics.instance.log('Permission-denied email-haussa: $email - kohdellaan ei-löydettynä');
+        print('InvitationDialog: Permission-denied email-haussa: $email');
+        return null; // Handle as not found (turvallinen, ei heitä erroria)
+      }
+      if (e.code == 'failed-precondition') {
+        await FirebaseCrashlytics.instance.log('Indeksi puuttuu email-haussa: $email - tarkista Firestore-konsoli');
+        print('InvitationDialog: Indeksi puuttuu email-haussa: $email - tarkista Firestore-konsoli');
+        return null; // Handle missing index
+      }
+      rethrow;
     } catch (e, stackTrace) {
       await FirebaseCrashlytics.instance.recordError(
         e,
         stackTrace,
         reason: 'Failed to get userId by email: $email',
       );
+      print('InvitationDialog: Virhe userId:n haussa email:llä $email: $e');
       return null;
     }
   }
@@ -106,7 +133,7 @@ class _InvitationDialogState extends State<InvitationDialog> {
         batch.set(invitationRef, {
           'sharedBudgetId': sharedBudgetId,
           'inviterId': userId,
-          'inviteeEmail': inviteeEmail,
+          'inviteeEmail': inviteeEmail.toLowerCase(), // Normalisoi invitation-dokumenttiin
           'status': 'pending',
           'createdAt': FieldValue.serverTimestamp(),
         });
@@ -131,8 +158,8 @@ class _InvitationDialogState extends State<InvitationDialog> {
             'user1Id': userId,
             'user2Id': null,
             'budgetName': budgetName,
-            'inviteeEmail': _includeInvite ? inviteeEmail : null,
-            'isNew': true, // Lisätty: Kerro screen:lle, että uusi budjetti (skippaa haku)
+            'inviteeEmail': _includeInvite ? inviteeEmail.toLowerCase() : null, // Normalisoi myös tässä
+            'isNew': true, // Kerro screen:lle, että uusi budjetti (skippaa haku)
           },
         );
       }
@@ -150,6 +177,10 @@ class _InvitationDialogState extends State<InvitationDialog> {
       if (mounted) {
         showErrorSnackBar(context, _errorMessage!);
       }
+    } finally {
+      setState(() {
+        _isLoading = false;
+      });
     }
   }
 

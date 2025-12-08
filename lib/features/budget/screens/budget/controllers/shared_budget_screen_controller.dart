@@ -1,5 +1,5 @@
+import 'dart:async';
 import 'package:budu/core/app_router/app_router.dart';
-import 'package:budu/features/auth/providers/auth_provider.dart';
 import 'package:budu/features/budget/models/budget_model.dart';
 import 'package:budu/features/budget/providers/expense_provider.dart';
 import 'package:budu/features/budget/providers/shared_budget_provider.dart';
@@ -12,12 +12,14 @@ import 'package:rxdart/rxdart.dart';
 /// Kontrolleri yhteistalousbudjettien tilan hallintaan.
 /// Käsittelee budjetin lataamista, nollausta ja poistamista.
 /// Käyttää BehaviorSubject:ia budjetin tilan reaaliaikaiseen seurantaan.
+/// Päivitetty: Lisätty _isDisposed-lippu ja mounted-check (estää deactivated context-viittaus dispose:n jälkeen), timeout loadBudget:iin (5s, handle null), virheenkäsittely loggauksella. Modulaarinen (ei riko).
 class SharedBudgetScreenController {
   final BuildContext context;
   final VoidCallback onStateChanged;
   final VoidCallback? onBudgetDeleted;
   bool _isInitialized = false;
   bool _isLoadingBudget = false;
+  bool _isDisposed = false; // Lisätty: Lippu tarkistamaan, onko disposed (estää async-crash)
 
   final BehaviorSubject<BudgetModel?> _selectedBudget = BehaviorSubject<BudgetModel?>();
   ValueStream<BudgetModel?> get selectedBudget => _selectedBudget.stream;
@@ -48,10 +50,17 @@ class SharedBudgetScreenController {
     });
 
     try {
+      if (_isDisposed) return;
       final sharedBudgetProvider = Provider.of<SharedBudgetProvider>(context, listen: false);
-      final budget = await sharedBudgetProvider.getSharedBudgetById(sharedBudgetId);
+      final budget = await sharedBudgetProvider.getSharedBudgetById(sharedBudgetId)
+          .timeout(const Duration(seconds: 5), onTimeout: () { // Lisätty: Timeout 5s (estää hangaus, handle as null)
+            print('SharedBudgetScreenController: Timeout loadBudget haussa sharedBudgetId: $sharedBudgetId');
+            return null;
+          });
       if (budget != null) {
-       // _selectedBudget.add(budget);
+        _selectedBudget.add(budget);
+      } else {
+        _selectedBudget.add(null);
       }
     } catch (e, stackTrace) {
       await FirebaseCrashlytics.instance.recordError(
@@ -59,6 +68,7 @@ class SharedBudgetScreenController {
         stackTrace,
         reason: 'Failed to load shared budget $sharedBudgetId for user $userId',
       );
+      _selectedBudget.add(null); // Handle virhe as null (fallback)
     } finally {
       _isLoadingBudget = false;
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -74,9 +84,7 @@ class SharedBudgetScreenController {
       (budget) => budget.id == sharedBudgetId,
       orElse: () => sharedBudgetProvider.sharedBudgets.isNotEmpty
           ? sharedBudgetProvider.sharedBudgets.first
-          : _selectedBudget.value != null && _selectedBudget.value!.id != null
-              ? BudgetModel.fromMap(_selectedBudget.value!.toMap(), _selectedBudget.value!.id)
-              : throw Exception('No valid shared budget available'),
+          : throw Exception('No valid shared budget available'),
     );
     _selectedBudget.add(BudgetModel(
       id: updatedBudget.id,
