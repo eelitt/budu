@@ -5,6 +5,19 @@ A cross-platform budgeting app built with Flutter and Firebase.
 - **Name**: `budu` — a personal budgeting and expense-tracking mobile app.
 - **Stack**: Flutter (Dart), Firebase (Auth, Firestore, Crashlytics), Cloud Functions (Node.js).
 
+  **Functionality**
+- **User accounts & auth**: Sign up and sign in with Firebase Authentication (Google Sign-In is supported).
+- **Real-time sync**: User data and transactions synchronize across devices using Cloud Firestore.
+- **Transactions management**: Create, edit and delete income and expense entries with category, amount, date and optional notes.
+- **Budgets & alerts**: Set budget limits per category and receive visual indicators when spending approaches or exceeds limits.
+- **Reports & visualizations**: View spending breakdowns and trends with charts (pie, line, bar) powered by charting libraries.
+- **Categories & tags**: Organize transactions with categories.
+- **Offline support & connectivity**: Local caching and sync behavior when connectivity is restored (uses connectivity checks and local storage).
+- **Crash reporting**: Crashlytics integration captures and reports crashes for improved stability.
+  
+ ![Image (1)](https://github.com/user-attachments/assets/20536cc3-de5b-4ed2-8070-718787359f74)  ![Image](https://github.com/user-attachments/assets/ecee11dd-059c-48cc-a37e-3b772783156a)
+
+
 **Quick Start**
 - **Prerequisites**: `Flutter` (Dart SDK compatible with `sdk: ^3.7.2`), `Node.js` (see `functions/package.json` - uses `node: 22`), and the `Firebase CLI`.
 - **Get dependencies**: run `flutter pub get` from the project root.
@@ -47,21 +60,6 @@ Use `npm run deploy` in `functions/` to deploy functions to Firebase: `npm run d
 - **Firebase config**: `firebase.json` — Firebase hosting/emulator/other config.
 - **Version & changelog**: `version.txt` and `changelog.txt` at project root.
 
-**Functionality**
-- **User accounts & auth**: Sign up and sign in with Firebase Authentication (email/password and Google Sign-In are supported).
-- **Real-time sync**: User data and transactions synchronize across devices using Cloud Firestore.
-- **Transactions management**: Create, edit and delete income and expense entries with category, amount, date and optional notes.
-- **Budgets & alerts**: Set budget limits per category and receive visual indicators when spending approaches or exceeds limits.
-- **Recurring transactions**: Schedule repeating transactions (monthly, weekly, daily) to automate recurring income or expenses.
-- **Reports & visualizations**: View spending breakdowns and trends with charts (pie, line, bar) powered by charting libraries.
-- **Categories & tags**: Organize transactions with categories and tags for easier filtering and reporting.
-- **Attachments & receipts**: Attach receipts or files to transactions and open them with installed apps when needed.
-- **Export / import**: Export transaction data (CSV/other formats) for backup or external analysis and import supported formats.
-- **Offline support & connectivity**: Local caching and sync behavior when connectivity is restored (uses connectivity checks and local storage).
-- **Crash reporting**: Crashlytics integration captures and reports crashes for improved stability.
-- **Optional features**: In-app chat/support UI and other real-time messaging features may be available if implemented (see `flutter_chat_ui` and `flutter_chat_types` dependencies).
-- **Server-side processing**: Background tasks, notifications or server logic can run in the `functions/` Cloud Functions code.
-
 **Development notes**
 - **Lint & tests**: standard `flutter test` and `flutter analyze` apply. There are no unit tests required to run the app, but `test/widget_test.dart` exists as a sample.
 - **Assets**: images and splash icon are under `lib/assets/images/` and are referenced in `pubspec.yaml`.
@@ -73,6 +71,3 @@ Use `npm run deploy` in `functions/` to deploy functions to Firebase: `npm run d
 
 **License & Contact**
 - Check repository.
-
----
-
