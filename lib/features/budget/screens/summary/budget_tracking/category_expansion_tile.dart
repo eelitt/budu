@@ -14,6 +14,7 @@ class CategoryExpansionTile extends StatefulWidget {
   final List<MapEntry<String, double>>? unmappedExpenses;
   final bool isUnmappedCategory;
   final String budgetId; // Budjetin tunniste SummaryScreen:ltä
+  final bool isSharedBudget; // Lisätty: Onko yhteistalousbudjetti
 
   const CategoryExpansionTile({
     super.key,
@@ -24,6 +25,7 @@ class CategoryExpansionTile extends StatefulWidget {
     this.unmappedExpenses,
     this.isUnmappedCategory = false,
     required this.budgetId,
+    required this.isSharedBudget,
   });
 
   @override
@@ -92,7 +94,7 @@ class _CategoryExpansionTileState extends State<CategoryExpansionTile> {
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.15),
+            color: Colors.black.withOpacity(0.15),
             blurRadius: 8,
             offset: const Offset(0, 4),
           ),
@@ -269,6 +271,7 @@ class _CategoryExpansionTileState extends State<CategoryExpansionTile> {
                       builder: (dialogContext) => AddEventDialog(
                         initialCategory: widget.categoryName,
                         initialBudgetId: widget.budgetId, // Välitetään budjetin ID
+                        isSharedBudget: widget.isSharedBudget, // Välitetään budjettityyppi
                       ),
                     );
                   },

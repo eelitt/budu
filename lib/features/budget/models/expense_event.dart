@@ -39,7 +39,7 @@ class ExpenseEvent {
   });
 
   /// Luo ExpenseEvent-instanssin Map-oliosta, esimerkiksi haettaessa dataa tallennuksesta.
-  factory ExpenseEvent.fromMap(Map<String, dynamic> map) {
+  factory ExpenseEvent.fromMap(Map<String, dynamic> map, [String? id]) {
     try {
       // Tuki vanhalle year/month-datamuodolle
       String budgetId;
@@ -50,7 +50,7 @@ class ExpenseEvent {
       }
 
       return ExpenseEvent(
-        id: map['id'] as String? ?? 'unknown',
+        id: id ?? map['id'] as String? ?? 'unknown',
         category: map['category'] as String? ?? 'Ei kategoriaa',
         subcategory: map['subcategory'] as String?,
         amount: (map['amount'] as num?)?.toDouble() ?? 0.0,
@@ -84,5 +84,31 @@ class ExpenseEvent {
     };
     if (userId != null) map['userId'] = userId;
     return map;
+  }
+
+  /// Luo kopion tapahtumasta, jossa voi muuttaa valittuja kenttiä.
+  /// Hyödyllinen immutable-päivityksiin, esim. userId:n lisäys shared-budjeteissa.
+  ExpenseEvent copyWith({
+    String? id,
+    String? category,
+    String? subcategory,
+    double? amount,
+    DateTime? createdAt,
+    EventType? type,
+    String? budgetId,
+    String? description,
+    String? userId,
+  }) {
+    return ExpenseEvent(
+      id: id ?? this.id,
+      category: category ?? this.category,
+      subcategory: subcategory ?? this.subcategory,
+      amount: amount ?? this.amount,
+      createdAt: createdAt ?? this.createdAt,
+      type: type ?? this.type,
+      budgetId: budgetId ?? this.budgetId,
+      description: description ?? this.description,
+      userId: userId ?? this.userId,
+    );
   }
 }

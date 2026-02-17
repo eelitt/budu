@@ -34,6 +34,7 @@ class SharedBudgetScreenController {
 
   bool get isInitialized => _isInitialized;
   bool get isLoadingBudget => _isLoadingBudget;
+StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _selectedBudgetSubscription;
 
   Future<void> _initialize() async {
     _isInitialized = true;
@@ -42,40 +43,47 @@ class SharedBudgetScreenController {
     });
   }
 
-  /// Lataa budjetin tiedot yhteistalousbudjetille.
-  Future<void> loadBudget({required String userId, required String sharedBudgetId}) async {
-    _isLoadingBudget = true;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      onStateChanged();
-    });
+  /// Loads a shared budget by ID with realtime updates.
+/// Replaces one-time fetch with initial get + document snapshot listener.
+Future<void> loadBudget({
+  required String userId,
+  required String sharedBudgetId,
+}) async {
+  // Cancel previous realtime listener (prevent leaks/multiple subs)
+  await _selectedBudgetSubscription?.cancel();
+  _selectedBudgetSubscription = null;
 
-    try {
-      if (_isDisposed) return;
+  try {
       final sharedBudgetProvider = Provider.of<SharedBudgetProvider>(context, listen: false);
-      final budget = await sharedBudgetProvider.getSharedBudgetById(sharedBudgetId)
-          .timeout(const Duration(seconds: 5), onTimeout: () { // Lisätty: Timeout 5s (estää hangaus, handle as null)
-            print('SharedBudgetScreenController: Timeout loadBudget haussa sharedBudgetId: $sharedBudgetId');
-            return null;
-          });
-      if (budget != null) {
-        _selectedBudget.add(budget);
+    // 1. Fast initial fetch
+    final initialBudget = await sharedBudgetProvider.getSharedBudgetById(sharedBudgetId);
+    _selectedBudget.add(initialBudget);
+
+    // 2. Realtime listener for live updates (shared multi-user)
+    _selectedBudgetSubscription = FirebaseFirestore.instance
+        .collection('shared_budgets')
+        .doc(sharedBudgetId)
+        .snapshots()
+        .listen((snapshot) {
+      if (snapshot.exists && snapshot.data() != null) {
+        final updated = BudgetModel.fromMap(snapshot.data()!, snapshot.id);
+        _selectedBudget.add(updated);
       } else {
-        _selectedBudget.add(null);
+        _selectedBudget.add(null); // Deleted/invalid
       }
-    } catch (e, stackTrace) {
-      await FirebaseCrashlytics.instance.recordError(
-        e,
-        stackTrace,
-        reason: 'Failed to load shared budget $sharedBudgetId for user $userId',
-      );
-      _selectedBudget.add(null); // Handle virhe as null (fallback)
-    } finally {
-      _isLoadingBudget = false;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        onStateChanged();
-      });
-    }
+    }, onError: (e) {
+      FirebaseCrashlytics.instance.recordError(e, StackTrace.current,
+          reason: 'Realtime shared budget listener failed: $sharedBudgetId');
+      _selectedBudget.add(null);
+    });
+  } catch (e, stack) {
+    await FirebaseCrashlytics.instance.recordError(e, stack,
+        reason: 'Failed to load shared budget $sharedBudgetId');
+    _selectedBudget.add(null);
+    rethrow; // Let UI handle (we already catch in toggle)
   }
+}
+
 
   /// Päivittää selectedBudget SharedBudgetProvider.sharedBudgets:n perusteella.
   void updateSelectedBudget(String sharedBudgetId) {
@@ -163,5 +171,7 @@ class SharedBudgetScreenController {
 
   void dispose() {
     _selectedBudget.close();
+      _selectedBudgetSubscription?.cancel();
+  _selectedBudget.close();
   }
 }

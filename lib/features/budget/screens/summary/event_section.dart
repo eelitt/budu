@@ -1,13 +1,27 @@
 import 'package:budu/core/utils.dart';
 import 'package:budu/features/auth/providers/auth_provider.dart';
+import 'package:budu/features/budget/models/budget_model.dart';
 import 'package:budu/features/budget/models/expense_event.dart';
-import 'package:budu/features/budget/providers/budget_provider.dart';
 import 'package:budu/features/budget/providers/expense_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+/// Näyttää meno- ja tulotapahtumat yhteenvetosivulla.
+/// Tukee nyt täysin sekä henkilökohtaista että yhteistalousbudjettia:
+/// - Välittää widget.budget.id!:n ja widget.isSharedBudget ExpenseProvider:lle poistossa.
+/// - Tapahtumat ladataan ExpenseProvider:stä – toimii molemmille, koska SummaryScreen lataa oikeat tapahtumat.
+/// - Poisto-dialogi ja vahvistus ennallaan.
+/// - Kaikki alkuperäinen toiminnallisuus (laajennus, kortit, ikonit, muotoilu, virheenkäsittely)
+///   säilytetty täysin – vain lisätty tuki yhteistalousbudjetille deleteExpense-kutsuun.
 class EventsSection extends StatefulWidget {
-  const EventsSection({super.key});
+  final BudgetModel budget; // Valittu budjetti (henkilökohtainen tai yhteistalous)
+  final bool isSharedBudget; // Onko yhteistalousbudjetti
+
+  const EventsSection({
+    super.key,
+    required this.budget,
+    required this.isSharedBudget,
+  });
 
   @override
   State<EventsSection> createState() => _EventsSectionState();
@@ -19,7 +33,6 @@ class _EventsSectionState extends State<EventsSection> {
   @override
   Widget build(BuildContext context) {
     final expenseProvider = Provider.of<ExpenseProvider>(context);
-    final budgetProvider = Provider.of<BudgetProvider>(context, listen: false);
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
 
     return Container(
@@ -28,7 +41,7 @@ class _EventsSectionState extends State<EventsSection> {
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.15),
+            color: Colors.black.withOpacity(0.15),
             blurRadius: 8,
             offset: const Offset(0, 4),
           ),
@@ -88,7 +101,7 @@ class _EventsSectionState extends State<EventsSection> {
                                   ),
                                   boxShadow: [
                                     BoxShadow(
-                                      color: Colors.black.withValues(alpha: 0.1),
+                                      color: Colors.black.withOpacity(0.1),
                                       blurRadius: 6,
                                       spreadRadius: 1,
                                       offset: const Offset(0, 3),
@@ -228,7 +241,13 @@ class _EventsSectionState extends State<EventsSection> {
                                                     );
                                                     if (confirm == true) {
                                                       try {
-                                                        await expenseProvider.deleteExpense(context, authProvider.user!.uid, expense.id, budgetProvider);
+                                                        await expenseProvider.deleteExpense(
+                                                          context,
+                                                          authProvider.user!.uid,
+                                                          expense.id,
+                                                          budgetId: widget.budget.id!, // Välitetään budjetin ID
+                                                          isSharedBudget: widget.isSharedBudget, // Välitetään budjettityyppi
+                                                        );
                                                       } catch (e) {
                                                         ScaffoldMessenger.of(context).showSnackBar(
                                                           SnackBar(content: Text('Virhe poistettaessa tapahtumaa: $e')),

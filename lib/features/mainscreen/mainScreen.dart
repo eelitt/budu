@@ -2,12 +2,14 @@ import 'dart:async';
 import 'package:budu/core/app_router/app_router.dart';
 import 'package:budu/features/auth/providers/auth_provider.dart';
 import 'package:budu/features/auth/providers/user_provider.dart';
+import 'package:budu/features/budget/providers/shared_budget_provider.dart';
 import 'package:budu/features/budget/screens/budget/budget_screen.dart';
 import 'package:budu/features/mainscreen/services/main_screen_actions_service.dart';
 import 'package:budu/features/mainscreen/services/main_screen_budget_status_service.dart';
 import 'package:budu/features/mainscreen/widgets/main_screen_app_bar.dart';
 import 'package:budu/features/mainscreen/widgets/main_screen_bottom_nav_bar.dart';
 import 'package:budu/features/notification/banner/notification_banner.dart';
+import 'package:budu/features/notification/widgets/invite_notification_handler.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -35,7 +37,7 @@ class _MainScreenState extends State<MainScreen> {
 
   final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>(); // Avain sisäisen Navigatorin hallintaan
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>(); // Avain Scaffoldin hallintaan
-
+    bool _hasLoadedInvitations = false;
   @override
   void initState() {
     super.initState();
@@ -56,8 +58,21 @@ class _MainScreenState extends State<MainScreen> {
     final userProvider = Provider.of<UserProvider>(context, listen: false);
 
     // Varmistetaan, että UserProvider-tiedot on haettu, jos käyttäjä on autentikoitu
-    if (authProvider.authState == AuthState.authenticated && authProvider.user != null) {
+    if (authProvider.authState == AuthState.authenticated && authProvider.user != null && !_hasLoadedInvitations) {
       userProvider.fetchUserData(authProvider.user!.uid);
+
+   // Defer load until after current build frame (safe from build-phase notify)
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        final sharedProvider = Provider.of<SharedBudgetProvider>(context, listen: false);
+        final userEmail = authProvider.user!.email!;
+        
+        // Optional: Log for debug
+        print('SharedBudgetProvider: Haetaan odottavat kutsut email:lle $userEmail');
+        await sharedProvider.fetchSharedBudgets(authProvider.user!.uid);
+        await sharedProvider.fetchPendingInvitations(userEmail);
+      });
+      _hasLoadedInvitations = true; // Varmistetaan, että kutsut haetaan vain kerran
+
     } else if (authProvider.authState == AuthState.unauthenticated && context.mounted) {
       // Lykätään navigointi login-sivulle build-vaiheen jälkeen, jos käyttäjä ei ole autentikoitu
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -180,6 +195,7 @@ class _MainScreenState extends State<MainScreen> {
       body: Column(
         children: [
           const NotificationBanner(), // Näyttää ilmoitusbannerin (esim. budjetin luomisen kehotukset)
+          const InviteNotificationHandler(),
           Expanded(
             // Poistetaan Consumer<BudgetProvider> ja renderöidään Navigator suoraan
             child: _hasBudgetLoadError

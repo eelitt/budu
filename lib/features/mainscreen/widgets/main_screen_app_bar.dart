@@ -50,6 +50,12 @@ class MainScreenAppBar extends StatelessWidget implements PreferredSizeWidget {
                   case 'show_changelog':
                     await appBarDebug.showChangelog(context);
                     break;
+                    case 'test_single_invite':
+          AppBarDebug.testSingleInviteNotification(context);
+          break;
+        case 'test_multiple_invites':
+          AppBarDebug.testMultipleInviteNotifications(context);
+          break;
                 }
               },
               position: PopupMenuPosition.under,
@@ -95,6 +101,32 @@ class MainScreenAppBar extends StatelessWidget implements PreferredSizeWidget {
                     ),
                   ),
                 ),
+                 const PopupMenuDivider(height: 1),
+                 PopupMenuItem(
+                  value: 'test_single_invite',
+                  child: ListTile(
+                    leading: const Icon(Icons.mail, color: Colors.black),
+                    title: Text(
+                      'Test Invite Notification (Single)', 
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: Colors.black,
+                            fontSize: 14,),
+                          ),
+                          ),
+                          ),
+                  const PopupMenuDivider(height: 1),
+                  PopupMenuItem(
+                  value: 'test_multiple_invites',
+                  child: ListTile(
+                    leading: const Icon(Icons.email, color: Colors.black),
+                    title: Text(
+                      'Test Invite Notification (Multiple)', 
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: Colors.black,
+                            fontSize: 14,),
+                          ),
+                          ),
+                          ),
               ],
               elevation: 8,
               shape: RoundedRectangleBorder(

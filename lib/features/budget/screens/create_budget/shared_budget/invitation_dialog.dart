@@ -11,7 +11,6 @@ import 'package:budu/features/notification/data/notification_repository.dart';
 
 /// Dialogi yhteistalousbudjetin nimen ja valinnaisen kutsun syöttämiseen.
 /// Päivitetty: Normalisoi email lowercase:ksi queryä varten, lisätty tarkempi logging, parannettu virheenkäsittely indeksiongelmiin.
-/// Lisätty: Handle fields.size() epäonnistuminen as not found (fallback null, ei crash).
 class InvitationDialog extends StatefulWidget {
   const InvitationDialog({super.key});
 
@@ -36,7 +35,6 @@ class _InvitationDialogState extends State<InvitationDialog> {
 
   /// Hakee userId:n annetulla email:llä (optimoitu limit=1).
   /// Normalisoi email lowercase:ksi (case-insensitive haku).
-  /// Virheenkäsittely: Käsittelee permission-denied ja indeksi-virheet as not found (null return, ei crash).
   Future<String?> _getUserIdByEmail(String email) async {
     try {
       final normalizedEmail = email.toLowerCase(); // Normalisoi lowercase

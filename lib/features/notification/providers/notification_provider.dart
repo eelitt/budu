@@ -15,7 +15,28 @@ class NotificationProvider with ChangeNotifier {
   final NotificationRepository _repository = NotificationRepository(); // Lisätty: Repository-instanssi
 
   NotificationMessage? get currentNotification => _currentNotification;
-  List<NotificationMessage> get notifications => _notifications; // Getter listalle
+  // Transient (paikalliset) notifikaatiot – ei tallenneta Firestoreen
+  final List<NotificationMessage> _transientNotifications = [];
+
+  // Yhdistetty lista: Firestore + transient
+  List<NotificationMessage> get notifications =>
+      [..._notifications, ..._transientNotifications];
+
+  /// Näyttää transient-notifikaation (ei Firestoreen)
+  void showTransientNotification(NotificationMessage message) {
+    // Poista mahdollinen vanha saman ID:n notifikaatio
+    _transientNotifications
+        .removeWhere((n) => n.notificationId == message.notificationId);
+    _transientNotifications.add(message);
+    notifyListeners();
+  }
+
+  /// Poistaa transient-notifikaation ID:llä
+  void removeTransientNotificationById(String? id) {
+    if (id == null) return;
+    _transientNotifications.removeWhere((n) => n.notificationId == id);
+    notifyListeners();
+  }
 
   /// Näyttää notifikaation (olemassa oleva, mutta päivitetty safe-notify:llä).
   void showNotification({

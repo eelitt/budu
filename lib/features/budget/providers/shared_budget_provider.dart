@@ -1,6 +1,7 @@
 import 'package:budu/features/budget/data/shared_budget_repository.dart';
 import 'package:budu/features/budget/models/budget_model.dart'; // Päivitetty: Käytetään yhdistettyä BudgetModel:ia SharedBudget:in sijaan
 import 'package:budu/features/budget/models/invitation_model.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'dart:async'; // Lisätty StreamSubscription:ia varten
 
@@ -10,18 +11,32 @@ import 'dart:async'; // Lisätty StreamSubscription:ia varten
 /// Päivitetty: Käytetään BudgetModel:ia sharedBudgets-listalle (sisältää shared-kentät).
 class SharedBudgetProvider with ChangeNotifier {
   final SharedBudgetRepository _repository = SharedBudgetRepository();
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   List<BudgetModel> _sharedBudgets = [];
   List<Invitation> _invitations = [];
   bool _isLoading = false;
   String? _errorMessage;
-  StreamSubscription<List<BudgetModel>>? _sharedBudgetsSubscription;
-  StreamSubscription<List<Invitation>>? _invitationsSubscription;
-
+ List<Invitation> get pendingInvitations =>
+      _invitations.where((inv) => inv.status == 'pending').toList();
   List<BudgetModel> get sharedBudgets => _sharedBudgets;
   List<Invitation> get invitations => _invitations;
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
+bool get hasSharedBudget => _sharedBudgets.isNotEmpty;
 
+BudgetModel? get latestSharedBudget {
+    if (_sharedBudgets.isEmpty) return null;
+
+    BudgetModel? latest;
+    for (final budget in _sharedBudgets) {
+      if (budget.endDate != null &&
+          (latest == null || budget.endDate!.isAfter(latest!.endDate!))) {
+        latest = budget;
+      }
+    }
+    return latest;
+  }
+  
   /// Hakee käyttäjän yhteistalousbudjetit ja päivittää tilan (käyttää repositorya).
   Future<void> fetchSharedBudgets(String userId) async {
     if (_isLoading) return;
@@ -39,53 +54,60 @@ class SharedBudgetProvider with ChangeNotifier {
     }
   }
 
-  /// Aloittaa reaaliaikaisen kuuntelun käyttäjän yhteistalousbudjeteille.
-  void listenToSharedBudgets(String userId) {
-    _sharedBudgetsSubscription?.cancel();
-    _sharedBudgetsSubscription = _repository.sharedBudgetsStream(userId).listen(
-      (budgets) {
-        _sharedBudgets = budgets;
-        notifyListeners();
-      },
-      onError: (e) {
-        _errorMessage = 'Yhteistalousbudjettien stream epäonnistui: $e';
-        notifyListeners();
-      },
-    );
-  }
+  
+  Future<void> fetchPendingInvitations(String userEmail) async {
+  if (_isLoading) return;
 
-  /// Hakee odottavat kutsut käyttäjän sähköpostilla (käyttää repositorya).
-  Future<void> fetchPendingInvitations(String email) async {
-    if (_isLoading) return;
+  try {
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
 
-    try {
-      _invitations = await _repository.getPendingInvitations(email);
-    } catch (e) {
-      _errorMessage = 'Kutsujen lataus epäonnistui: $e';
-    } finally {
-      _isLoading = false;
-      notifyListeners();
-    }
-  }
+    final normalizedEmail = userEmail.trim().toLowerCase();
+    var invitations = await _repository.getPendingInvitations(normalizedEmail);
 
-  /// Aloittaa reaaliaikaisen kuuntelun odottaville kutsuille.
-  void listenToPendingInvitations(String email) {
-    _invitationsSubscription?.cancel();
-    _invitationsSubscription = _repository.pendingInvitationsStream(email).listen(
-      (invitations) {
-        _invitations = invitations;
-        notifyListeners();
-      },
-      onError: (e) {
-        _errorMessage = 'Kutsujen stream epäonnistui: $e';
-        notifyListeners();
-      },
+    // Enrich in parallel (efficient for rare/low count)
+    invitations = await Future.wait(
+      invitations.map((invite) async {
+        try {
+          // Fetch inviter email from /users/{inviterId}
+          final inviterSnap = await _firestore
+              .collection('users')
+              .doc(invite.inviterId)
+              .get();
+          final inviterData = inviterSnap.data();
+          final fetchedInviterEmail = inviterData?['email'] as String?;
+
+          // Fetch budget name
+          final budgetSnap = await _firestore
+              .collection('shared_budgets')
+              .doc(invite.sharedBudgetId)
+              .get();
+          final budgetName = budgetSnap.data()?['name'] as String? ?? 'Nimetön budjetti';
+
+          return invite.copyWith(
+            inviterEmail: fetchedInviterEmail ?? 'tuntematon@example.com',
+            sharedBudgetName: budgetName,
+          );
+        } catch (e) {
+          // Graceful fallback on error – don't break whole load
+          print('Enrichment error for invite ${invite.id}: $e');
+          return invite.copyWith(
+            inviterEmail: 'tuntematon@example.com',
+            sharedBudgetName: 'Nimetön budjetti',
+          );
+        }
+      }),
     );
-  }
 
+    _invitations = invitations;
+  } catch (e) {
+    _errorMessage = 'Kutsujen lataaminen epäonnistui: $e';
+  } finally {
+    _isLoading = false;
+    notifyListeners();
+  }
+}
   /// Luo uuden yhteistalousbudjetin (käyttää repositorya).
   Future<void> createSharedBudget({
     required String sharedBudgetId,
@@ -152,22 +174,21 @@ class SharedBudgetProvider with ChangeNotifier {
     }
   }
 
-  /// Hyväksyy kutsun ja lisää käyttäjän yhteistalousbudjettiin (käyttää repositorya).
+  // Updated accept – now passes userId
   Future<void> acceptInvitation({
     required String invitationId,
+    required String sharedBudgetId,
     required String userId,
   }) async {
-    if (_isLoading) return;
-    _isLoading = true;
-    _errorMessage = null;
-    notifyListeners();
-
     try {
+      _isLoading = true;
+      notifyListeners();
+
       await _repository.acceptInvitation(
         invitationId: invitationId,
+        sharedBudgetId: sharedBudgetId,
         userId: userId,
       );
-      await fetchSharedBudgets(userId); // Refetch päivittää listan
     } catch (e) {
       _errorMessage = 'Kutsun hyväksyminen epäonnistui: $e';
       rethrow;
@@ -177,6 +198,21 @@ class SharedBudgetProvider with ChangeNotifier {
     }
   }
 
+// Decline unchanged (no userId needed)
+  Future<void> declineInvitation(String invitationId) async {
+    try {
+      _isLoading = true;
+      notifyListeners();
+
+      await _repository.declineInvitation(invitationId);
+    } catch (e) {
+      _errorMessage = 'Kutsun hylkääminen epäonnistui: $e';
+      rethrow;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
   /// Hakee budjetin tiedot yhteistalousbudjetille (käyttää repositorya).
   Future<BudgetModel?> getSharedBudgetById(String sharedBudgetId) async {
     return await _repository.getSharedBudgetById(sharedBudgetId);
@@ -224,11 +260,5 @@ class SharedBudgetProvider with ChangeNotifier {
     }
   }
 
-  /// Peruuttaa reaaliaikaiset kuuntelijat muistivuotojen estämiseksi.
-  void cancelSubscriptions() {
-    _sharedBudgetsSubscription?.cancel();
-    _invitationsSubscription?.cancel();
-    _sharedBudgetsSubscription = null;
-    _invitationsSubscription = null;
-  }
+ 
 }

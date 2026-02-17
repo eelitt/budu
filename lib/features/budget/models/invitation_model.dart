@@ -8,6 +8,9 @@ class Invitation {
   final String inviteeEmail;
   final String status;
   final DateTime createdAt;
+  String? inviterDisplayName; // e.g., "Anna" from users doc
+  String? inviterEmail;       // Fallback if no displayName
+  String? sharedBudgetName;   // e.g., "Perhebudjetti"
 
   Invitation({
     required this.id,
@@ -16,6 +19,9 @@ class Invitation {
     required this.inviteeEmail,
     required this.status,
     required this.createdAt,
+    this.inviterDisplayName,
+    this.inviterEmail,
+    this.sharedBudgetName,
   });
 
   factory Invitation.fromMap(Map<String, dynamic> map, String id) {
@@ -26,6 +32,9 @@ class Invitation {
       inviteeEmail: map['inviteeEmail'],
       status: map['status'],
       createdAt: (map['createdAt'] as Timestamp).toDate(),
+      inviterDisplayName: map['inviterDisplayName'] as String?,
+      inviterEmail: map['inviterEmail'] as String?,
+      sharedBudgetName: map['sharedBudgetName'] as String?,
     );
   }
 
@@ -37,5 +46,21 @@ class Invitation {
       'status': status,
       'createdAt': Timestamp.fromDate(createdAt),
     };
+  }
+  // Optional: copyWith for enrichment
+  Invitation copyWith({
+    String? inviterEmail,
+    String? sharedBudgetName,
+  }) {
+    return Invitation(
+      id: id,
+      sharedBudgetId: sharedBudgetId,
+      inviterId: inviterId,
+      inviteeEmail: inviteeEmail,
+      status: status,
+      createdAt: createdAt,
+      inviterEmail: inviterEmail ?? this.inviterEmail,
+      sharedBudgetName: sharedBudgetName ?? this.sharedBudgetName,
+    );
   }
 }

@@ -1,10 +1,21 @@
 import 'package:budu/core/utils.dart';
-import 'package:budu/features/budget/providers/budget_provider.dart';
+import 'package:budu/features/budget/providers/expense_provider.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'summary_utils.dart';
 
+/// Näyttää meno-tapahtumien jakautumisen piirakkakaaviona yhteenvetosivulla.
+/// Nyt täysin yhteensopiva sekä henkilökohtaisen että yhteistalousbudjetin kanssa:
+/// - Käyttää ExpenseProvider.events:iä toteutuneiden menojen laskemiseen (ryhmittely kategorioittain).
+/// - Yhdistää pienet kategoriat "Muut"-kategoriaan (kuten ennen).
+/// - Näyttää prosentit toteutuneesta kokonaissummasta.
+/// - Dialogi näyttää alakategoriat "Muut"-kategorialle ja yksittäisen kategorian tiedot.
+/// - Ei enää riipu BudgetProvider.budget:sta → toimii saumattomasti molemmille budjettityypeille,
+///   koska SummaryScreen lataa aina oikeat tapahtumat loadExpenses-kutsulla.
+/// - Jos ei menoja, näyttää selkeän viestin.
+/// - Kaikki alkuperäinen toiminnallisuus (laajennus, kosketus, värit, legend, dialogit)
+///   säilytetty täysin ennallaan – vain data-lähde vaihdettu toteutuneisiin menoihin.
 class BudgetDistributionSection extends StatefulWidget {
   const BudgetDistributionSection({super.key});
 
@@ -21,15 +32,16 @@ class _BudgetDistributionSectionState extends State<BudgetDistributionSection> {
     BuildContext context,
     String category,
     double amount,
-    double totalBudget,
-    Map<String, Map<String, double>> originalExpenses,
+    double totalSpent,
+    Map<String, Map<String, double>> spentExpenses,
   ) {
     if (_isDialogOpen) return;
     _isDialogOpen = true;
 
-    final percentage = (amount / totalBudget) * 100;
+    final percentage = totalSpent > 0 ? (amount / totalSpent) * 100 : 0.0;
+
     if (category == 'Muut') {
-      final otherCategories = getOtherCategoryDetails(originalExpenses, totalBudget);
+      final otherCategories = getOtherCategoryDetails(spentExpenses, totalSpent);
       showDialog(
         context: context,
         builder: (context) => AlertDialog(
@@ -43,7 +55,7 @@ class _BudgetDistributionSectionState extends State<BudgetDistributionSection> {
                 const SizedBox(height: 8),
                 const Text('Sisältää:'),
                 ...otherCategories.entries.map((entry) {
-                  final subPercentage = (entry.value / totalBudget) * 100;
+                  final subPercentage = totalSpent > 0 ? (entry.value / totalSpent) * 100 : 0.0;
                   return Padding(
                     padding: const EdgeInsets.symmetric(vertical: 4.0),
                     child: Row(
@@ -81,11 +93,37 @@ class _BudgetDistributionSectionState extends State<BudgetDistributionSection> {
         ),
       );
     } else {
+      final subExpenses = spentExpenses[category] ?? {};
       showDialog(
         context: context,
         builder: (context) => AlertDialog(
           title: Text(category),
-          content: Text('Summa: ${formatCurrency(amount)}\nOsuus: ${percentage.toStringAsFixed(1)}%'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Yhteensä: ${formatCurrency(amount)} (${percentage.toStringAsFixed(1)}%)'),
+                if (subExpenses.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  const Text('Alakategoriat:'),
+                  ...subExpenses.entries.map((sub) {
+                    final subPercentage = totalSpent > 0 ? (sub.value / totalSpent) * 100 : 0.0;
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 4.0),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Flexible(child: Text(sub.key)),
+                          Text('${formatCurrency(sub.value)} (${subPercentage.toStringAsFixed(1)}%)'),
+                        ],
+                      ),
+                    );
+                  }).toList(),
+                ],
+              ],
+            ),
+          ),
           actions: [
             TextButton(
               onPressed: () {
@@ -102,10 +140,74 @@ class _BudgetDistributionSectionState extends State<BudgetDistributionSection> {
 
   @override
   Widget build(BuildContext context) {
-    final budgetProvider = Provider.of<BudgetProvider>(context);
-    final budget = budgetProvider.budget!;
-    final totalBudget = budget.totalExpenses;
-    final combinedExpenses = combineSmallCategories(budget.expenses, totalBudget);
+    final expenseProvider = Provider.of<ExpenseProvider>(context);
+    final events = expenseProvider.expenses ?? [];
+
+    if (events.isEmpty) {
+      return Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.15),
+              blurRadius: 8,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        padding: const EdgeInsets.all(6),
+        child: Theme(
+          data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+          child: ExpansionTile(
+            initiallyExpanded: _isExpanded,
+            onExpansionChanged: (expanded) => setState(() => _isExpanded = expanded),
+            tilePadding: EdgeInsets.zero,
+            leading: const Padding(
+              padding: EdgeInsets.only(left: 2),
+              child: Icon(Icons.pie_chart_sharp, color: Colors.blueGrey),
+            ),
+            title: Padding(
+              padding: const EdgeInsets.only(left: 8),
+              child: Text(
+                'Menojen jakautuminen',
+                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black87,
+                    ),
+              ),
+            ),
+            trailing: const Padding(
+              padding: EdgeInsets.only(right: 12),
+              child: Icon(Icons.expand_more),
+            ),
+            children: const [
+              Padding(
+                padding: EdgeInsets.all(20),
+                child: Center(child: Text('Ei menoja näytettäväksi')),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // Ryhmitellään toteutuneet menot kategorioittain ja alakategorioittain
+    final Map<String, Map<String, double>> spentExpenses = {};
+    double totalSpent = 0.0;
+
+    for (final event in events) {
+      final cat = event.category;
+      final sub = event.subcategory ?? 'Ei alakategoriaa';
+      final amount = event.amount;
+      totalSpent += amount;
+
+      spentExpenses.putIfAbsent(cat, () => {});
+      spentExpenses[cat]!.update(sub, (v) => v + amount, ifAbsent: () => amount);
+    }
+
+    // Yhdistetään pienet kategoriat "Muut"-kategoriaan
+    final combinedExpenses = combineSmallCategories(spentExpenses, totalSpent);
 
     return Container(
       decoration: BoxDecoration(
@@ -113,7 +215,7 @@ class _BudgetDistributionSectionState extends State<BudgetDistributionSection> {
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha:0.15),
+            color: Colors.black.withOpacity(0.15),
             blurRadius: 8,
             offset: const Offset(0, 4),
           ),
@@ -124,11 +226,7 @@ class _BudgetDistributionSectionState extends State<BudgetDistributionSection> {
         data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
         child: ExpansionTile(
           initiallyExpanded: _isExpanded,
-          onExpansionChanged: (bool expanded) {
-            setState(() {
-              _isExpanded = expanded;
-            });
-          },
+          onExpansionChanged: (expanded) => setState(() => _isExpanded = expanded),
           tilePadding: EdgeInsets.zero,
           leading: const Padding(
             padding: EdgeInsets.only(left: 2),
@@ -137,7 +235,7 @@ class _BudgetDistributionSectionState extends State<BudgetDistributionSection> {
           title: Padding(
             padding: const EdgeInsets.only(left: 8),
             child: Text(
-              'Budjetin jakautuminen',
+              'Menojen jakautuminen',
               style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                     fontWeight: FontWeight.bold,
                     color: Colors.black87,
@@ -155,114 +253,103 @@ class _BudgetDistributionSectionState extends State<BudgetDistributionSection> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const SizedBox(height: 8),
-                  totalBudget > 0
-                      ? Column(
-                          children: [
-                            SizedBox(
-                              height: 220,
-                              child: PieChart(
-                                PieChartData(
-                                  sections: combinedExpenses.entries.toList().asMap().entries.map((mapEntry) {
-                                    final index = mapEntry.key;
-                                    final entry = mapEntry.value;
-                                    final percentage = (entry.value / totalBudget) * 100;
-                                    return PieChartSectionData(
-                                      color: getColorForCategory(entry.key, combinedExpenses.keys.toList()),
-                                      value: entry.value,
-                                      title: '${percentage.toStringAsFixed(1)}%',
-                                      radius: 80,
-                                      titleStyle: const TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.bold,
-                                        color: Colors.white,
-                                        shadows: [
-                                          Shadow(
-                                            color: Colors.black26,
-                                            blurRadius: 2,
-                                            offset: Offset(1, 1),
-                                          ),
-                                        ],
-                                      ),
-                                      showTitle: percentage > 5,
-                                      badgeWidget: touchedIndex == index
-                                          ? Container(
-                                              padding: const EdgeInsets.all(4),
-                                              decoration: BoxDecoration(
-                                                color: Colors.black54,
-                                                borderRadius: BorderRadius.circular(8),
-                                              ),
-                                              child: Text(
-                                                entry.key,
-                                                style: const TextStyle(
-                                                  fontSize: 10,
-                                                  color: Colors.white,
-                                                ),
-                                              ),
-                                            )
-                                          : null,
-                                      badgePositionPercentageOffset: 1.2,
-                                    );
-                                  }).toList(),
-                                  sectionsSpace: 2,
-                                  centerSpaceRadius: 40,
-                                  borderData: FlBorderData(show: false),
-                                  startDegreeOffset: 90,
-                                  pieTouchData: PieTouchData(
-                                    touchCallback: (FlTouchEvent event, pieTouchResponse) {
-                                      if (event is! FlTapUpEvent) return;
-                                      setState(() {
-                                        if (pieTouchResponse == null || pieTouchResponse.touchedSection == null) {
-                                          touchedIndex = -1;
-                                          return;
-                                        }
-                                        touchedIndex = pieTouchResponse.touchedSection!.touchedSectionIndex;
-                                        if (touchedIndex != -1) {
-                                          final touchedCategory = combinedExpenses.keys.elementAt(touchedIndex!);
-                                          final touchedAmount = combinedExpenses[touchedCategory]!;
-                                          _showCategoryDetails(
-                                            context,
-                                            touchedCategory,
-                                            touchedAmount,
-                                            totalBudget,
-                                            budget.expenses,
-                                          );
-                                        }
-                                      });
-                                    },
-                                  ),
+                  SizedBox(
+                    height: 220,
+                    child: PieChart(
+                      PieChartData(
+                        sections: combinedExpenses.entries.toList().asMap().entries.map((mapEntry) {
+                          final index = mapEntry.key;
+                          final entry = mapEntry.value;
+                          final percentage = totalSpent > 0 ? (entry.value / totalSpent) * 100 : 0.0;
+                          return PieChartSectionData(
+                            color: getColorForCategory(entry.key, combinedExpenses.keys.toList()),
+                            value: entry.value,
+                            title: '${percentage.toStringAsFixed(1)}%',
+                            radius: 80,
+                            titleStyle: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                              shadows: [
+                                Shadow(
+                                  color: Colors.black26,
+                                  blurRadius: 2,
+                                  offset: Offset(1, 1),
                                 ),
-                              ),
+                              ],
                             ),
-                            const SizedBox(height: 32),
-                            Wrap(
-                              spacing: 16,
-                              runSpacing: 8,
-                              children: combinedExpenses.keys.map((category) {
-                                return Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Container(
-                                      width: 16,
-                                      height: 16,
-                                      decoration: BoxDecoration(
-                                        color: getColorForCategory(category, combinedExpenses.keys.toList()),
-                                        shape: BoxShape.circle,
-                                      ),
+                            showTitle: percentage > 5,
+                            badgeWidget: touchedIndex == index
+                                ? Container(
+                                    padding: const EdgeInsets.all(4),
+                                    decoration: BoxDecoration(
+                                      color: Colors.black54,
+                                      borderRadius: BorderRadius.circular(8),
                                     ),
-                                    const SizedBox(width: 8),
-                                    Text(
-                                      category,
-                                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                            color: Colors.black87,
-                                          ),
+                                    child: Text(
+                                      entry.key,
+                                      style: const TextStyle(fontSize: 10, color: Colors.white),
                                     ),
-                                  ],
+                                  )
+                                : null,
+                            badgePositionPercentageOffset: 1.2,
+                          );
+                        }).toList(),
+                        sectionsSpace: 2,
+                        centerSpaceRadius: 40,
+                        borderData: FlBorderData(show: false),
+                        startDegreeOffset: 90,
+                        pieTouchData: PieTouchData(
+                          touchCallback: (FlTouchEvent event, pieTouchResponse) {
+                            if (event is! FlTapUpEvent) return;
+                            setState(() {
+                              if (pieTouchResponse == null || pieTouchResponse.touchedSection == null) {
+                                touchedIndex = -1;
+                                return;
+                              }
+                              touchedIndex = pieTouchResponse.touchedSection!.touchedSectionIndex;
+                              if (touchedIndex != -1) {
+                                final touchedCategory = combinedExpenses.keys.elementAt(touchedIndex!);
+                                final touchedAmount = combinedExpenses[touchedCategory]!;
+                                _showCategoryDetails(
+                                  context,
+                                  touchedCategory,
+                                  touchedAmount,
+                                  totalSpent,
+                                  spentExpenses,
                                 );
-                              }).toList(),
+                              }
+                            });
+                          },
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 32),
+                  Wrap(
+                    spacing: 16,
+                    runSpacing: 8,
+                    children: combinedExpenses.keys.map((category) {
+                      return Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            width: 16,
+                            height: 16,
+                            decoration: BoxDecoration(
+                              color: getColorForCategory(category, combinedExpenses.keys.toList()),
+                              shape: BoxShape.circle,
                             ),
-                          ],
-                        )
-                      : const Center(child: Text('Ei budjettitietoja näytettäväksi')),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            category,
+                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.black87),
+                          ),
+                        ],
+                      );
+                    }).toList(),
+                  ),
                 ],
               ),
             ),

@@ -36,7 +36,6 @@ class _BudgetScreenState extends State<BudgetScreen> {
   bool _isSharedBudget = false;
   BudgetModel? _selectedSharedBudget;
   bool _isLoadingBudgets = true;
-  bool _hasSharedBudgets = false;
   bool _isLoadingSharedBudget = false; // Seuraa yhteistalousbudjetin lataustilaa
   Timer? _toggleCooldownTimer; // Lisätty: Timer delay:lle (5s debounce rämppäyksessä)
   bool _toggleCooldown = false; // Lisätty: Lippu tarkistamaan delay (estää rämppääminen, UX-ystävällinen)
@@ -80,10 +79,10 @@ class _BudgetScreenState extends State<BudgetScreen> {
       if (mounted) {
         setState(() {
           _isLoadingBudgets = false;
-          _hasSharedBudgets = sharedBudgetProvider.sharedBudgets.isNotEmpty;
+      
           // Aseta _isSharedBudget vain, jos yhteistalousbudjetteja on
-          _isSharedBudget = _hasSharedBudgets && savedIsSharedBudget;
-          if (_hasSharedBudgets) {
+          _isSharedBudget = sharedBudgetProvider.hasSharedBudget && savedIsSharedBudget;
+          if (sharedBudgetProvider.hasSharedBudget) {
             _selectedSharedBudget = sharedBudgetProvider.sharedBudgets.first;
             // Ladataan yhteistalousbudjetti, jos valittuna
             if (_isSharedBudget && _selectedSharedBudget != null) {
@@ -160,7 +159,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
             final budget = _isSharedBudget ? snapshot.data : budgetProvider.budget;
 
             if (budget == null) {
-              if (_personalController.availableBudgets.isEmpty && !_hasSharedBudgets) {
+              if (_personalController.availableBudgets.isEmpty && !sharedBudgetProvider.hasSharedBudget) {
                 return const Center(child: Text('Luo budjetti ensin!'));
               } else {
                 return const Center(child: CircularProgressIndicator());
@@ -176,7 +175,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       // Näytä toggle-painike vain, jos yhteistalousbudjetteja on
-                      if (_hasSharedBudgets) ...[
+                      if (sharedBudgetProvider.hasSharedBudget) ...[
                         Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
@@ -190,40 +189,71 @@ class _BudgetScreenState extends State<BudgetScreen> {
                             Switch(
                               value: _isSharedBudget,
                               onChanged: (value) {
-                                if (_toggleCooldown) {
-                                  // Näytä snackbar jos delay aktiivinen (UX-ystävällinen, estää rämppääminen)
-                                  showSnackBar(context, 'Odota hetki vaihtaaksesi budjettia', backgroundColor: Colors.orange);
-                                  return;
-                                }
-                                WidgetsBinding.instance.addPostFrameCallback((_) async {
-                                  setState(() {
-                                    _isSharedBudget = value;
-                                    if (value && _selectedSharedBudget != null) {
-                                      _isLoadingSharedBudget = true;
-                                    }
-                                  });
-                                  // Tallenna toggle-painikkeen valinta
-                                  await _saveBudgetPreference(value);
-                                  // Ladataan yhteistalousbudjetti, jos valittu
-                                  if (value && _selectedSharedBudget != null) {
-                                    final authProvider = Provider.of<AuthProvider>(context, listen: false);
-                                    await _sharedController.loadBudget(
-                                      userId: authProvider.user!.uid,
-                                      sharedBudgetId: _selectedSharedBudget!.id.toString(),
-                                    );
-                                    if (mounted) {
-                                      setState(() {
-                                        _isLoadingSharedBudget = false;
-                                      });
-                                    }
-                                  }
-                                  // Aktivoi delay 5s (debounce rämppäyksessä)
-                                  _toggleCooldown = true;
-                                  _toggleCooldownTimer = Timer(const Duration(seconds: 5), () {
-                                    _toggleCooldown = false;
-                                  });
-                                });
-                              },
+  if (_toggleCooldown) {
+    showSnackBar(context, 'Odota hetki vaihtaaksesi budjettia', backgroundColor: Colors.orange);
+    return;
+  }
+
+  WidgetsBinding.instance.addPostFrameCallback((_) async {
+    // Always start loading when switching TO shared
+    setState(() {
+      _isSharedBudget = value;
+      if (value) {
+        _isLoadingSharedBudget = true;
+      }
+    });
+
+    await _saveBudgetPreference(value);
+
+    if (value) {
+      // AUTO-SELECT: If no previously selected shared budget, pick the most recent one
+      if (_selectedSharedBudget == null && sharedBudgetProvider.sharedBudgets.isNotEmpty) {
+        // Copy & sort by startDate descending (latest first) - efficient, no Firestore cost
+        final sortedShared = List<BudgetModel>.from(sharedBudgetProvider.sharedBudgets)
+          ..sort((a, b) => b.startDate.compareTo(a.startDate));
+        
+        setState(() {
+          _selectedSharedBudget = sortedShared.first;
+        });
+
+        // OPTIONAL: Persist selected shared budget ID for next launch (add if you have prefs logic)
+        // await _saveSelectedSharedBudgetId(_selectedSharedBudget!.id!);
+      }
+
+      // Load the (now guaranteed non-null) selected shared budget
+      if (_selectedSharedBudget != null) {
+        final authProvider = Provider.of<AuthProvider>(context, listen: false);
+        try {
+          await _sharedController.loadBudget(
+            userId: authProvider.user!.uid,
+            sharedBudgetId: _selectedSharedBudget!.id!,
+          );
+        } catch (e) {
+          // Graceful error handling - prevent stuck loading
+          if (mounted) {
+            showErrorSnackBar(context, 'Yhteistalousbudjetin lataus epäonnistui');
+            setState(() {
+              _isSharedBudget = false; // Revert toggle on error
+            });
+          }
+        }
+      }
+    }
+
+    // Always stop loading indicator (after success or error)
+    if (mounted) {
+      setState(() {
+        _isLoadingSharedBudget = false;
+      });
+    }
+
+    // Cooldown debounce (unchanged)
+    _toggleCooldown = true;
+    _toggleCooldownTimer = Timer(const Duration(seconds: 5), () {
+      _toggleCooldown = false;
+    });
+  });
+},
                               activeColor: Colors.blueGrey[700],
                               inactiveThumbColor: Colors.blueGrey[300],
                             ),
@@ -363,7 +393,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
                                   final confirmed = await showDeleteConfirmationDialog(
                                     context: context,
                                     isLastBudget: _isSharedBudget
-                                        ? _hasSharedBudgets && sharedBudgetProvider.sharedBudgets.length == 1
+                                        ?sharedBudgetProvider.hasSharedBudget && sharedBudgetProvider.sharedBudgets.length == 1
                                         : _personalController.availableBudgets.length == 1,
                                     customMessage: _isSharedBudget
                                         ? 'Haluatko varmasti poistaa yhteistalousbudjetin? Kaikki siihen liittyvät tapahtumat poistetaan.'
@@ -378,8 +408,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
                                       );
                                       WidgetsBinding.instance.addPostFrameCallback((_) {
                                         setState(() {
-                                          _hasSharedBudgets = sharedBudgetProvider.sharedBudgets.isNotEmpty;
-                                          if (!_hasSharedBudgets) {
+                                          if (sharedBudgetProvider.hasSharedBudget) {
                                             _isSharedBudget = false;
                                             _selectedSharedBudget = null;
                                             // Nollataan isSharedBudget SharedPreferences:ssä

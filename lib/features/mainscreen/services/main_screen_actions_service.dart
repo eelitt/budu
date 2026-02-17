@@ -9,10 +9,11 @@ import 'package:budu/features/budget/providers/expense_provider.dart';
 import 'package:budu/features/budget/providers/shared_budget_provider.dart';
 import 'package:budu/features/budget/screens/create_budget/create_budget_screen.dart';
 import 'package:budu/features/budget/screens/create_budget/shared_budget/invitation_dialog.dart';
-import 'package:budu/features/budget/screens/create_budget/shared_budget/invite_to_budget_dialog.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
+import 'package:uuid/uuid.dart';
+import 'package:shared_preferences/shared_preferences.dart'; // Lisätty: SharedPreferences toggle-tilan lukuun
 
 /// Käsittelee pääsivun toimintovalikon (AppBar) valintoja.
 /// Tarjoaa toimintoja kuten tapahtuman lisääminen, budjetin luominen, yhteistalousbudjetin luominen ja uloskirjautuminen.
@@ -85,29 +86,91 @@ class MainScreenActionsService {
     }
   }
 
+  /// Navigates to shared budget creation screen for sequential budgets.
+  /// Generates a new sharedBudgetId, carries over existing partner (if any) and budget name.
+  /// Used only when a shared budget already exists.
+  void _navigateToSequentialSharedBudget(BuildContext context) {
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    final sharedProvider = Provider.of<SharedBudgetProvider>(context, listen: false);
+
+    final currentUid = authProvider.user!.uid;
+    final latest = sharedProvider.latestSharedBudget;
+
+    final newSharedBudgetId = const Uuid().v4();
+
+    String? partnerId;
+    String budgetName = 'Yhteistalousbudjetti';
+
+    if (latest != null) {
+      budgetName = latest.name ?? budgetName;
+      final others = latest.users?.where((u) => u != currentUid);
+      partnerId = others?.isNotEmpty == true ? others!.first : null;
+    }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (context.mounted) {
+        Navigator.pushNamed(
+          context,
+          AppRouter.sharedCreateBudgetRoute,
+          arguments: {
+            'sharedBudgetId': newSharedBudgetId,
+            'user1Id': currentUid,
+            'user2Id': partnerId,
+            'budgetName': budgetName,
+            'inviteeEmail': null,
+            'isNew': true,
+          },
+        );
+      }
+    });
+  }
+
   /// Käsittelee toimintovalikon valinnat.
   Future<void> handleMenuSelection(String value, BuildContext context) async {
     if (value == 'add_event') {
       final budgetProvider = Provider.of<BudgetProvider>(context, listen: false);
+      final sharedProvider = Provider.of<SharedBudgetProvider>(context, listen: false);
       final expenseProvider = Provider.of<ExpenseProvider>(context, listen: false);
       final authProvider = Provider.of<AuthProvider>(context, listen: false);
 
-      if (budgetProvider.budget == null || budgetProvider.budget!.expenses.isEmpty) {
-        showSnackBar(
-          context,
-          'Lisää ensin kategoria budjettiin!',
-          duration: const Duration(seconds: 3),
-          backgroundColor: Colors.blueGrey[700],
-        );
-        return;
-      }
+      // Lataa toggle-tila SharedPreferences:stä (BudgetScreenin valinta)
+      final prefs = await SharedPreferences.getInstance();
+      final isSharedBudget = prefs.getBool('isSharedBudget') ?? false;
 
-      final originalBudgetId = budgetProvider.budget?.id;
+      // Hae initialBudgetId tyypin perusteella
+      String? initialBudgetId;
+      if (isSharedBudget) {
+        if (sharedProvider.sharedBudgets.isNotEmpty) {
+          final sorted = List<BudgetModel>.from(sharedProvider.sharedBudgets)
+            ..sort((a, b) => b.startDate.compareTo(a.startDate));
+          initialBudgetId = sorted.first.id;
+        } else {
+          showSnackBar(
+            context,
+            'Ei yhteistalousbudjetteja saatavilla!',
+            duration: const Duration(seconds: 3),
+            backgroundColor: Colors.blueGrey[700],
+          );
+          return;
+        }
+      } else {
+        if (budgetProvider.budget != null) {
+          initialBudgetId = budgetProvider.budget!.id;
+        } else {
+          showSnackBar(
+            context,
+            'Lisää ensin kategoria budjettiin!',
+            duration: const Duration(seconds: 3),
+            backgroundColor: Colors.blueGrey[700],
+          );
+          return;
+        }
+      }
 
       showDialog(
         context: context,
         builder: (dialogContext) {
-          return const AddEventDialog();
+          return AddEventDialog(isSharedBudget: isSharedBudget, initialBudgetId: initialBudgetId);
         },
       ).then((result) async {
         print('MainScreenActionsService: AddEventDialog suljettu');
@@ -120,14 +183,11 @@ class MainScreenActionsService {
             backgroundColor: Colors.green,
           );
 
-          if (authProvider.user != null && originalBudgetId != null) {
-            await budgetProvider.loadBudget(
-              authProvider.user!.uid,
-              originalBudgetId,
-            );
+          if (authProvider.user != null && initialBudgetId != null) {
             await expenseProvider.loadExpenses(
               authProvider.user!.uid,
-              originalBudgetId,
+              initialBudgetId,
+              isSharedBudget: isSharedBudget,
             );
           }
         }
@@ -135,10 +195,18 @@ class MainScreenActionsService {
     } else if (value == 'create_budget') {
       createBudgetForNextMonth(context, () {});
     } else if (value == 'create_shared_budget') {
-      showDialog(
-        context: context,
-        builder: (_) => const InvitationDialog(),
-      );
+      final sharedProvider = Provider.of<SharedBudgetProvider>(context, listen: false);
+
+      if (sharedProvider.sharedBudgets.isEmpty) {
+        // First-time shared budget: show invitation dialog to invite partner
+        showDialog(
+          context: context,
+          builder: (_) => const InvitationDialog(),
+        );
+      } else {
+        // Sequential shared budget: skip invitation, go directly to creation with templating
+        _navigateToSequentialSharedBudget(context);
+      }
     } else if (value == 'settings') {
       Navigator.push(
         context,
@@ -150,12 +218,10 @@ class MainScreenActionsService {
       final authProvider = Provider.of<AuthProvider>(context, listen: false);
       final budgetProvider = Provider.of<BudgetProvider>(context, listen: false);
       final expenseProvider = Provider.of<ExpenseProvider>(context, listen: false);
-      final sharedBudgetProvider = Provider.of<SharedBudgetProvider>(context, listen: false);
 
       try {
         budgetProvider.cancelSubscriptions();
         expenseProvider.cancelSubscriptions();
-        sharedBudgetProvider.cancelSubscriptions();
         await authProvider.signOut();
 
         if (context.mounted) {

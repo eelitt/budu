@@ -5,7 +5,6 @@ import 'package:provider/provider.dart';
 
 /// NotificationBanner: Näyttää in-app-notifikaatiot.
 /// Päivitetty: Näytä lista notifikaatioista (jos useita), merkitse luetuksi klikillä. Banner per notifikaatio.
-/// Yhteensopiva repository-muutoksen kanssa (käytä providerin notifications, ei data access:ia täällä).
 class NotificationBanner extends StatelessWidget {
   const NotificationBanner({super.key});
 
@@ -14,88 +13,85 @@ class NotificationBanner extends StatelessWidget {
     return Consumer<NotificationProvider>(
       builder: (context, notificationProvider, child) {
         final notifications = notificationProvider.notifications;
-        if (notifications.isEmpty) {
-          return const SizedBox.shrink();
-        }
 
-        // Näytä stack banner:eja tai list (tässä esimerkki: Vertical list banner:eista)
+        if (notifications.isEmpty) return const SizedBox.shrink();
+
         return Column(
           children: notifications.map((notification) {
-            Color backgroundColor;
-            IconData icon;
-            switch (notification.type) {
-              case NotificationType.warning:
-                backgroundColor = Colors.orange;
-                icon = Icons.warning;
-                break;
-              case NotificationType.error:
-                backgroundColor = Colors.red;
-                icon = Icons.error;
-                break;
-              case NotificationType.success:
-                backgroundColor = Colors.green;
-                icon = Icons.check_circle;
-                break;
+            // Väri tyypin mukaan (säilytetään nykyinen logiikka)
+            final Color backgroundColor = _getBackgroundColor(notification.type);
+
+            final List<Widget> actionButtons = [];
+
+            // Ensisijainen toiminto
+            if (notification.actionText != null && notification.onAction != null) {
+              actionButtons.add(
+                TextButton(
+                  onPressed: () {
+                    notification.onAction!();
+                    if (notification.isTransient) {
+                      notificationProvider.removeTransientNotificationById(
+                          notification.notificationId);
+                    }
+                  },
+                  child: Text(
+                    notification.actionText!,
+                    style: const TextStyle(color: Colors.green),
+                  ),
+                ),
+              );
             }
 
+            // Toissijainen toiminto (esim. Hylkää)
+            if (notification.secondaryActionText != null &&
+                notification.onSecondaryAction != null) {
+              actionButtons.add(
+                TextButton(
+                  onPressed: () {
+                    notification.onSecondaryAction!();
+                    if (notification.isTransient) {
+                      notificationProvider.removeTransientNotificationById(
+                          notification.notificationId);
+                    }
+                  },
+                  child: Text(
+                    notification.secondaryActionText!,
+                    style: const TextStyle(color: Colors.red),
+                  ),
+                ),
+              );
+            }
+
+            // Sulje-painike
+            actionButtons.add(
+              TextButton(
+                onPressed: () {
+                  if (notification.isTransient) {
+                    notificationProvider.removeTransientNotificationById(
+                        notification.notificationId);
+                  } else {
+                    if (notification.notificationId != null) {
+                      notificationProvider.markAsRead(
+                          notification.notificationId!);
+                    }
+                    notificationProvider.clearNotification();
+                  }
+                },
+                child: const Text('Sulje'),
+              ),
+            );
+
             return Container(
-              margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-              padding: const EdgeInsets.all(12.0),
+              margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
                 color: backgroundColor,
                 borderRadius: BorderRadius.circular(8),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.1),
-                    blurRadius: 8,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
               ),
               child: Row(
                 children: [
-                  Icon(
-                    icon,
-                    color: Colors.white,
-                    size: 24,
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      notification.message,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 14,
-                      ),
-                    ),
-                  ),
-                  if (notification.onAction != null && notification.actionText != null) ...[
-                    const SizedBox(width: 8),
-                    TextButton(
-                      onPressed: notification.onAction,
-                      child: Text(
-                        notification.actionText!,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  ],
-                  IconButton(
-                    icon: const Icon(
-                      Icons.close,
-                      color: Colors.white,
-                      size: 20,
-                    ),
-                    onPressed: () {
-                      // Merkitse luetuksi (kutsu providerin markAsRead, poista listasta)
-                      if (notification.notificationId != null) {
-                        notificationProvider.markAsRead(notification.notificationId!);
-                      }
-                      notificationProvider.clearNotification(); // Nykyinen clear (päivitä listaan)
-                    },
-                  ),
+                  Expanded(child: Text(notification.message)),
+                  Row(children: actionButtons),
                 ],
               ),
             );
@@ -103,5 +99,17 @@ class NotificationBanner extends StatelessWidget {
         );
       },
     );
+  }
+
+  // Säilytetään nykyinen väri-logiikka
+  Color _getBackgroundColor(NotificationType type) {
+    switch (type) {
+      case NotificationType.warning:
+        return Colors.amber.shade100;
+      case NotificationType.error:
+        return Colors.red.shade100;
+      case NotificationType.success:
+        return Colors.green.shade100;
+    }
   }
 }

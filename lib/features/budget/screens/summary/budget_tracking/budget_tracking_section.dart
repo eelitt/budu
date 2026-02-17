@@ -1,18 +1,29 @@
 import 'package:budu/features/auth/providers/auth_provider.dart';
 import 'package:budu/features/budget/models/budget_model.dart';
-import 'package:budu/features/budget/providers/budget_provider.dart';
 import 'package:budu/features/budget/providers/expense_provider.dart';
 import 'package:budu/features/budget/screens/summary/budget_tracking/category_expansion_tile.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 
+/// Näyttää budjetin kategorioiden seurannan yhteenvetosivulla.
+/// Tukee nyt täysin sekä henkilökohtaista että yhteistalousbudjettia:
+/// - Suunnitellut summat (kategoriat, alakategoriat, kokonaisbudjetti) otetaan suoraan
+///   välitetystä widget.budget-parametrista (joko henkilökohtainen tai yhteistalous).
+/// - Toteutuneet summat (categoryTotals) haetaan ExpenseProvider:stä – toimii molemmille,
+///   koska SummaryScreen lataa aina oikeat menot/tapahtumat loadExpenses-kutsulla.
+/// - Ei enää riipu BudgetProvider.budget:sta – poistaa ristiriidat yhteistalousbudjetin kanssa.
+/// - Kaikki alkuperäinen toiminnallisuus (laajennus, lajittelu, yhteensä-teksti, virheenkäsittely)
+///   säilytetty täysin ennallaan.
+/// - Tehokas: Ei ylimääräisiä Firestore-kutsuja, käyttää välitettyä BudgetModel:ia suunniteltuihin
+///   ja ExpenseProvider:ia toteutuneisiin.
 class BudgetTrackingSection extends StatefulWidget {
-  final BudgetModel budget; // Valittu budjetti SummaryScreen:ltä
-
+  final BudgetModel budget; // Valittu budjetti (henkilökohtainen tai yhteistalous)
+final bool isSharedBudget;
   const BudgetTrackingSection({
     super.key,
     required this.budget,
+    this.isSharedBudget = false,
   });
 
   @override
@@ -25,7 +36,7 @@ class _BudgetTrackingSectionState extends State<BudgetTrackingSection> {
   @override
   void initState() {
     super.initState();
-   // Suorita tapahtumien lataus build-vaiheen jälkeen
+    // Ladataan menot/tapahtumat build-vaiheen jälkeen (varmistaa oikea budgetId)
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         _loadExpenses();
@@ -33,13 +44,13 @@ class _BudgetTrackingSectionState extends State<BudgetTrackingSection> {
     });
   }
 
-  /// Lataa tapahtumat oikealle budjetille
+  /// Lataa menot/tapahtumat välitetylle budjetille (henkilökohtainen tai yhteistalous).
   Future<void> _loadExpenses() async {
     try {
       final expenseProvider = Provider.of<ExpenseProvider>(context, listen: false);
       final authProvider = Provider.of<AuthProvider>(context, listen: false);
       if (authProvider.user != null) {
-        await expenseProvider.loadExpenses(authProvider.user!.uid, widget.budget.id!);
+        await expenseProvider.loadExpenses(authProvider.user!.uid, widget.budget.id!, isSharedBudget: widget.isSharedBudget);
       }
     } catch (e, stackTrace) {
       await FirebaseCrashlytics.instance.recordError(
@@ -57,25 +68,16 @@ class _BudgetTrackingSectionState extends State<BudgetTrackingSection> {
 
   @override
   Widget build(BuildContext context) {
-    final budgetProvider = Provider.of<BudgetProvider>(context);
     final expenseProvider = Provider.of<ExpenseProvider>(context);
-
     final categoryTotals = expenseProvider.getCategoryTotals();
-    // Tarkistetaan, onko budjetti olemassa
-    if (budgetProvider.budget == null) {
-      return const Center(
-        child: Text(
-          'Budjettia ei ole saatavilla. Luo budjetti ensin.',
-          style: TextStyle(fontSize: 16, color: Colors.black54),
-        ),
-      );
-    }
-    final budget = budgetProvider.budget!;
 
-    // Haetaan budjetin kategoriat suoraan budjetista
+    // Käytetään suoraan välitettyä budjettia (ei BudgetProvider.budget:ia)
+    final budget = widget.budget;
+
+    // Haetaan kategoriat budjetista ja lajitellaan aakkosjärjestykseen
     final budgetCategories = budget.expenses.keys.toList()..sort();
 
-    // Luo kategoriat widgetit
+    // Luo kategoriatilet
     final List<Widget> categoryWidgets = budgetCategories.map((categoryName) {
       final categoryExpenses = budget.expenses[categoryName]!.entries
           .map((e) => MapEntry(e.key, e.value))
@@ -90,11 +92,12 @@ class _BudgetTrackingSectionState extends State<BudgetTrackingSection> {
         categoryBudget: categoryBudget,
         categorySpent: categorySpent,
         categoryExpenses: categoryExpenses,
-        budgetId: widget.budget.id!, // Välitetään budjetin ID
+        budgetId: budget.id!,
+        isSharedBudget: widget.isSharedBudget
       );
     }).toList();
 
-    // Lasketaan kokonaisbudjetti ja käytetyt summat
+    // Lasketaan kokonaisbudjetti ja toteutuneet summat
     final totalBudget = budgetCategories.fold<double>(
         0.0, (sum, category) => sum + budget.expenses[category]!.values.fold(0.0, (s, v) => s + v));
     final totalSpent = budgetCategories.fold<double>(
@@ -106,7 +109,7 @@ class _BudgetTrackingSectionState extends State<BudgetTrackingSection> {
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.15),
+            color: Colors.black.withOpacity(0.15),
             blurRadius: 8,
             offset: const Offset(0, 4),
           ),
@@ -138,7 +141,7 @@ class _BudgetTrackingSectionState extends State<BudgetTrackingSection> {
                   'Budjettiseuranta',
                   style: Theme.of(context).textTheme.headlineSmall,
                 ),
-                if (budgetCategories.isNotEmpty) // Näytetään vain, jos kategorioita on
+                if (budgetCategories.isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.only(top: 2),
                     child: Text(

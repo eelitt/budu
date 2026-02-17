@@ -478,6 +478,55 @@ class BudgetProvider with ChangeNotifier {
       rethrow;
     }
   }
+  
+/// Vähentää tuloja budjetista (esim. tulotapahtuman poisto).
+  /// Tarkistaa budjetin olemassaolon, lataa tarvittaessa, vähentää summan (clamp 0:aan) ja päivittää Firestoreen.
+  /// Päivittää paikallisen _budget:in, jos se vastaa budgetId:tä.
+  Future<void> subtractFromIncome({
+    required String userId,
+    required String budgetId,
+    required double amount,
+  }) async {
+    try {
+      _clearError();
+      final exists = await budgetExists(userId, budgetId);
+      if (!exists) {
+        print('Cannot subtract from income: Budget does not exist for $budgetId');
+        _setError('Budjetin olemassaolon tarkistus epäonnistui tulojen vähentämiseksi');
+        return;
+      }
+
+      final budget = await _budgetRepository.getBudget(userId, budgetId);
+      if (budget == null) {
+        print('Cannot subtract from income: Failed to load budget for $budgetId');
+        _setError('Budjetin lataus epäonnistui tulojen vähentämiseksi');
+        return;
+      }
+
+      final updatedIncome = (budget.income - amount).clamp(0.0, double.infinity);
+      await FirebaseFirestore.instance
+          .collection('budgets')
+          .doc(userId)
+          .collection('budgets')
+          .doc(budgetId)
+          .update({'income': updatedIncome});
+
+      if (_budget != null && _budget!.id == budgetId) {
+        _budget!.income = updatedIncome;
+      }
+      print('Subtracting from income: $amount, new income: $updatedIncome');
+      _safeNotifyListeners(); // Turvallinen notify
+    } catch (e) {
+      await FirebaseCrashlytics.instance.recordError(
+        e,
+        StackTrace.current,
+        reason: 'Failed to subtract from budget income',
+      );
+      print('Error subtracting from income: $e');
+      _setError('Tulojen vähentäminen epäonnistui');
+      rethrow;
+    }
+  }
 
   /// Peruuttaa kaikki aktiiviset Firestore-kuuntelijat ja ajastimet.
   void cancelSubscriptions() {

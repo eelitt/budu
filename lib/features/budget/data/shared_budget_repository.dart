@@ -52,9 +52,10 @@ class SharedBudgetRepository {
   /// Hakee odottavat kutsut käyttäjän sähköpostilla (query optimoitu limit:llä).
   Future<List<Invitation>> getPendingInvitations(String email) async {
     try {
+      final String normalizedEmail = email.trim().toLowerCase();
       final snapshot = await _firestore
           .collection('invitations')
-          .where('inviteeEmail', isEqualTo: email)
+          .where('inviteeEmail', isEqualTo: normalizedEmail)
           .where('status', isEqualTo: 'pending')
           .orderBy('createdAt', descending: true)
           .limit(10)
@@ -159,30 +160,50 @@ class SharedBudgetRepository {
     }
   }
 
-  /// Päivittää kutsun tilan ja lisää käyttäjän yhteistalousbudjettiin batch-write:lla (optimoi kulut).
+  /// Atomically accept an invitation:
+  /// - Marks invitation as 'accepted'
+  /// - Adds user UID to the shared budget's 'users' array
   Future<void> acceptInvitation({
     required String invitationId,
+    required String sharedBudgetId,
     required String userId,
   }) async {
-    final batch = _firestore.batch();
     try {
-      final invitationRef = _firestore.collection('invitations').doc(invitationId);
-      final invitation = await invitationRef.get();
-      if (!invitation.exists) {
-        throw Exception('Kutsua ei löydy');
-      }
-      batch.update(invitationRef, {'status': 'accepted'});
-      final sharedBudgetRef = _firestore.collection('shared_budgets').doc(invitation.data()!['sharedBudgetId']);
-      batch.update(sharedBudgetRef, {
-        'users': FieldValue.arrayUnion([userId]),
+      await FirebaseFirestore.instance.runTransaction((transaction) async {
+        final invitationRef = FirebaseFirestore.instance
+            .collection('invitations')
+            .doc(invitationId);
+        final budgetRef = FirebaseFirestore.instance
+            .collection('shared_budgets')
+            .doc(sharedBudgetId);
+
+        transaction.update(invitationRef, {'status': 'accepted'});
+        transaction.update(budgetRef, {
+          'users': FieldValue.arrayUnion([userId]),
+        });
       });
-      await batch.commit();
-      await FirebaseCrashlytics.instance.log('SharedBudgetRepository: Kutsu hyväksytty, ID: $invitationId, userId: $userId');
     } catch (e, stackTrace) {
       await FirebaseCrashlytics.instance.recordError(
         e,
         stackTrace,
-        reason: 'Failed to accept invitation $invitationId',
+        reason: 'SharedBudgetRepository: Failed to accept invitation $invitationId',
+      );
+      rethrow;
+    }
+  }
+
+/// Decline an invitation (simple status update)
+  Future<void> declineInvitation(String invitationId) async {
+    try {
+      await FirebaseFirestore.instance
+          .collection('invitations')
+          .doc(invitationId)
+          .update({'status': 'declined'});
+    } catch (e, stackTrace) {
+      await FirebaseCrashlytics.instance.recordError(
+        e,
+        stackTrace,
+        reason: 'SharedBudgetRepository: Failed to decline invitation $invitationId',
       );
       rethrow;
     }

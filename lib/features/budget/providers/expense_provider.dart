@@ -8,10 +8,15 @@ import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-/// Hallinnoi menotapahtumia, kuten lataamista, lisäämistä, poistamista ja reaaliaikaista päivitystä Firestoresta.
-/// Käsittelee sekä henkilökohtaisia (budgets/{userId}/events) että yhteistalousbudjettien (shared_budgets/{sharedBudgetId}/events) tapahtumia.
-/// Tukee myös vanhaa expenses-alakokoelmaa siirtymävaiheessa.
-/// Päivitetty: Lisätty batch-delete massapoistoihin kuluja vähentäen, paginointi loadAllExpenses:iin, erillinen stream shared-budjeteille.
+/// Hallinnoi meno- ja tulotapahtumia Firestoressa.
+/// Tukee sekä henkilökohtaisia (budgets/{userId}/events, legacy monthly_budgets/{budgetId}/expenses)
+/// että yhteistalousbudjetteja (shared_budgets/{sharedBudgetId}/events).
+/// - Kaikki metodit hyväksyvät isSharedBudget-flagin polun valintaan.
+/// - Yhteistalous-tapahtumiin lisätään automaattisesti userId (kuka lisäsi).
+/// - Tulojen päivitys budjettiin automaattisesti (personal: BudgetProvider, shared: SharedBudgetProvider).
+/// - Batch-operaatiot massapoistoissa kuluja minimoiden.
+/// - Reaaliaikainen stream vain henkilökohtaisille (shared ladataan manuaalisesti).
+/// - Paginointi loadExpenses/loadMoreExpenses:iin (limit 50) tehokkuuden vuoksi.
 class ExpenseProvider with ChangeNotifier {
   List<ExpenseEvent> _expenses = [];
   bool _isLoadingMore = false;
@@ -23,33 +28,28 @@ class ExpenseProvider with ChangeNotifier {
   bool get isLoadingMore => _isLoadingMore;
   String? get errorMessage => _errorMessage;
 
-  /// Nollaa virheviestin ja päivittää kuuntelijat.
   void _clearError() {
     _errorMessage = null;
     notifyListeners();
   }
 
-  /// Asettaa virheviestin ja päivittää kuuntelijat.
   void _setError(String message) {
     _errorMessage = message;
     notifyListeners();
   }
 
-  /// Laskee tulojen kokonaissumman tapahtumista.
   double get totalIncome {
     return _expenses
         .where((expense) => expense.type == EventType.income)
         .fold(0.0, (sum, expense) => sum + expense.amount);
   }
 
-  /// Laskee menojen kokonaissumman tapahtumista.
   double get totalExpenses {
     return _expenses
         .where((expense) => expense.type == EventType.expense)
         .fold(0.0, (sum, expense) => sum + expense.amount);
   }
 
-  /// Hakee kategorioiden kokonaissummat menotapahtumista.
   Map<String, double> getCategoryTotals() {
     final Map<String, double> totals = {};
     final Map<String, String> reverseMapping = {};
@@ -60,41 +60,40 @@ class ExpenseProvider with ChangeNotifier {
     });
 
     for (var expense in _expenses.where((e) => e.type == EventType.expense)) {
-      String categoryKey = expense.subcategory != null && reverseMapping.containsKey(expense.subcategory)
-          ? reverseMapping[expense.subcategory]!
+      String categoryKey = expense.subcategory != null && reverseMapping.containsKey(expense.subcategory!)
+          ? reverseMapping[expense.subcategory!]!
           : expense.category;
       totals[categoryKey] = (totals[categoryKey] ?? 0) + expense.amount;
     }
     return totals;
   }
 
-  /// Lataa tapahtumat ensisijaisesti events-kokoelmasta, tukee sekä henkilökohtaisia että yhteistalousbudjetteja.
+  /// Lataa tapahtumat events-kokoelmasta (ensisijainen) tai legacy expenses-kokoelmasta.
+  /// Tukee sekä henkilökohtaisia että yhteistalousbudjetteja.
   Future<void> loadExpenses(String userId, String budgetId, {bool isSharedBudget = false}) async {
     try {
       _clearError();
       _expenses.clear();
       _lastDoc = null;
 
-      // Valitse oikea Firestore-kokoelma budjettityypin perusteella
       final collectionPath = isSharedBudget ? 'shared_budgets' : 'budgets';
-      final docId = isSharedBudget ? budgetId : userId;
+      final parentDocId = isSharedBudget ? budgetId : userId;
 
-      // Lataa tapahtumat events-kokoelmasta
       final eventsQuery = FirebaseFirestore.instance
           .collection(collectionPath)
-          .doc(docId)
+          .doc(parentDocId)
           .collection('events')
-          .where(isSharedBudget ? 'budgetId' : 'budgetId', isEqualTo: budgetId)
+          .where('budgetId', isEqualTo: budgetId)
           .orderBy('createdAt', descending: true)
           .limit(50);
 
-      final eventsSnapshot = await eventsQuery.get(const GetOptions(source: Source.serverAndCache));
-      _expenses = eventsSnapshot.docs.map((doc) => ExpenseEvent.fromMap(doc.data())).toList();
+      final eventsSnapshot = await eventsQuery.get();
+      _expenses = eventsSnapshot.docs.map((doc) => ExpenseEvent.fromMap(doc.data(), doc.id)).toList();
       _lastDoc = eventsSnapshot.docs.isNotEmpty ? eventsSnapshot.docs.last : null;
 
-      // Jos events-kokoelmasta ei löydy tapahtumia ja budjetti on henkilökohtainen, yritä vanhaa expenses-alakokoelmaa
+      // Legacy fallback vain henkilökohtaisille
       if (_expenses.isEmpty && !isSharedBudget) {
-        final expensesQuery = FirebaseFirestore.instance
+        final legacyQuery = FirebaseFirestore.instance
             .collection('budgets')
             .doc(userId)
             .collection('monthly_budgets')
@@ -103,24 +102,157 @@ class ExpenseProvider with ChangeNotifier {
             .orderBy('createdAt', descending: true)
             .limit(50);
 
-        final expensesSnapshot = await expensesQuery.get(const GetOptions(source: Source.serverAndCache));
-        _expenses = expensesSnapshot.docs.map((doc) {
+        final legacySnapshot = await legacyQuery.get();
+        _expenses = legacySnapshot.docs.map((doc) {
           final data = doc.data();
-          data['id'] = doc.id; // Vanha rakenne käyttää id-kenttää
+          data['id'] = doc.id;
           return ExpenseEvent.fromMap(data);
         }).toList();
-        _lastDoc = expensesSnapshot.docs.isNotEmpty ? expensesSnapshot.docs.last : null;
+        _lastDoc = legacySnapshot.docs.isNotEmpty ? legacySnapshot.docs.last : null;
       }
 
       notifyListeners();
     } catch (e, stackTrace) {
-      await FirebaseCrashlytics.instance.recordError(
-        e,
-        stackTrace,
-        reason: 'Menojen lataus epäonnistui käyttäjälle $userId, budjetti $budgetId, isSharedBudget: $isSharedBudget',
-      );
-      _setError('Menojen lataus epäonnistui: $e');
+      await FirebaseCrashlytics.instance.recordError(e, stackTrace,
+          reason: 'loadExpenses failed – userId: $userId, budgetId: $budgetId, isShared: $isSharedBudget');
+      _setError('Tapahtumien lataus epäonnistui');
       rethrow;
+    }
+  }
+
+  /// Lisää tapahtuman – tukee sekä henkilökohtaisia että yhteistalousbudjetteja.
+  /// Yhteistalous-tapahtumaan lisätään automaattisesti userId (kuka lisäsi).
+  /// Tulotapahtuma päivittää budjetin income-kentän (personal tai shared).
+  Future<void> addExpense(
+    BuildContext context,
+    String userId,
+    ExpenseEvent expense, {
+    bool isSharedBudget = false,
+  }) async {
+    try {
+      _clearError();
+
+      final collectionPath = isSharedBudget ? 'shared_budgets' : 'budgets';
+      final parentDocId = isSharedBudget ? expense.budgetId : userId;
+
+      // Lisää userId yhteistalous-tapahtumaan (attribuutio)
+      final Map<String, dynamic> eventMap = expense.toMap();
+      if (isSharedBudget) {
+        eventMap['userId'] = userId;
+      }
+
+      await FirebaseFirestore.instance
+          .collection(collectionPath)
+          .doc(parentDocId)
+          .collection('events')
+          .doc(expense.id)
+          .set(eventMap);
+
+      _expenses.add(expense.copyWith(userId: isSharedBudget ? userId : expense.userId));
+      _expenses.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+
+      // Päivitä budjetin tulot, jos tulo
+      if (expense.type == EventType.income) {
+        if (isSharedBudget) {
+          final sharedProvider = Provider.of<SharedBudgetProvider>(context, listen: false);
+          final sharedBudget = sharedProvider.sharedBudgets.firstWhere((b) => b.id == expense.budgetId);
+          await sharedProvider.updateSharedBudget(
+            sharedBudgetId: sharedBudget.id!,
+            income: sharedBudget.income + expense.amount,
+            expenses: sharedBudget.expenses,
+            startDate: sharedBudget.startDate,
+            endDate: sharedBudget.endDate,
+            type: sharedBudget.type,
+            isPlaceholder: sharedBudget.isPlaceholder,
+          );
+        } else {
+          final budgetProvider = Provider.of<BudgetProvider>(context, listen: false);
+          await budgetProvider.addToIncome(
+            userId: userId,
+            budgetId: expense.budgetId,
+            amount: expense.amount,
+          );
+        }
+      }
+
+      notifyListeners();
+    } catch (e, stackTrace) {
+      await FirebaseCrashlytics.instance.recordError(e, stackTrace,
+          reason: 'addExpense failed – isShared: $isSharedBudget');
+      _setError('Tapahtuman lisäys epäonnistui');
+      throw Exception('Tapahtuman lisäys epäonnistui');
+    }
+  }
+
+  /// Poistaa tapahtuman – tukee molempia budjettityyppejä.
+  /// Tulotapahtuman poisto päivittää budjetin income-kentän.
+  Future<void> deleteExpense(
+    BuildContext context,
+    String userId,
+    String expenseId, {
+    bool isSharedBudget = false,
+    required String budgetId,
+  }) async {
+    try {
+      _clearError();
+      final expense = _expenses.firstWhere((e) => e.id == expenseId);
+
+      // Tulotapahtuman poisto → päivitä income
+      if (expense.type == EventType.income) {
+        if (isSharedBudget) {
+          final sharedProvider = Provider.of<SharedBudgetProvider>(context, listen: false);
+          final sharedBudget = sharedProvider.sharedBudgets.firstWhere((b) => b.id == budgetId);
+          final newIncome = (sharedBudget.income - expense.amount).clamp(0.0, double.infinity);
+          await sharedProvider.updateSharedBudget(
+            sharedBudgetId: sharedBudget.id!,
+            income: newIncome,
+            expenses: sharedBudget.expenses,
+            startDate: sharedBudget.startDate,
+            endDate: sharedBudget.endDate,
+            type: sharedBudget.type,
+            isPlaceholder: sharedBudget.isPlaceholder,
+          );
+        } else {
+          final budgetProvider = Provider.of<BudgetProvider>(context, listen: false);
+          await budgetProvider.subtractFromIncome(
+            userId: userId,
+            budgetId: budgetId,
+            amount: expense.amount,
+          );
+        }
+      }
+
+      // Poista tapahtuma oikeasta events-kokoelmasta
+      final collectionPath = isSharedBudget ? 'shared_budgets' : 'budgets';
+      final parentDocId = isSharedBudget ? budgetId : userId;
+
+      final eventRef = FirebaseFirestore.instance
+          .collection(collectionPath)
+          .doc(parentDocId)
+          .collection('events')
+          .doc(expenseId);
+
+      if ((await eventRef.get()).exists) {
+        await eventRef.delete();
+      } else if (!isSharedBudget) {
+        // Legacy fallback
+        await FirebaseFirestore.instance
+            .collection('budgets')
+            .doc(userId)
+            .collection('monthly_budgets')
+            .doc(budgetId)
+            .collection('expenses')
+            .doc(expenseId)
+            .delete();
+      }
+
+      _expenses.removeWhere((e) => e.id == expenseId);
+      notifyListeners();
+    } catch (e, stackTrace) {
+      await FirebaseCrashlytics.instance.recordError(e, stackTrace,
+          reason: 'deleteExpense failed – isShared: $isSharedBudget');
+      _setError('Tapahtuman poisto epäonnistui');
+      throw Exception('Tapahtuman poisto epäonnistui');
     }
   }
 
@@ -140,7 +272,7 @@ class ExpenseProvider with ChangeNotifier {
           .limit(50)
           .get(const GetOptions(source: Source.serverAndCache));
 
-      _expenses.addAll(eventsSnapshot.docs.map((doc) => ExpenseEvent.fromMap(doc.data())));
+      _expenses.addAll(eventsSnapshot.docs.map((doc) => ExpenseEvent.fromMap(doc.data(), doc.id)));
       _lastDoc = eventsSnapshot.docs.isNotEmpty ? eventsSnapshot.docs.last : null;
 
       // Lataa vanhat tapahtumat monthly_budgets/expenses-alakokoelmista
@@ -176,7 +308,7 @@ class ExpenseProvider with ChangeNotifier {
             .orderBy('createdAt', descending: true)
             .limit(50)
             .get(const GetOptions(source: Source.serverAndCache));
-        _expenses.addAll(eventsSnapshot.docs.map((doc) => ExpenseEvent.fromMap(doc.data())));
+        _expenses.addAll(eventsSnapshot.docs.map((doc) => ExpenseEvent.fromMap(doc.data(), doc.id)));
       }
 
       _expenses.sort((a, b) => b.createdAt.compareTo(a.createdAt));
@@ -211,7 +343,7 @@ class ExpenseProvider with ChangeNotifier {
       try {
         _expenses.clear();
         // Lataa tapahtumat events-kokoelmasta
-        _expenses.addAll(eventsSnapshot.docs.map((doc) => ExpenseEvent.fromMap(doc.data())));
+        _expenses.addAll(eventsSnapshot.docs.map((doc) => ExpenseEvent.fromMap(doc.data(), doc.id)));
 
         // Lataa vanhat tapahtumat monthly_budgets/expenses-alakokoelmista
         final budgetsSnapshot = await FirebaseFirestore.instance
@@ -261,27 +393,25 @@ class ExpenseProvider with ChangeNotifier {
     try {
       _clearError();
 
-      // Valitse oikea Firestore-kokoelma budjettityypin perusteella
       final collectionPath = isSharedBudget ? 'shared_budgets' : 'budgets';
-      final docId = isSharedBudget ? budgetId : userId;
+      final parentDocId = isSharedBudget ? budgetId : userId;
 
-      // Lataa lisää tapahtumia events-kokoelmasta
       final eventsQuery = FirebaseFirestore.instance
           .collection(collectionPath)
-          .doc(docId)
+          .doc(parentDocId)
           .collection('events')
-          .where(isSharedBudget ? 'budgetId' : 'budgetId', isEqualTo: budgetId)
+          .where('budgetId', isEqualTo: budgetId)
           .orderBy('createdAt', descending: true)
           .startAfterDocument(_lastDoc!)
           .limit(50);
 
-      final eventsSnapshot = await eventsQuery.get(const GetOptions(source: Source.serverAndCache));
-      _expenses.addAll(eventsSnapshot.docs.map((doc) => ExpenseEvent.fromMap(doc.data())));
+      final eventsSnapshot = await eventsQuery.get();
+      _expenses.addAll(eventsSnapshot.docs.map((doc) => ExpenseEvent.fromMap(doc.data(), doc.id)));
       _lastDoc = eventsSnapshot.docs.isNotEmpty ? eventsSnapshot.docs.last : null;
 
-      // Jos ei löydy lisää tapahtumia events-kokoelmasta ja budjetti on henkilökohtainen, yritä expenses-alakokoelmaa
+      // Legacy fallback vain henkilökohtaisille
       if (eventsSnapshot.docs.isEmpty && !isSharedBudget) {
-        final expensesQuery = FirebaseFirestore.instance
+        final legacyQuery = FirebaseFirestore.instance
             .collection('budgets')
             .doc(userId)
             .collection('monthly_budgets')
@@ -291,13 +421,13 @@ class ExpenseProvider with ChangeNotifier {
             .startAfterDocument(_lastDoc!)
             .limit(50);
 
-        final expensesSnapshot = await expensesQuery.get(const GetOptions(source: Source.serverAndCache));
-        _expenses.addAll(expensesSnapshot.docs.map((doc) {
+        final legacySnapshot = await legacyQuery.get();
+        _expenses.addAll(legacySnapshot.docs.map((doc) {
           final data = doc.data();
           data['id'] = doc.id;
           return ExpenseEvent.fromMap(data);
         }));
-        _lastDoc = expensesSnapshot.docs.isNotEmpty ? expensesSnapshot.docs.last : null;
+        _lastDoc = legacySnapshot.docs.isNotEmpty ? legacySnapshot.docs.last : null;
       }
 
       notifyListeners();
@@ -315,145 +445,6 @@ class ExpenseProvider with ChangeNotifier {
     }
   }
 
-  /// Lisää tapahtuman, tukee sekä henkilökohtaisia että yhteistalousbudjetteja.
-  Future<void> addExpense(BuildContext context, String userId, ExpenseEvent expense, BudgetProvider budgetProvider, {bool isSharedBudget = false}) async {
-    try {
-      _clearError();
-
-      // Valitse oikea Firestore-kokoelma budjettityypin perusteella
-      final collectionPath = isSharedBudget ? 'shared_budgets' : 'budgets';
-      final docId = isSharedBudget ? expense.budgetId : userId;
-
-      // Tallenna tapahtuma events-kokoelmaan
-      await FirebaseFirestore.instance
-          .collection(collectionPath)
-          .doc(docId)
-          .collection('events')
-          .doc(expense.id)
-          .set(expense.toMap());
-
-      _expenses.add(expense);
-
-      // Päivitä budjetin tulot, jos tapahtuma on tulo
-      if (expense.type == EventType.income) {
-        if (isSharedBudget) {
-          final sharedBudgetProvider = Provider.of<SharedBudgetProvider>(context, listen: false);
-          final sharedBudget = sharedBudgetProvider.sharedBudgets.firstWhere((b) => b.id == expense.budgetId);
-          await sharedBudgetProvider.updateSharedBudget(
-            sharedBudgetId: sharedBudget.id!,
-            income: sharedBudget.income + expense.amount,
-            expenses: sharedBudget.expenses,
-            startDate: sharedBudget.startDate,
-            endDate: sharedBudget.endDate,
-            type: sharedBudget.type,
-            isPlaceholder: sharedBudget.isPlaceholder,
-          );
-        } else {
-          await budgetProvider.addToIncome(
-            userId: userId,
-            budgetId: expense.budgetId,
-            amount: expense.amount,
-          );
-        }
-      }
-
-      _expenses.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-      notifyListeners();
-    } catch (e, stackTrace) {
-      await FirebaseCrashlytics.instance.recordError(
-        e,
-        stackTrace,
-        reason: 'Tapahtuman tallentaminen epäonnistui käyttäjälle $userId, isSharedBudget: $isSharedBudget',
-      );
-      _setError('Tapahtuman tallentaminen epäonnistui: $e');
-      throw Exception('Tapahtuman tallentaminen epäonnistui: $e');
-    }
-  }
-
-  /// Poistaa tapahtuman, tukee sekä henkilökohtaisia että yhteistalousbudjetteja.
-  Future<void> deleteExpense(BuildContext context, String userId, String expenseId, BudgetProvider budgetProvider, {bool isSharedBudget = false}) async {
-    try {
-      _clearError();
-      final expense = _expenses.firstWhere((e) => e.id == expenseId);
-
-      // Päivitä budjetin tulot, jos tapahtuma on tulo
-      if (expense.type == EventType.income) {
-        if (isSharedBudget) {
-          final sharedBudgetProvider = Provider.of<SharedBudgetProvider>(context, listen: false);
-          final sharedBudget = sharedBudgetProvider.sharedBudgets.firstWhere((b) => b.id == expense.budgetId);
-          final updatedIncome = (sharedBudget.income - expense.amount).clamp(0.0, double.infinity);
-          await sharedBudgetProvider.updateSharedBudget(
-            sharedBudgetId: sharedBudget.id!,
-            income: updatedIncome,
-            expenses: sharedBudget.expenses,
-            startDate: sharedBudget.startDate,
-            endDate: sharedBudget.endDate,
-            type: sharedBudget.type,
-            isPlaceholder: sharedBudget.isPlaceholder,
-          );
-        } else {
-          final budgetDoc = await FirebaseFirestore.instance
-              .collection('budgets')
-              .doc(userId)
-              .collection('budgets')
-              .doc(expense.budgetId)
-              .get();
-
-          if (budgetDoc.exists) {
-            final currentIncome = (budgetDoc.data()!['income'] as num?)?.toDouble() ?? 0.0;
-            final updatedIncome = (currentIncome - expense.amount).clamp(0.0, double.infinity);
-
-            await FirebaseFirestore.instance
-                .collection('budgets')
-                .doc(userId)
-                .collection('budgets')
-                .doc(expense.budgetId)
-                .update({'income': updatedIncome});
-
-            if (budgetProvider.budget != null && budgetProvider.budget!.id == expense.budgetId) {
-              budgetProvider.budget!.income = updatedIncome;
-              budgetProvider.notifyListeners();
-            }
-          }
-        }
-      }
-
-      // Poista tapahtuma events-kokoelmasta
-      final collectionPath = isSharedBudget ? 'shared_budgets' : 'budgets';
-      final docId = isSharedBudget ? expense.budgetId : userId;
-      final eventDocRef = FirebaseFirestore.instance
-          .collection(collectionPath)
-          .doc(docId)
-          .collection('events')
-          .doc(expenseId);
-      final eventDoc = await eventDocRef.get();
-      if (eventDoc.exists) {
-        await eventDocRef.delete();
-      } else if (!isSharedBudget) {
-        // Fallback: Poista vanhasta expenses-alakokoelmasta
-        await FirebaseFirestore.instance
-            .collection('budgets')
-            .doc(userId)
-            .collection('monthly_budgets')
-            .doc(expense.budgetId)
-            .collection('expenses')
-            .doc(expenseId)
-            .delete();
-      }
-
-      _expenses.removeWhere((e) => e.id == expenseId);
-      notifyListeners();
-    } catch (e, stackTrace) {
-      await FirebaseCrashlytics.instance.recordError(
-        e,
-        stackTrace,
-        reason: 'Tapahtuman poistaminen epäonnistui käyttäjälle $userId, isSharedBudget: $isSharedBudget',
-      );
-      _setError('Tapahtuman poistaminen epäonnistui: $e');
-      throw Exception('Tapahtuman poistaminen epäonnistui: $e');
-    }
-  }
-
   /// Tarkistaa, onko alakategorian tapahtumia, tukee sekä henkilökohtaisia että yhteistalousbudjetteja.
   Future<bool> hasSubcategoryEvents({
     required String userId,
@@ -465,27 +456,23 @@ class ExpenseProvider with ChangeNotifier {
     try {
       _clearError();
 
-      // Valitse oikea Firestore-kokoelma budjettityypin perusteella
       final collectionPath = isSharedBudget ? 'shared_budgets' : 'budgets';
-      final docId = isSharedBudget ? budgetId : userId;
+      final parentDocId = isSharedBudget ? budgetId : userId;
 
-      // Tarkista events-kokoelmasta
       final eventsSnapshot = await FirebaseFirestore.instance
           .collection(collectionPath)
-          .doc(docId)
+          .doc(parentDocId)
           .collection('events')
-          .where(isSharedBudget ? 'budgetId' : 'budgetId', isEqualTo: budgetId)
+          .where('budgetId', isEqualTo: budgetId)
           .where('category', isEqualTo: category)
           .where('subcategory', isEqualTo: subcategory)
           .get();
 
-      if (eventsSnapshot.docs.isNotEmpty) {
-        return true;
-      }
+      if (eventsSnapshot.docs.isNotEmpty) return true;
 
-      // Fallback: Tarkista expenses-alakokoelmasta vain henkilökohtaisille budjeteille
+      // Legacy fallback vain henkilökohtaisille
       if (!isSharedBudget) {
-        final expensesSnapshot = await FirebaseFirestore.instance
+        final legacySnapshot = await FirebaseFirestore.instance
             .collection('budgets')
             .doc(userId)
             .collection('monthly_budgets')
@@ -495,7 +482,7 @@ class ExpenseProvider with ChangeNotifier {
             .where('subcategory', isEqualTo: subcategory)
             .get();
 
-        return expensesSnapshot.docs.isNotEmpty;
+        return legacySnapshot.docs.isNotEmpty;
       }
 
       return false;
@@ -510,7 +497,7 @@ class ExpenseProvider with ChangeNotifier {
     }
   }
 
-  /// Poistaa alakategorian tapahtumat batch-write:lla (optimoi kulut), tukee sekä henkilökohtaisia että yhteistalousbudjetteja.
+  /// Poistaa alakategorian tapahtumat batch-write:lla, tukee molempia tyyppejä.
   Future<bool> deleteSubcategoryEvents({
     required String userId,
     required String budgetId,
@@ -523,16 +510,14 @@ class ExpenseProvider with ChangeNotifier {
       _clearError();
       bool deleted = false;
 
-      // Valitse oikea Firestore-kokoelma budjettityypin perusteella
       final collectionPath = isSharedBudget ? 'shared_budgets' : 'budgets';
-      final docId = isSharedBudget ? budgetId : userId;
+      final parentDocId = isSharedBudget ? budgetId : userId;
 
-      // Poista tapahtumat events-kokoelmasta batch:lla
       final eventsSnapshot = await FirebaseFirestore.instance
           .collection(collectionPath)
-          .doc(docId)
+          .doc(parentDocId)
           .collection('events')
-          .where(isSharedBudget ? 'budgetId' : 'budgetId', isEqualTo: budgetId)
+          .where('budgetId', isEqualTo: budgetId)
           .where('category', isEqualTo: category)
           .where('subcategory', isEqualTo: subcategory)
           .get();
@@ -545,9 +530,9 @@ class ExpenseProvider with ChangeNotifier {
         deleted = true;
       }
 
-      // Poista tapahtumat expenses-alakokoelmasta batch:lla vain henkilökohtaisille budjeteille
+      // Legacy fallback vain henkilökohtaisille
       if (!isSharedBudget) {
-        final expensesSnapshot = await FirebaseFirestore.instance
+        final legacySnapshot = await FirebaseFirestore.instance
             .collection('budgets')
             .doc(userId)
             .collection('monthly_budgets')
@@ -557,8 +542,8 @@ class ExpenseProvider with ChangeNotifier {
             .where('subcategory', isEqualTo: subcategory)
             .get();
 
-        if (expensesSnapshot.docs.isNotEmpty) {
-          for (var doc in expensesSnapshot.docs) {
+        if (legacySnapshot.docs.isNotEmpty) {
+          for (var doc in legacySnapshot.docs) {
             batch.delete(doc.reference);
             _expenses.removeWhere((expense) => expense.id == doc.id);
           }
@@ -582,7 +567,7 @@ class ExpenseProvider with ChangeNotifier {
     }
   }
 
-  /// Poistaa kaikki tapahtumat budjetille batch-write:lla (optimoi kulut), tukee sekä henkilökohtaisia että yhteistalousbudjetteja.
+  /// Poistaa kaikki tapahtumat budjetille batch-write:lla, tukee molempia tyyppejä.
   Future<void> deleteAllExpensesForBudget({
     required String userId,
     required String budgetId,
@@ -592,16 +577,14 @@ class ExpenseProvider with ChangeNotifier {
     try {
       _clearError();
 
-      // Valitse oikea Firestore-kokoelma budjettityypin perusteella
       final collectionPath = isSharedBudget ? 'shared_budgets' : 'budgets';
-      final docId = isSharedBudget ? budgetId : userId;
+      final parentDocId = isSharedBudget ? budgetId : userId;
 
-      // Poista tapahtumat events-kokoelmasta batch:lla
       final eventsSnapshot = await FirebaseFirestore.instance
           .collection(collectionPath)
-          .doc(docId)
+          .doc(parentDocId)
           .collection('events')
-          .where(isSharedBudget ? 'budgetId' : 'budgetId', isEqualTo: budgetId)
+          .where('budgetId', isEqualTo: budgetId)
           .get();
 
       if (eventsSnapshot.docs.isNotEmpty) {
@@ -611,9 +594,9 @@ class ExpenseProvider with ChangeNotifier {
         }
       }
 
-      // Poista tapahtumat expenses-alakokoelmasta batch:lla vain henkilökohtaisille budjeteille
+      // Legacy fallback vain henkilökohtaisille
       if (!isSharedBudget) {
-        final expensesSnapshot = await FirebaseFirestore.instance
+        final legacySnapshot = await FirebaseFirestore.instance
             .collection('budgets')
             .doc(userId)
             .collection('monthly_budgets')
@@ -621,8 +604,8 @@ class ExpenseProvider with ChangeNotifier {
             .collection('expenses')
             .get();
 
-        if (expensesSnapshot.docs.isNotEmpty) {
-          for (var doc in expensesSnapshot.docs) {
+        if (legacySnapshot.docs.isNotEmpty) {
+          for (var doc in legacySnapshot.docs) {
             batch.delete(doc.reference);
             _expenses.removeWhere((expense) => expense.id == doc.id);
           }

@@ -12,6 +12,11 @@ import '../managers/add_event_dialog_state_manager.dart';
 
 /// Palveluluokka tapahtumien tallentamiseen AddEventDialogissa.
 /// Vastaa tapahtuman luomisesta, validoinnista ja tallentamisesta Firestoreen.
+/// Nyt tukee sekä henkilökohtaista että yhteistalousbudjettia:
+/// - Lisätty valinnainen isSharedBudget-parametri saveEvent-metodiin.
+/// - Välittää isSharedBudget ExpenseProvider.addExpense:lle.
+/// - Kaikki muu toiminnallisuus (validointi, error handling, success/failure callbacks)
+///   säilytetty ennallaan – vain lisätty tuki yhteistalousbudjetille.
 class EventSavingService {
   final BuildContext context;
 
@@ -23,6 +28,7 @@ class EventSavingService {
     required EventValidator validator,
     required VoidCallback onSuccess,
     required VoidCallback onFailure,
+    bool isSharedBudget = false, // Lisätty: Määrittää, onko yhteistalousbudjetti
   }) async {
     // Nollaa aiemmat virheet
     stateManager.clearErrors();
@@ -61,7 +67,6 @@ class EventSavingService {
     }
 
     final expenseProvider = Provider.of<ExpenseProvider>(context, listen: false);
-    final budgetProvider = Provider.of<BudgetProvider>(context, listen: false);
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
 
     if (authProvider.user == null || stateManager.selectedBudgetId == null) {
@@ -89,11 +94,15 @@ class EventSavingService {
         budgetId: stateManager.selectedBudgetId!,
         description: stateManager.descriptionController.text.isNotEmpty ? stateManager.descriptionController.text : null,
       );
-      // Tallennetaan tapahtuma Firestoreen
-      await expenseProvider.addExpense(context,authProvider.user!.uid, event, budgetProvider);
-      // Päivitetään BudgetProvider.budget ja ExpenseProvider.expenses, jos valittu budjetti on sama kuin SummaryScreen:llä
-      await budgetProvider.loadBudget(authProvider.user!.uid, stateManager.selectedBudgetId!);
-      await expenseProvider.loadExpenses(authProvider.user!.uid, stateManager.selectedBudgetId!);
+      // Tallennetaan tapahtuma Firestoreen – välittää isSharedBudget
+      await expenseProvider.addExpense(
+        context,
+        authProvider.user!.uid,
+        event,
+        isSharedBudget: isSharedBudget,
+      );
+      // Päivitetään ExpenseProvider.expenses lataamalla uudelleen
+      await expenseProvider.loadExpenses(authProvider.user!.uid, stateManager.selectedBudgetId!, isSharedBudget: isSharedBudget);
       // Kutsutaan onnistumiskäsittelijä
       onSuccess();
     } catch (e) {

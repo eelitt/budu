@@ -11,15 +11,21 @@ import 'package:budu/features/budget/event_dialog/services/event_saving_service.
 import 'package:flutter/material.dart';
 
 /// Dialogi uuden meno- tai tulotapahtuman lisäämiseksi.
-/// Käyttäjä voi valita budjetin, tapahtuman tyypin, summan, kategorian, päivämäärän ja lisätä valinnaisen kuvauksen.
+/// Nyt tukee sekä henkilökohtaista että yhteistalousbudjettia:
+/// - Lisätty valinnainen isSharedBudget-parametri widget:iin.
+/// - Välittää isSharedBudget BudgetSelectionService:lle ja EventSavingService:lle.
+/// - Kaikki muu toiminnallisuus (alustus, date picker, validointi, UI-osat)
+///   säilytetty ennallaan – vain lisätty tuki yhteistalousbudjetille.
 class AddEventDialog extends StatefulWidget {
   final String? initialCategory;
   final String? initialBudgetId;
+  final bool isSharedBudget; // Lisätty: Määrittää, onko yhteistalousbudjetti
 
   const AddEventDialog({
     super.key,
     this.initialCategory,
     this.initialBudgetId,
+    this.isSharedBudget = false, // Oletus: Henkilökohtainen
   });
 
   @override
@@ -59,6 +65,7 @@ class _AddEventDialogState extends State<AddEventDialog> {
           Navigator.pop(context);
         }
       },
+      isSharedBudget: widget.isSharedBudget, // Välitetään budjettityyppi
     );
 
     if (_stateManager.selectedBudgetId != null) {
@@ -71,6 +78,7 @@ class _AddEventDialogState extends State<AddEventDialog> {
             Navigator.pop(context);
           }
         },
+        isSharedBudget: widget.isSharedBudget, // Välitetään budjettityyppi
       );
     }
 
@@ -119,7 +127,16 @@ class _AddEventDialogState extends State<AddEventDialog> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const SizedBox(height: 8),
+              // Lisätty: Teksti budjettityypistä ennen dropdownia
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8.0),
+                child: Text(
+                  widget.isSharedBudget ? 'Lisää tapahtuma yhteistalousbudjettiin' : 'Lisää tapahtuma henkilökohtaiseen budjettiin',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                ),
+              ),
               BudgetSelector(
                 selectedBudgetId: _stateManager.selectedBudgetId,
                 availableBudgets: _stateManager.availableBudgets,
@@ -137,6 +154,7 @@ class _AddEventDialogState extends State<AddEventDialog> {
                           Navigator.pop(context);
                         }
                       },
+                      isSharedBudget: widget.isSharedBudget, // Välitetään budjettityyppi
                     );
                   }
                 },
@@ -226,6 +244,7 @@ class _AddEventDialogState extends State<AddEventDialog> {
                       onFailure: () {
                         Navigator.pop(context);
                       },
+                      isSharedBudget: widget.isSharedBudget, // Välitetään budjettityyppi
                     ),
             child: Text(
               _stateManager.isExpense ? 'Tallenna meno' : 'Tallenna tulo',
