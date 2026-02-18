@@ -7,10 +7,8 @@ import 'package:provider/provider.dart';
 
 /// Invisible widget that monitors pending shared-budget invitations
 /// and shows a transient in-app notification when there are any.
-/// 
-/// Uses nested Consumers (stateless) to safely react to changes
-/// without storing provider references or manual listeners.
-/// This avoids "provider used after disposed" crashes.
+/// Uses nested Consumers (stateless) to safely react to changes in both NotificationProvider and 
+/// SharedBudgetProvider without risking stale data or memory leaks.
 class InviteNotificationHandler extends StatelessWidget {
   const InviteNotificationHandler({super.key});
 

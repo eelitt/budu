@@ -46,7 +46,7 @@ class _SummaryScreenState extends State<SummaryScreen> {
   /// Lataa valinnat, budjettilistat ja alkumenot.
   Future<void> _loadPreferencesAndBudgets() async {
     final prefs = await SharedPreferences.getInstance();
-    final savedIsShared = prefs.getBool('isSharedBudget_summary') ?? false;
+    final savedIsShared = prefs.getBool('isSharedBudget') ?? false;
 
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     final budgetProvider = Provider.of<BudgetProvider>(context, listen: false);
@@ -89,7 +89,7 @@ class _SummaryScreenState extends State<SummaryScreen> {
 
   Future<void> _savePreference(bool value) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('isSharedBudget_summary', value);
+    await prefs.setBool('isSharedBudget', value);
   }
 
   /// Toggle-vaihto: tallenna valinta ja lataa oikeat menot.
@@ -109,7 +109,7 @@ class _SummaryScreenState extends State<SummaryScreen> {
     if (budgetId != null && mounted) {
       final auth = Provider.of<AuthProvider>(context, listen: false);
       final expense = Provider.of<ExpenseProvider>(context, listen: false);
-      await expense.loadExpenses(auth.user!.uid, budgetId);
+      await expense.loadExpenses(auth.user!.uid, budgetId, isSharedBudget: _isSharedBudget);
     }
   }
 
@@ -125,7 +125,7 @@ class _SummaryScreenState extends State<SummaryScreen> {
       setState(() => _selectedSharedBudget = selected);
     } else {
       // Lataa henkilökohtainen budjetti provideriin (tarvitaan suunnitellut summat)
-      await budgetProvider.loadBudget(auth.user!.uid, selected.id!);
+      await budgetProvider.loadBudget(auth.user!.uid, selected.id!,);
     }
 
     // Lataa menot/tapahtumat – toimii molemmille budjettityypeille

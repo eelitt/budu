@@ -23,7 +23,6 @@ import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 /// - Income, expenses, period type and dates are pre-filled and advanced to the next logical period.
 /// - Group members (users array) are carried over automatically (handled by navigation passing user1Id/user2Id).
 /// - Invite button is hidden when the group already has 2 members (widget.user2Id != null).
-/// - All changes are modular, work with existing code/structure, and keep Firestore usage efficient.
 class SharedCreateBudgetScreen extends StatefulWidget {
   final String sharedBudgetId;
   final String user1Id;

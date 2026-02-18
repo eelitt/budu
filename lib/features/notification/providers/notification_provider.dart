@@ -6,13 +6,11 @@ import 'dart:async'; // Lisätty: StreamSubscription varten
 
 
 /// NotificationProvider: Hallinnoi in-app-notifikaatioita.
-/// Päivitetty: Käytä NotificationRepository:a data access:iin (modulaarinen), stream repositorysta.
-/// Lataa init:ssa, kuuntele muutoksia reaaliaikaisesti. Virheenkäsittely loggauksella.
 class NotificationProvider with ChangeNotifier {
   NotificationMessage? _currentNotification;
   List<NotificationMessage> _notifications = []; // Lista kaikista notifikaatioista (UI:lle)
-  StreamSubscription<List<NotificationMessage>>? _notificationsSubscription; // Muutettu: StreamSubscription tyyppi repositoryn streamiin
-  final NotificationRepository _repository = NotificationRepository(); // Lisätty: Repository-instanssi
+  StreamSubscription<List<NotificationMessage>>? _notificationsSubscription; 
+  final NotificationRepository _repository = NotificationRepository();
 
   NotificationMessage? get currentNotification => _currentNotification;
   // Transient (paikalliset) notifikaatiot – ei tallenneta Firestoreen

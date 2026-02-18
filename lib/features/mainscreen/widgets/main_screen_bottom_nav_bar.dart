@@ -23,7 +23,7 @@ class MainScreenBottomNavigationBar extends StatelessWidget {
         ),
         BottomNavigationBarItem(
           icon: Icon(Icons.bar_chart),
-          label: 'Yhteenveto',
+          label: 'Seuranta',
         ),
         BottomNavigationBarItem(
           icon: Icon(Icons.history),

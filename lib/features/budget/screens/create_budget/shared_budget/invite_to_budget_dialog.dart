@@ -121,7 +121,7 @@ class _InviteToExistingBudgetDialogState extends State<InviteToExistingBudgetDia
         invitationId: invitationId,
         batch: batch,
       );
-      await batch.commit(); // Committaa batch (atominen)
+      await batch.commit();
 
       await FirebaseCrashlytics.instance.log('InviteToExistingBudgetDialog: Kutsu ja notifikaatio lähetetty, sharedBudgetId: ${widget.sharedBudgetId}, inviteeEmail: $inviteeEmail');
       if (mounted) {

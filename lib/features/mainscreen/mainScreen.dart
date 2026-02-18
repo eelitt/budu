@@ -67,7 +67,7 @@ class _MainScreenState extends State<MainScreen> {
         final userEmail = authProvider.user!.email!;
         
         // Optional: Log for debug
-        print('SharedBudgetProvider: Haetaan odottavat kutsut email:lle $userEmail');
+       // print('SharedBudgetProvider: Haetaan odottavat kutsut email:lle $userEmail');
         await sharedProvider.fetchSharedBudgets(authProvider.user!.uid);
         await sharedProvider.fetchPendingInvitations(userEmail);
       });
@@ -197,7 +197,6 @@ class _MainScreenState extends State<MainScreen> {
           const NotificationBanner(), // Näyttää ilmoitusbannerin (esim. budjetin luomisen kehotukset)
           const InviteNotificationHandler(),
           Expanded(
-            // Poistetaan Consumer<BudgetProvider> ja renderöidään Navigator suoraan
             child: _hasBudgetLoadError
                 ? Center(
                     child: Column(

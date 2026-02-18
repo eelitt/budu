@@ -1,14 +1,13 @@
 import 'package:budu/features/budget/data/shared_budget_repository.dart';
-import 'package:budu/features/budget/models/budget_model.dart'; // Päivitetty: Käytetään yhdistettyä BudgetModel:ia SharedBudget:in sijaan
+import 'package:budu/features/budget/models/budget_model.dart';
 import 'package:budu/features/budget/models/invitation_model.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-import 'dart:async'; // Lisätty StreamSubscription:ia varten
+import 'dart:async';
 
 /// Provider yhteistalousbudjettien ja kutsujen hallintaan.
 /// Välittää dataa repositorysta UI:lle, hallinnoi tilaa ja käyttää streameja reaaliaikaiseen dataan.
 /// Peruuttaa subskriptiot muistivuotojen estämiseksi.
-/// Päivitetty: Käytetään BudgetModel:ia sharedBudgets-listalle (sisältää shared-kentät).
 class SharedBudgetProvider with ChangeNotifier {
   final SharedBudgetRepository _repository = SharedBudgetRepository();
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
