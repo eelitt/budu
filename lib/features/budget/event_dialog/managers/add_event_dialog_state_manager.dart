@@ -142,18 +142,18 @@ class AddEventDialogStateManager with ChangeNotifier {
   void _selectFirstValidCategory() {
     if (currentBudget != null && isExpense) {
       final allCategories = currentBudget!.expenses.keys.toList();
-      print('Selecting first valid category from: $allCategories'); // Debug-tuloste
+     // print('Selecting first valid category from: $allCategories');
       for (var category in allCategories) {
         final subCategories = currentBudget!.expenses[category]?.keys.toList() ?? [];
         if (subCategories.isNotEmpty) {
-          print('Selected category: $category with subcategories: $subCategories'); // Debug-tuloste
+         // print('Selected category: $category with subcategories: $subCategories');
           selectedCategory = category;
           selectedSubcategory = subCategories.first;
           hasSubcategoriesForSelectedCategory = true;
           break;
         }
       }
-      print('After selection - selectedCategory: $selectedCategory, hasSubcategories: $hasSubcategoriesForSelectedCategory'); // Debug-tuloste
+      //print('After selection - selectedCategory: $selectedCategory, hasSubcategories: $hasSubcategoriesForSelectedCategory');
       notifyListeners();
     }
   }
