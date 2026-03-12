@@ -7,6 +7,7 @@ A cross-platform budgeting app built with Flutter and Firebase.
 
   **Functionality**
 - **User accounts & auth**: Sign up and sign in with Firebase Authentication (Google Sign-In is supported).
+- **Create personal or shared budgets**: Create and track a personal or shared budgets.
 - **Real-time sync**: User data and transactions synchronize across devices using Cloud Firestore.
 - **Transactions management**: Create, edit and delete income and expense entries with category, amount, date and optional notes.
 - **Budgets & alerts**: Set budget limits per category and receive visual indicators when spending approaches or exceeds limits.
