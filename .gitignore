@@ -14,6 +14,7 @@ firebase.json
 .svn/
 .swiftpm/
 migrate_working_dir/
+AGENTS.md
 
 # IntelliJ related
 *.iml
@@ -49,3 +50,6 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+android/app/google-services.json
+ios/Runner/GoogleService-Info.plist
