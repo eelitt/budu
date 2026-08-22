@@ -49,7 +49,18 @@ void main() {
 
   test('description 50 ok, 51 not', () {
     expect(validate(description: 'a' * 50), isNull);
-    expect(validate(description: 'a' * 51), isNotNull);
+    expect(
+      validate(description: 'a' * 51),
+      'Kuvaus voi olla enintään 50 merkkiä',
+    );
+    expect(
+      eventValidationField('Kuvaus voi olla enintään 50 merkkiä'),
+      EventValidationField.description,
+    );
+    expect(
+      eventValidationField('Kuvaus voi olla enintään 75 merkkiä'),
+      isNull,
+    );
   });
 
   test('not logged in', () {

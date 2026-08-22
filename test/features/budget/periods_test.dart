@@ -68,6 +68,53 @@ void main() {
     });
   });
 
+  group('hasOverlappingBudgetPeriod', () {
+    final jan = (
+      id: 'jan',
+      start: DateTime(2025, 1, 1),
+      end: DateTime(2025, 1, 31),
+    );
+    final feb = (
+      id: 'feb',
+      start: DateTime(2025, 2, 1),
+      end: DateTime(2025, 2, 28),
+    );
+
+    test('detects overlap on real period data', () {
+      expect(
+        hasOverlappingBudgetPeriod(
+          start: DateTime(2025, 1, 15),
+          end: DateTime(2025, 2, 10),
+          existing: [jan, feb],
+        ),
+        isTrue,
+      );
+    });
+
+    test('editing same id is not an overlap with itself', () {
+      expect(
+        hasOverlappingBudgetPeriod(
+          start: DateTime(2025, 1, 1),
+          end: DateTime(2025, 1, 31),
+          existing: [jan],
+          excludeId: 'jan',
+        ),
+        isFalse,
+      );
+    });
+
+    test('adjacent month is not overlap', () {
+      expect(
+        hasOverlappingBudgetPeriod(
+          start: DateTime(2025, 3, 1),
+          end: DateTime(2025, 3, 31),
+          existing: [jan, feb],
+        ),
+        isFalse,
+      );
+    });
+  });
+
   group('nextPeriodAfter', () {
     test('monthly ends at month-end of the new start', () {
       final period = nextPeriodAfter(

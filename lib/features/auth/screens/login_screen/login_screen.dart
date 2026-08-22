@@ -2,9 +2,8 @@ import 'package:budu/core/utils.dart';
 import 'package:budu/features/auth/screens/login_screen/login_button.dart';
 import 'package:budu/features/budget/providers/budget_provider.dart';
 import 'package:budu/features/budget/providers/expense_provider.dart';
-import 'package:budu/features/budget/providers/migrateBudgets.dart';
+import 'package:budu/features/budget/providers/shared_budget_provider.dart';
 import 'package:budu/features/update/update_manager.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:budu/core/app_router/app_router.dart';
@@ -105,61 +104,27 @@ class _LoginScreenState extends State<LoginScreen> {
     print('_navigateAfterLogin: Aloitetaan, UID: $userId');
 
     try {
-      // Tarkista ja suorita budjettien migraatio
-      final migrationCheck = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(userId)
-          .get();
-      if (migrationCheck.data()?['migration_completed'] != true) {
-        print('LoginScreen: Suoritetaan budjettien migraatio käyttäjälle $userId');
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Migroidaan budjetteja...'), duration: Duration(seconds: 2)),
-          );
-        }
-        try {
-          await migrateBudgets(userId);
-          await FirebaseFirestore.instance
-              .collection('users')
-              .doc(userId)
-              .set({'migration_completed': true}, SetOptions(merge: true));
-          await FirebaseCrashlytics.instance.log('Budjettien migraatio suoritettu käyttäjälle $userId');
-          if (context.mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Budjettien migraatio onnistui!'), duration: Duration(seconds: 2)),
-            );
-          }
-        } catch (e) {
-          // Raportoi migraatiovirhe, mutta jatka budjettien lataamista
-          await FirebaseCrashlytics.instance.recordError(
-            e,
-            StackTrace.current,
-            reason: 'Budjettien migraatio epäonnistui käyttäjälle $userId',
-          );
-          print('LoginScreen: Migraatio epäonnistui: $e');
-          if (context.mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Budjettien migraatio epäonnistui: $e'), duration: Duration(seconds: 2)),
-            );
-          }
-        }
-      } else {
-        print('LoginScreen: Migraatio jo suoritettu käyttäjälle $userId');
-      }
-
       final budgetProvider = Provider.of<BudgetProvider>(context, listen: false);
       final expenseProvider = Provider.of<ExpenseProvider>(context, listen: false);
+      final sharedProvider = Provider.of<SharedBudgetProvider>(context, listen: false);
 
-      // Haetaan saatavilla olevat budjetit
       final budgets = await budgetProvider.getAvailableBudgets(userId);
-      print('LoginScreen: Saatavilla olevat budjetit: ${budgets.length}');
+      await sharedProvider.fetchSharedBudgets(userId);
+      print('LoginScreen: Saatavilla olevat budjetit: ${budgets.length}, yhteistalous: ${sharedProvider.sharedBudgets.length}');
 
       if (context.mounted) {
-        if (budgets.isEmpty) {
+        if (budgets.isEmpty && sharedProvider.sharedBudgets.isEmpty) {
           print('LoginScreen: Ei budjetteja, ohjataan chatbot-sivulle');
           Navigator.pushNamedAndRemoveUntil(
             context,
             AppRouter.chatbotRoute,
+            (route) => false,
+          );
+        } else if (budgets.isEmpty) {
+          print('LoginScreen: Vain yhteistalousbudjetteja, ohjataan pääsivulle');
+          Navigator.pushNamedAndRemoveUntil(
+            context,
+            AppRouter.mainRoute,
             (route) => false,
           );
         } else {

@@ -1,4 +1,5 @@
 import 'package:budu/core/utils.dart';
+import 'package:budu/features/budget/domain/tracking.dart';
 import 'package:budu/features/budget/event_dialog/add_event_dialog.dart';
 import 'package:budu/features/budget/models/expense_event.dart';
 import 'package:budu/features/budget/providers/expense_provider.dart';
@@ -48,10 +49,9 @@ class _CategoryExpansionTileState extends State<CategoryExpansionTile> {
 
   @override
   Widget build(BuildContext context) {
-    final progress = widget.categoryBudget > 0 ? widget.categorySpent / widget.categoryBudget : 0.0;
-    final remainingPercentage = widget.categoryBudget > 0
-        ? ((widget.categoryBudget - widget.categorySpent) / widget.categoryBudget * 100).clamp(0, 100)
-        : 100.0;
+    final progress = trackingProgress(widget.categorySpent, widget.categoryBudget);
+    final remainingPercentage =
+        remainingPercentClamped(widget.categorySpent, widget.categoryBudget);
     final isOverBudget = progress > 1;
 
     // Lasketaan alakategorioiden lukumäärä

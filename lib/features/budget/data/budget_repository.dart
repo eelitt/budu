@@ -1,3 +1,4 @@
+import 'package:budu/features/budget/data/event_repository.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import '../models/budget_model.dart';
@@ -9,9 +10,13 @@ import 'package:uuid/uuid.dart';
 /// Optimointi: Lisätty stream reaaliaikaan, batch-valmius massatoimintoihin.
 class BudgetRepository {
   BudgetRepository({FirebaseFirestore? firestore})
-      : _firestore = firestore ?? FirebaseFirestore.instance;
+      : _firestore = firestore ?? FirebaseFirestore.instance,
+        _events = EventRepository(
+          firestore: firestore ?? FirebaseFirestore.instance,
+        );
 
   final FirebaseFirestore _firestore;
+  final EventRepository _events;
 
   CollectionReference<Map<String, dynamic>> get _budgetsCollection =>
       _firestore.collection('budgets');
@@ -170,5 +175,45 @@ class BudgetRepository {
       );
       throw Exception('Saatavilla olevien budjettien stream epäonnistui: $e');
     });
+  }
+
+  Future<void> updateIncome({
+    required String userId,
+    required String budgetId,
+    required double income,
+  }) async {
+    try {
+      await _budgetsCollection
+          .doc(userId)
+          .collection('budgets')
+          .doc(budgetId)
+          .update({'income': income});
+    } catch (e) {
+      await FirebaseCrashlytics.instance.recordError(
+        e,
+        StackTrace.current,
+        reason: 'Failed to update income for $budgetId',
+      );
+      throw Exception('Tulojen päivitys epäonnistui: $e');
+    }
+  }
+
+  /// Deletes the plan and all events (including legacy expenses) in batches.
+  Future<void> deleteBudget(String userId, String budgetId) async {
+    try {
+      await _events.deleteEventsForBudget(userId: userId, budgetId: budgetId);
+      await _budgetsCollection
+          .doc(userId)
+          .collection('budgets')
+          .doc(budgetId)
+          .delete();
+    } catch (e) {
+      await FirebaseCrashlytics.instance.recordError(
+        e,
+        StackTrace.current,
+        reason: 'Failed to delete budget $budgetId for user $userId',
+      );
+      throw Exception('Budjetin poisto epäonnistui: $e');
+    }
   }
 }

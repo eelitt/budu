@@ -7,7 +7,13 @@ import 'package:budu/features/notification/models/notification_message.dart'; //
 /// Optimoitu: Query limitit, batch-write massatoimintoihin, reaaliaikainen stream unread-notifikaatioille.
 /// Virheenkäsittely: Loggaa Crashlytics:iin, heitä error kutsujalle.
 class NotificationRepository {
-  final CollectionReference _usersCollection = FirebaseFirestore.instance.collection('users');
+  NotificationRepository({FirebaseFirestore? firestore})
+      : _firestore = firestore ?? FirebaseFirestore.instance;
+
+  final FirebaseFirestore _firestore;
+
+  CollectionReference<Map<String, dynamic>> get _usersCollection =>
+      _firestore.collection('users');
 
   /// Luo notifikaation annetulle käyttäjälle (tukee optional batch:a atomisiin operaatioihin).
   /// Jos batch annettu, ei committaa tässä (kutsu commit kutsujassa).

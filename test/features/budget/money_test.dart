@@ -33,7 +33,7 @@ void main() {
   test('isSharedBudget', () {
     expect(isSharedBudget(null), isFalse);
     expect(isSharedBudget([]), isFalse);
-    expect(isSharedBudget(['a']), isFalse);
+    expect(isSharedBudget(['a']), isTrue);
     expect(isSharedBudget(['a', 'b']), isTrue);
   });
 
@@ -67,7 +67,7 @@ void main() {
     );
     expect(budget.totalExpenses, 40);
     expect(budget.remaining, 60);
-    expect(budget.isShared, isFalse);
+    expect(budget.isShared, isTrue);
 
     final copy = budget.copy();
     copy.expenses['Ruoka']!['A'] = 99;

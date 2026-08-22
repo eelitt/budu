@@ -24,7 +24,7 @@ class DescriptionInputField extends StatelessWidget {
         errorText: errorText,
       ),
       maxLines: 2,
-      maxLength: 75, // Enintään 75 merkkiä
+      maxLength: 50,
       onChanged: onChanged,
     );
   }

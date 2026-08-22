@@ -52,7 +52,7 @@ double trackingProgress(double actual, double planned) =>
 bool isOverBudget(double actual, double planned) =>
     trackingProgress(actual, planned) > 1;
 
-/// Category tiles use 100 when planned is 0; subcategory tiles use 0.
+/// Empty plan (planned 0) shows 100% remaining.
 double remainingPercentClamped(
   double actual,
   double planned, {

@@ -29,7 +29,7 @@ The one exception: an **income event** also changes the plan — it adds to `Bud
 4. Log events (amount, date, category/subcategory, optional note) against a selected budget.
 5. Summary/history: sum actual expenses per category and show progress vs planned caps.
 
-Personal plans live under `budgets/{uid}/…`. Household plans live under `shared_budgets/{id}` with an `users` list. Events sit in an `events` subcollection and point at a `budgetId`.
+Personal plans live under `budgets/{uid}/…`. Household plans live under `shared_budgets/{id}` with an `users` list. Events sit in an `events` subcollection and point at a `budgetId`. Budget/event/shared **providers** persist through repositories (`BudgetRepository`, `EventRepository`, `SharedBudgetRepository`), not `FirebaseFirestore.instance`.
 
 **What are the business rules?**
 Invariants the rest of this file spells out:
@@ -40,8 +40,8 @@ Invariants the rest of this file spells out:
 - Overlap, empty plan, and planned expenses > income are warnings, not hard blocks.
 - Expense amount `≥ 0` and `≤ 99999`; category required; subcategory required if that category has subs; description `≤ 50` chars. Planned income, if set, `≥ 0` and `≤ 999999`.
 - Max 25 main categories, 20 subs each, names `≤ 20` chars, no duplicates.
-- Shared: invite `pending` → `accepted` (user added to `users`) or `declined`. `isShared` only when `users.length > 1`.
-- Reminders (personal only): no budget this calendar month → warn; no next-month budget → warn only in the last 3 days of the month.
+- Shared: invite `pending` → `accepted` (user added to `users`) or `declined`. `isShared` when `users` is non-empty.
+- Reminders use personal **and** shared `startDate`s: no budget this calendar month → warn; no next-month budget → warn only in the last 3 days of the month. Chatbot save is personal only; login skips chatbot if the user already has a shared budget.
 - Chatbot: 2-week answers stored as monthly/2; yearly answers stored as /12. Chatbot saves personal budgets only.
 
 Details, formulas, category tree, Firestore paths, and as-implemented caveats follow.
@@ -66,7 +66,7 @@ Derived:
 
 - `totalExpenses` = sum of every planned subcategory amount.
 - `remaining` = `income - totalExpenses`. This is **planned leftover**, not cash after actual spending.
-- `isShared` = `users != null && users.length > 1`. A newly created household budget with only the creator is **not** `isShared` until a second user is added.
+- `isShared` = `users != null && users.isNotEmpty` (a household plan with only the creator is already shared).
 
 Legacy documents that store `year` + `month` instead of dates are parsed as a calendar month with `type = monthly`.
 
@@ -92,7 +92,7 @@ Links an invitee email to a `sharedBudgetId`.
 
 ### User
 
-On first Google sign-in, if `users/{uid}` is missing, the app writes `email`, `isPremium: false`, `isAdmin: false`, `createdAt`. Sign-in is Google only.
+On first Google sign-in, `UserProfileRepository.ensureUserDocument` creates `users/{uid}` if missing (`email`, `isPremium: false`, `isAdmin: false`, `createdAt`). Sign-in is Google only (`AuthRepository`). Profile reads go through the same repository (`UserProvider`).
 
 ---
 
@@ -131,11 +131,11 @@ Creating from scratch seeds empty main categories from `categoryMapping` (no sub
 
 The user can continue after confirming:
 
-- The new range overlaps an existing personal or shared budget for that user (`startDate ≤ newEnd` and `endDate ≥ newStart`).
+- The new range overlaps an existing personal (`budgets/{uid}/budgets`) or shared (`shared_budgets`) budget (`startDate ≤ newEnd` and `endDate ≥ newStart`). Editing skips the budget being saved. A failed overlap load does not count as “no overlap”.
 - Income is `0` and there are no planned expenses.
 - Planned expenses exceed planned income.
 
-Income on save: empty is allowed; if present it must parse as a number, be `≥ 0`, and be `≤ 999999`. Values above `999999` are rejected before the later “continue anyway” dialog (that dialog is unreachable).
+Income on save: empty is allowed; if present it must parse as a number, be `≥ 0`, and be `≤ 999999`. Values above `999999` are a hard reject (`validateIncomeText`), not a continue-dialog.
 
 ---
 
@@ -197,7 +197,7 @@ Limits:
 ## Shared household
 
 - Plan document: `shared_budgets/{id}` with `users: [creator, …]`, `createdBy`, `name`.
-- Invite: `invitations/{id}` with `status: pending`. The new-budget invite dialog stores the email lowercased; invite-to-existing trims but may not lowercase.
+- Invite: `invitations/{id}` with `status: pending`. Invitee email is stored trimmed and lowercased (`Invitation.toMap` / create invitation).
 - Accept: one Firestore transaction — set invitation `accepted` and `arrayUnion` the user’s uid onto `users`.
 - Decline: set `status: declined`.
 - Events: `shared_budgets/{id}/events`, with `userId` of the author.
@@ -207,7 +207,7 @@ Limits:
 
 ## “Need a budget” reminders
 
-Personal budgets only, keyed off `startDate` year/month:
+Personal **and** shared `startDate` year/month:
 
 1. If no budget starts in the **current** calendar month → warn and offer create.
 2. Else if no budget starts in the **next** month → warn only when **≤ 3 days** remain in the current month.
@@ -236,17 +236,18 @@ budgets/{uid}/monthly_budgets/{year}_{month}
   └── expenses/
 ```
 
-- Available personal budgets: `isPlaceholder == false`, ordered by `startDate` descending. Streams often `limit(50)`.
+- Available personal budgets: `isPlaceholder == false`, ordered by `startDate` descending. Budget list streams often `limit(50)`.
+- Events for the **selected** budget are loaded in full (no 50-event cap) so tracking totals are complete. History’s `loadAllExpenses` still caps per collection at 50 (overhaul B1 remainder / U2).
+- Budget, event, and invitation **writes** store dates as ISO-8601 strings (`DateTime.toIso8601String()`). Reads still accept Firestore `Timestamp` (legacy shared updates / old invites). User/notification `createdAt` uses `FieldValue.serverTimestamp()` and is separate.
+- Deleting a personal or shared budget also deletes its `events` (and personal legacy expenses).
 - Personal in-memory edits debounce-save after **1 second**.
-- `migrateBudgets` copies old monthly docs and their expense subcollections into the new paths and skips ids that already exist. Old data is left in place.
 
 ---
 
 ## Caveats (as implemented)
 
 - `Budget.remaining` is planned leftover, not actual remaining cash.
-- A household budget with one member is not `isShared`.
-- The “continue with income &gt; 999999” dialog cannot run; `_validateIncome` already rejects that value.
-- Event-save UI looks for a 75-character description error; the validator caps at 50.
+
+
+- Description field `maxLength` is still 75 (UI U1); the validator and save-error routing use 50 characters.
 - Category actuals can roll a default-mapped subcategory up to its **mapped parent**, even if `event.category` is a different main category.
-- Invite-to-existing may store mixed-case emails while pending-invite queries use lowercase.

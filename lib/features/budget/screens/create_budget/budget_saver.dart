@@ -1,5 +1,6 @@
 import 'package:budu/core/utils.dart';
 import 'package:budu/features/budget/domain/money.dart';
+import 'package:budu/features/budget/domain/periods.dart';
 import 'package:budu/features/budget/domain/save_decisions.dart';
 import 'package:budu/features/auth/providers/auth_provider.dart';
 import 'package:budu/features/budget/models/budget_model.dart';
@@ -77,41 +78,74 @@ class BudgetSaver {
   }
 
   /// Validoi budjetin tulot (yksityinen, laajennettavissa expense-validoinnille).
+  Future<bool> _confirmWarning(SaveDecision decision) async {
+    final content = switch (decision) {
+      SaveDecision.warnOverlap =>
+        'Valittu aikaväli on päällekkäinen olemassa olevan budjetin kanssa. Haluatko jatkaa?',
+      SaveDecision.warnEmpty =>
+        'Budjetissa ei ole tuloja eikä menoja. Haluatko tallentaa tyhjän budjetin?',
+      SaveDecision.warnExpensesExceedIncome =>
+        'Menot ovat suuremmat kuin tulot. Haluatko jatkaa?',
+      _ => '',
+    };
+    final confirm = await _showDialog(
+      title: 'Varoitus',
+      content: content,
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, false),
+          child: Text('Peruuta', style: Theme.of(context).textTheme.bodyLarge),
+        ),
+        ElevatedButton(
+          onPressed: () => Navigator.pop(context, true),
+          style: Theme.of(context).elevatedButtonTheme.style,
+          child: Text('Jatka'),
+        ),
+      ],
+    );
+    return confirm == true;
+  }
+
+  String _cancelReason(SaveDecision decision) {
+    return switch (decision) {
+      SaveDecision.warnOverlap => 'Päällekkäinen aikaväli',
+      SaveDecision.warnEmpty => 'Tyhjä budjetti',
+      SaveDecision.warnExpensesExceedIncome => 'Menot ylittävät tulot',
+      _ => 'Peruutettu',
+    };
+  }
+
   String? _validateIncome(String? value) => validateIncomeText(value);
 
-  /// Tarkistaa päällekkäiset budjetit optimoitulla Firestore-queryllä.
-  /// Hakee vain potentiaalisesti päällekkäiset budjetit, vähentäen lukuja/kuluja.
-  Future<bool> _checkOverlappingBudgets(String userId) async {
+  /// Personal: `budgets/{uid}/budgets`. Shared: `shared_budgets`.
+  /// Uses parsed dates. Load failures are rethrown (not treated as no overlap).
+  Future<bool> _checkOverlappingBudgets(
+    String userId, {
+    String? excludeId,
+  }) async {
+    final budgetProvider = Provider.of<BudgetProvider>(context, listen: false);
+    final sharedBudgetProvider =
+        Provider.of<SharedBudgetProvider>(context, listen: false);
     try {
-      final firestore = FirebaseFirestore.instance;
-
-      // Query päällekkäisille henkilökohtaisille budjeteille
-      final personalQuery = firestore
-          .collection('users')
-          .doc(userId)
-          .collection('budgets')
-          .where('startDate', isLessThanOrEqualTo: endDate)
-          .where('endDate', isGreaterThanOrEqualTo: startDate);
-
-      final personalSnapshot = await personalQuery.get();
-      if (personalSnapshot.docs.isNotEmpty) return true;
-
-      // Query päällekkäisille yhteistalousbudejeteille (olettaen shared_budgets-rakenne)
-      final sharedQuery = firestore
-          .collection('shared_budgets')
-          .where('users', arrayContains: userId) // Olettaen 'users'-array käyttäjille
-          .where('startDate', isLessThanOrEqualTo: endDate)
-          .where('endDate', isGreaterThanOrEqualTo: startDate);
-
-      final sharedSnapshot = await sharedQuery.get();
-      return sharedSnapshot.docs.isNotEmpty;
+      final personal = await budgetProvider.getAvailableBudgets(userId);
+      await sharedBudgetProvider.fetchSharedBudgets(userId);
+      final existing = [
+        ...personal,
+        ...sharedBudgetProvider.sharedBudgets,
+      ].map((b) => (id: b.id, start: b.startDate, end: b.endDate));
+      return hasOverlappingBudgetPeriod(
+        start: startDate,
+        end: endDate,
+        existing: existing,
+        excludeId: excludeId,
+      );
     } catch (e, stackTrace) {
       await FirebaseCrashlytics.instance.recordError(
         e,
         stackTrace,
         reason: 'Failed to check overlapping budgets for user $userId',
       );
-      return false; // Palauta false virheessä, jotta tallennus voi jatkua
+      rethrow;
     }
   }
 
@@ -150,29 +184,6 @@ class BudgetSaver {
       throw Exception(incomeError);
     }
 
-    if (await _checkOverlappingBudgets(authProvider.user!.uid)) {
-      final confirm = await _showDialog(
-        title: 'Varoitus',
-        content: 'Valittu aikaväli on päällekkäinen olemassa olevan budjetin kanssa. Haluatko jatkaa?',
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: Text('Peruuta', style: Theme.of(context).textTheme.bodyLarge),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: Theme.of(context).elevatedButtonTheme.style,
-            child: Text('Jatka'),
-          ),
-        ],
-      );
-      if (confirm != true) {
-        errorMessage = 'Budjetin tallennus peruutettu: Päällekkäinen aikaväli';
-        throw Exception('Päällekkäinen aikaväli');
-      }
-    }
-
-    // Käytä annettuja totalIncome/Expenses, mutta parsaa expenses controller:eista (säilytä olemassa oleva logiikka)
     final double income = totalIncome;
     final rawExpenses = <String, Map<String, double>>{};
     for (var category in expenseControllers.keys) {
@@ -185,79 +196,47 @@ class BudgetSaver {
     final Map<String, Map<String, double>> expenses =
         sanitizePlannedExpenses(rawExpenses);
 
-    if (income == 0.0 && expenses.isEmpty) {
-      final confirm = await _showDialog(
-        title: 'Varoitus',
-        content: 'Budjetissa ei ole tuloja eikä menoja. Haluatko tallentaa tyhjän budjetin?',
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: Text('Peruuta', style: Theme.of(context).textTheme.bodyLarge),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: Theme.of(context).elevatedButtonTheme.style,
-            child: Text('Jatka'),
-          ),
-        ],
+    var overlaps = await _checkOverlappingBudgets(
+      authProvider.user!.uid,
+      excludeId: isEditing ? budgetId : null,
+    );
+    var ignoreEmpty = false;
+    var ignoreOverspend = false;
+
+    while (true) {
+      final decision = decideBudgetSave(
+        incomeError: null,
+        overlaps: overlaps,
+        income: income,
+        hasExpenses: expenses.isNotEmpty,
+        totalExpenses: totalExpenses,
+        ignoreEmpty: ignoreEmpty,
+        ignoreOverspend: ignoreOverspend,
       );
-      if (confirm != true) {
-        errorMessage = 'Budjetin tallennus peruutettu: Tyhjä budjetti';
-        throw Exception('Tyhjä budjetti');
+      if (decision == SaveDecision.ok) break;
+      final confirmed = await _confirmWarning(decision);
+      if (!confirmed) {
+        errorMessage = 'Budjetin tallennus peruutettu';
+        throw Exception(_cancelReason(decision));
+      }
+      switch (decision) {
+        case SaveDecision.warnOverlap:
+          overlaps = false;
+          break;
+        case SaveDecision.warnEmpty:
+          ignoreEmpty = true;
+          break;
+        case SaveDecision.warnExpensesExceedIncome:
+          ignoreOverspend = true;
+          break;
+        default:
+          break;
       }
     }
-
-    if (income > 999999) {
-      final confirm = await _showDialog(
-        title: 'Varoitus',
-        content: 'Tulot ylittävät sallitun maksimiarvon (999999 €). Haluatko jatkaa?',
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: Text('Peruuta', style: Theme.of(context).textTheme.bodyLarge),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: Theme.of(context).elevatedButtonTheme.style,
-            child: Text('Jatka'),
-          ),
-        ],
-      );
-      if (confirm != true) {
-        errorMessage = 'Budjetin tallennus peruutettu: Liian suuret tulot';
-        throw Exception('Liian suuret tulot');
-      }
-    }
-
-    if (totalExpenses > totalIncome) {
-      final confirm = await _showDialog(
-        title: 'Varoitus',
-        content: 'Menot ovat suuremmat kuin tulot. Haluatko jatkaa?',
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: Text('Peruuta', style: Theme.of(context).textTheme.bodyLarge),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: Theme.of(context).elevatedButtonTheme.style,
-            child: Text('Jatka'),
-          ),
-        ],
-      );
-      if (confirm != true) {
-        errorMessage = 'Budjetin tallennus peruutettu: Menot ylittävät tulot';
-        throw Exception('Menot ylittävät tulot');
-      }
-    }
-
-    // Ei enää tyhjien kategorioiden varoitusta – poistettu automaattisesti yllä
 
     final newBudgetId = budgetId ?? const Uuid().v4();
 
     try {
-      final localBatch = batch ?? FirebaseFirestore.instance.batch(); // Käytä annettua batchia tai luo uusi
-
       if (sharedBudgetId != null) {
         // Yhteistalousbudjetti: Käytä provideria, mutta lisää batch-tuki jos provider tukee
         if (isEditing) {
@@ -309,7 +288,6 @@ class BudgetSaver {
         backgroundColor: Colors.green,
       );
 
-      if (batch == null) await localBatch.commit(); // Commit vain jos ei annettua batchia
       return newBudgetId;
     } catch (e, stackTrace) {
       await FirebaseCrashlytics.instance.recordError(

@@ -13,10 +13,7 @@ class ChatbotResponseProcessor {
   String? housingType;
   String? carOwnership;
   bool rentsParkingSpace;
-  bool hasTireService;
-  bool useAverageCarMaintenance;
   bool hasPets;
-  bool hasOtherExpenses;
   bool hasCarLoan;
   bool hasOtherDebts;
   double debtAmount;
@@ -31,10 +28,7 @@ class ChatbotResponseProcessor {
     required this.housingType,
     required this.carOwnership,
     required this.rentsParkingSpace,
-    required this.hasTireService,
-    required this.useAverageCarMaintenance,
     required this.hasPets,
-    required this.hasOtherExpenses,
     required this.hasCarLoan,
     required this.hasOtherDebts,
     required this.debtAmount,

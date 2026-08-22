@@ -1,4 +1,5 @@
 import 'package:budu/core/utils.dart';
+import 'package:budu/features/budget/domain/tracking.dart';
 import 'package:flutter/material.dart';
 
 class SubCategoryTile extends StatelessWidget {
@@ -17,10 +18,9 @@ class SubCategoryTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final subProgress = subCategoryBudget > 0 ? spentAmount / subCategoryBudget : 0.0;
-    final subRemainingPercentage = subCategoryBudget > 0
-        ? ((subCategoryBudget - spentAmount) / subCategoryBudget * 100).clamp(0, 100)
-        : 0.0;
+    final subProgress = trackingProgress(spentAmount, subCategoryBudget);
+    final subRemainingPercentage =
+        remainingPercentClamped(spentAmount, subCategoryBudget);
     final isOverBudget = subProgress > 1;
 
     return Padding(

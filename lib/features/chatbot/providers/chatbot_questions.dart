@@ -3,10 +3,7 @@ class ChatbotQuestions {
   final String? housingType;
   final String? carOwnership;
   final bool rentsParkingSpace;
-  final bool hasTireService;
-  final bool useAverageCarMaintenance;
   final bool hasPets;
-  final bool hasOtherExpenses;
   final bool hasCarLoan;
   final bool hasOtherDebts;
   final Map<String, Map<String, double>> expenses;
@@ -16,10 +13,7 @@ class ChatbotQuestions {
     required this.housingType,
     required this.carOwnership,
     required this.rentsParkingSpace,
-    required this.hasTireService,
-    required this.useAverageCarMaintenance,
     required this.hasPets,
-    required this.hasOtherExpenses,
     required this.hasCarLoan,
     required this.hasOtherDebts,
     required this.expenses,

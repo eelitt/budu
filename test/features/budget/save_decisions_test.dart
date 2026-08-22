@@ -53,7 +53,8 @@ void main() {
       );
     });
 
-    test('income too large is unreachable after validate but still encoded', () {
+    test('income above 999999 is a validate reject, not a save warning', () {
+      expect(validateIncomeText('1000000'), isNotNull);
       expect(
         decideBudgetSave(
           incomeError: null,
@@ -62,7 +63,7 @@ void main() {
           hasExpenses: true,
           totalExpenses: 1,
         ),
-        SaveDecision.warnIncomeTooLarge,
+        SaveDecision.ok,
       );
     });
 
@@ -87,6 +88,20 @@ void main() {
           income: 10,
           hasExpenses: true,
           totalExpenses: 10,
+        ),
+        SaveDecision.ok,
+      );
+    });
+
+    test('ignore flags skip already-confirmed warnings', () {
+      expect(
+        decideBudgetSave(
+          incomeError: null,
+          overlaps: false,
+          income: 0,
+          hasExpenses: false,
+          totalExpenses: 0,
+          ignoreEmpty: true,
         ),
         SaveDecision.ok,
       );

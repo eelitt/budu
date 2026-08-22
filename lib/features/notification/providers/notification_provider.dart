@@ -7,10 +7,14 @@ import 'dart:async'; // Lisätty: StreamSubscription varten
 
 /// NotificationProvider: Hallinnoi in-app-notifikaatioita.
 class NotificationProvider with ChangeNotifier {
+  NotificationProvider({NotificationRepository? repository})
+      : _repository = repository ?? NotificationRepository();
+
   NotificationMessage? _currentNotification;
-  List<NotificationMessage> _notifications = []; // Lista kaikista notifikaatioista (UI:lle)
-  StreamSubscription<List<NotificationMessage>>? _notificationsSubscription; 
-  final NotificationRepository _repository = NotificationRepository();
+  List<NotificationMessage> _notifications = [];
+  StreamSubscription<List<NotificationMessage>>? _notificationsSubscription;
+  final NotificationRepository _repository;
+  String? _userId;
 
   NotificationMessage? get currentNotification => _currentNotification;
   // Transient (paikalliset) notifikaatiot – ei tallenneta Firestoreen
@@ -65,6 +69,7 @@ class NotificationProvider with ChangeNotifier {
   /// Alustaa notifikaatioiden kuuntelun Firestoresta (kutsutaan esim. MainScreen:initState:ssa).
   /// Käytä repository:a stream:in hakemiseen (modulaarinen).
   void initializeNotifications(String userId) {
+    _userId = userId;
     _notificationsSubscription?.cancel();
     _notificationsSubscription = _repository.getUnreadNotificationsStream(userId).listen((notifications) {
       _notifications = notifications.map((notif) {
@@ -92,11 +97,10 @@ class NotificationProvider with ChangeNotifier {
     });
   }
 
-  /// Merkitsee notifikaation luetuksi (käytä repositorya).
+  /// Merkitsee notifikaation luetuksi signed-in uid:lle ([initializeNotifications]).
   Future<void> markAsRead(String notificationId) async {
-    // Oleta userId saatavilla (esim. authProvider.user!.uid - injektoi kutsujasta)
-    // TODO: Lisää userId parametri, jos ei globaali
-    final userId = 'TODO: Get from authProvider'; // Korvaa oikealla userId:llä (esim. injektoi)
+    final userId = _userId;
+    if (userId == null) return;
     await _repository.markAsRead(userId, notificationId);
   }
 

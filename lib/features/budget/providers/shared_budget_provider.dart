@@ -1,7 +1,6 @@
 import 'package:budu/features/budget/data/shared_budget_repository.dart';
 import 'package:budu/features/budget/models/budget_model.dart';
 import 'package:budu/features/budget/models/invitation_model.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'dart:async';
 
@@ -9,8 +8,10 @@ import 'dart:async';
 /// Välittää dataa repositorysta UI:lle, hallinnoi tilaa ja käyttää streameja reaaliaikaiseen dataan.
 /// Peruuttaa subskriptiot muistivuotojen estämiseksi.
 class SharedBudgetProvider with ChangeNotifier {
-  final SharedBudgetRepository _repository = SharedBudgetRepository();
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  SharedBudgetProvider({SharedBudgetRepository? repository})
+      : _repository = repository ?? SharedBudgetRepository();
+
+  final SharedBudgetRepository _repository;
   List<BudgetModel> _sharedBudgets = [];
   List<Invitation> _invitations = [];
   bool _isLoading = false;
@@ -67,36 +68,7 @@ BudgetModel? get latestSharedBudget {
 
     // Enrich in parallel (efficient for rare/low count)
     invitations = await Future.wait(
-      invitations.map((invite) async {
-        try {
-          // Fetch inviter email from /users/{inviterId}
-          final inviterSnap = await _firestore
-              .collection('users')
-              .doc(invite.inviterId)
-              .get();
-          final inviterData = inviterSnap.data();
-          final fetchedInviterEmail = inviterData?['email'] as String?;
-
-          // Fetch budget name
-          final budgetSnap = await _firestore
-              .collection('shared_budgets')
-              .doc(invite.sharedBudgetId)
-              .get();
-          final budgetName = budgetSnap.data()?['name'] as String? ?? 'Nimetön budjetti';
-
-          return invite.copyWith(
-            inviterEmail: fetchedInviterEmail ?? 'tuntematon@example.com',
-            sharedBudgetName: budgetName,
-          );
-        } catch (e) {
-          // Graceful fallback on error – don't break whole load
-          print('Enrichment error for invite ${invite.id}: $e');
-          return invite.copyWith(
-            inviterEmail: 'tuntematon@example.com',
-            sharedBudgetName: 'Nimetön budjetti',
-          );
-        }
-      }),
+      invitations.map(_repository.enrichInvitation),
     );
 
     _invitations = invitations;

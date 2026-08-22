@@ -15,7 +15,7 @@ double plannedRemaining(
 }
 
 bool isSharedBudget(List<String>? users) =>
-    users != null && users.length > 1;
+    users != null && users.isNotEmpty;
 
 /// Drops subcategory amounts ≤ 0 and main categories with nothing left.
 Map<String, Map<String, double>> sanitizePlannedExpenses(

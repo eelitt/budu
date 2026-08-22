@@ -2,7 +2,6 @@ enum SaveDecision {
   rejectIncome,
   warnOverlap,
   warnEmpty,
-  warnIncomeTooLarge,
   warnExpensesExceedIncome,
   ok,
 }
@@ -18,18 +17,22 @@ String? validateIncomeText(String? value) {
   return null;
 }
 
-/// Order matches [BudgetSaver.createBudget]: income error, overlap, empty, income cap, overspend.
+/// Order matches [BudgetSaver.createBudget]: income error, overlap, empty, overspend.
+/// Income > 999999 is rejected by [validateIncomeText] only — not a continue-dialog.
 SaveDecision decideBudgetSave({
   required String? incomeError,
   required bool overlaps,
   required double income,
   required bool hasExpenses,
   required double totalExpenses,
+  bool ignoreEmpty = false,
+  bool ignoreOverspend = false,
 }) {
   if (incomeError != null) return SaveDecision.rejectIncome;
   if (overlaps) return SaveDecision.warnOverlap;
-  if (income == 0.0 && !hasExpenses) return SaveDecision.warnEmpty;
-  if (income > 999999) return SaveDecision.warnIncomeTooLarge;
-  if (totalExpenses > income) return SaveDecision.warnExpensesExceedIncome;
+  if (!ignoreEmpty && income == 0.0 && !hasExpenses) return SaveDecision.warnEmpty;
+  if (!ignoreOverspend && totalExpenses > income) {
+    return SaveDecision.warnExpensesExceedIncome;
+  }
   return SaveDecision.ok;
 }

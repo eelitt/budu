@@ -2,6 +2,7 @@ import 'package:budu/features/auth/providers/auth_provider.dart';
 import 'package:budu/features/budget/domain/periods.dart';
 import 'package:budu/features/budget/domain/reminder_rules.dart';
 import 'package:budu/features/budget/providers/budget_provider.dart';
+import 'package:budu/features/budget/providers/shared_budget_provider.dart';
 import 'package:budu/features/notification/models/notification_message.dart';
 import 'package:budu/features/notification/providers/notification_provider.dart';
 import 'package:flutter/material.dart';
@@ -20,9 +21,11 @@ class MainScreenBudgetStatusService {
     }
 
     final next = nextMonthStart(DateTime.now());
-    final availableBudgets = await budgetProvider.getAvailableBudgets(authProvider.user!.uid);
-
-    return availableBudgets.any(
+    final personal = await budgetProvider.getAvailableBudgets(authProvider.user!.uid);
+    final sharedProvider = Provider.of<SharedBudgetProvider>(context, listen: false);
+    await sharedProvider.fetchSharedBudgets(authProvider.user!.uid);
+    final shared = sharedProvider.sharedBudgets;
+    return [...personal, ...shared].any(
       (budget) =>
           budget.startDate.year == next.year &&
           budget.startDate.month == next.month,
@@ -46,8 +49,13 @@ class MainScreenBudgetStatusService {
       final nextEnd = DateTime(nextStart.year, nextStart.month + 1, 0);
       final dateFormat = DateFormat('d.M.yyyy');
 
-      final availableBudgets = await budgetProvider.getAvailableBudgets(authProvider.user!.uid);
-      final startDates = availableBudgets.map((b) => b.startDate).toList();
+      final personal = await budgetProvider.getAvailableBudgets(authProvider.user!.uid);
+      final sharedProvider = Provider.of<SharedBudgetProvider>(context, listen: false);
+      await sharedProvider.fetchSharedBudgets(authProvider.user!.uid);
+      final startDates = [
+        ...personal.map((b) => b.startDate),
+        ...sharedProvider.sharedBudgets.map((b) => b.startDate),
+      ];
       final decision = reminderDecision(now: now, budgetStartDates: startDates);
 
       final nextMonthExists = startDates.any(

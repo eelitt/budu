@@ -1,5 +1,6 @@
 import 'package:budu/core/utils.dart';
 import 'package:budu/features/auth/providers/auth_provider.dart';
+import 'package:budu/features/budget/domain/event_rules.dart' as event_rules;
 import 'package:budu/features/budget/event_dialog/event_validator.dart';
 import 'package:budu/features/budget/models/expense_event.dart';
 import 'package:budu/features/budget/providers/budget_provider.dart';
@@ -45,23 +46,30 @@ class EventSavingService {
     );
 
     if (validationResult != null) {
-      // Näytetään validointivirheet asianomaisissa kentissä
-      if (validationResult.contains('Syötä positiivinen numero') || validationResult.contains('Summa voi olla enintään 99999')) {
-        stateManager.updateAmountError(validationResult);
-      } else if (validationResult.contains('Kuvaus voi olla enintään 75 merkkiä')) {
-        stateManager.updateDescriptionError(validationResult);
-      } else if (validationResult.contains('Valitse kategoria')) {
-        stateManager.updateCategoryError(validationResult);
-      } else if (validationResult.contains('Valitse alakategoria')) {
-        stateManager.updateSubcategoryError(validationResult);
-      } else if (validationResult.contains('Käyttäjä ei ole kirjautunut')) {
-        showSnackBar(
-          context,
-          validationResult,
-          duration: const Duration(seconds: 3),
-          backgroundColor: Colors.blueGrey[700],
-        );
-        onFailure();
+      switch (event_rules.eventValidationField(validationResult)) {
+        case event_rules.EventValidationField.amount:
+          stateManager.updateAmountError(validationResult);
+          break;
+        case event_rules.EventValidationField.description:
+          stateManager.updateDescriptionError(validationResult);
+          break;
+        case event_rules.EventValidationField.category:
+          stateManager.updateCategoryError(validationResult);
+          break;
+        case event_rules.EventValidationField.subcategory:
+          stateManager.updateSubcategoryError(validationResult);
+          break;
+        case event_rules.EventValidationField.auth:
+          showSnackBar(
+            context,
+            validationResult,
+            duration: const Duration(seconds: 3),
+            backgroundColor: Colors.blueGrey[700],
+          );
+          onFailure();
+          break;
+        case null:
+          break;
       }
       return;
     }

@@ -22,6 +22,20 @@ bool rangesOverlap(
   return !startA.isAfter(endB) && !endA.isBefore(startB);
 }
 
+/// True if [start]–[end] overlaps any existing period except [excludeId].
+bool hasOverlappingBudgetPeriod({
+  required DateTime start,
+  required DateTime end,
+  required Iterable<({String? id, DateTime start, DateTime end})> existing,
+  String? excludeId,
+}) {
+  for (final other in existing) {
+    if (excludeId != null && other.id == excludeId) continue;
+    if (rangesOverlap(start, end, other.start, other.end)) return true;
+  }
+  return false;
+}
+
 /// Day after [latestEnd]; monthly ends at month-end of that start, biweekly is +13 days.
 ({DateTime start, DateTime end}) nextPeriodAfter({
   required DateTime latestEnd,

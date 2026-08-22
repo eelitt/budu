@@ -1,9 +1,9 @@
 import 'package:budu/features/auth/models/user_model.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:flutter/material.dart';
 import '../data/auth_repository.dart';
+import '../data/user_profile_repository.dart';
 
 enum AuthState {
   unauthenticated,
@@ -12,16 +12,21 @@ enum AuthState {
 }
 
 class AuthProvider with ChangeNotifier {
-  final AuthRepository _authRepo = AuthRepository();
+  AuthProvider({
+    AuthRepository? authRepository,
+    UserProfileRepository? userProfileRepository,
+  })  : _authRepo = authRepository ?? AuthRepository(),
+        _userProfiles = userProfileRepository ?? UserProfileRepository();
+
+  final AuthRepository _authRepo;
+  final UserProfileRepository _userProfiles;
   UserModel? _user;
   AuthState _authState = AuthState.unauthenticated;
-  bool _isInitialized = false; // Uusi lippu alustuksen seurantaa varten
+  bool _isInitialized = false;
 
   UserModel? get user => _user;
   AuthState get authState => _authState;
   bool get isInitialized => _isInitialized;
-
-  AuthProvider();
 
   Future<void> initialize() async {
     _authState = AuthState.loading;
@@ -41,9 +46,9 @@ class AuthProvider with ChangeNotifier {
       );
 
       // Tunnistetaan virhetyyppi ja lisätään kontekstia
-      if (e is FirebaseException) {
+      if (e is firebase_auth.FirebaseAuthException) {
         await FirebaseCrashlytics.instance.setCustomKey('error_code', e.code);
-        await FirebaseCrashlytics.instance.setCustomKey('error_message', e.message ?? 'Unknown Firebase error');
+        await FirebaseCrashlytics.instance.setCustomKey('error_message', e.message ?? 'Unknown FirebaseAuth error');
       }
 
       _user = null;
@@ -62,38 +67,10 @@ class AuthProvider with ChangeNotifier {
       print('AuthProvider: Google-kirjautuminen onnistui: ${_user?.uid}');
 
       if (_user != null) {
-        final userDocRef = FirebaseFirestore.instance.collection('users').doc(_user!.uid);
-        final userDoc = await userDocRef.get();
-
-        if (!userDoc.exists) {
-          try {
-            await userDocRef.set({
-              'email': _user!.email,
-              'isPremium': false,
-              'isAdmin': false,
-              'createdAt': FieldValue.serverTimestamp(),
-            });
-            print('AuthProvider: Käyttäjädokumentti luotu Firestoreen: ${_user!.uid}');
-          } catch (firestoreError) {
-            // Raportoidaan Firestore-virhe Crashlyticsiin
-            await FirebaseCrashlytics.instance.recordError(
-              firestoreError,
-              StackTrace.current,
-              reason: 'Failed to create user document in Firestore',
-            );
-
-            // Tunnistetaan virhetyyppi ja lisätään kontekstia
-            if (firestoreError is FirebaseException) {
-              await FirebaseCrashlytics.instance.setCustomKey('error_code', firestoreError.code);
-              await FirebaseCrashlytics.instance.setCustomKey('error_message', firestoreError.message ?? 'Unknown Firestore error');
-            }
-
-            // Heitetään virhe eteenpäin
-            throw Exception('Failed to create user document: $firestoreError');
-          }
-        } else {
-          print('AuthProvider: Käyttäjädokumentti on jo olemassa Firestoressa: ${_user!.uid}');
-        }
+        await _userProfiles.ensureUserDocument(
+          uid: _user!.uid,
+          email: _user!.email,
+        );
         _authState = AuthState.authenticated;
       } else {
         _authState = AuthState.unauthenticated;

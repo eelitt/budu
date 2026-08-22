@@ -1,3 +1,4 @@
+import 'package:budu/features/budget/data/event_repository.dart';
 import 'package:budu/features/budget/domain/shared_rules.dart';
 import 'package:budu/features/budget/models/budget_model.dart';
 import 'package:budu/features/budget/models/invitation_model.dart';
@@ -11,9 +12,13 @@ import 'package:uuid/uuid.dart';
 /// Päivitetty: Käytetään BudgetModel:ia kaikille budjeteille (sisältää shared-kentät optionalina).
 class SharedBudgetRepository {
   SharedBudgetRepository({FirebaseFirestore? firestore})
-      : _firestore = firestore ?? FirebaseFirestore.instance;
+      : _firestore = firestore ?? FirebaseFirestore.instance,
+        _events = EventRepository(
+          firestore: firestore ?? FirebaseFirestore.instance,
+        );
 
   final FirebaseFirestore _firestore;
+  final EventRepository _events;
 
   /// Hakee käyttäjän yhteistalousbudjetit (query optimoitu limit:llä).
   Future<List<BudgetModel>> getSharedBudgets(String userId) async {
@@ -79,7 +84,7 @@ class SharedBudgetRepository {
   Stream<List<Invitation>> pendingInvitationsStream(String email) {
     return _firestore
         .collection('invitations')
-        .where('inviteeEmail', isEqualTo: email)
+        .where('inviteeEmail', isEqualTo: normalizeInviteEmailForLookup(email))
         .where('status', isEqualTo: 'pending')
         .orderBy('createdAt', descending: true)
         .limit(10)
@@ -146,7 +151,7 @@ class SharedBudgetRepository {
         id: invitationId,
         sharedBudgetId: sharedBudgetId,
         inviterId: inviterId,
-        inviteeEmail: inviteeEmail,
+        inviteeEmail: normalizeInviteEmailForLookup(inviteeEmail),
         status: 'pending',
         createdAt: DateTime.now(),
       );
@@ -224,8 +229,8 @@ class SharedBudgetRepository {
       final updates = {
         'income': income,
         'expenses': expenses,
-        'startDate': Timestamp.fromDate(startDate),
-        'endDate': Timestamp.fromDate(endDate),
+        'startDate': startDate.toIso8601String(),
+        'endDate': endDate.toIso8601String(),
         'type': type,
         'isPlaceholder': isPlaceholder,
       };
@@ -256,6 +261,52 @@ class SharedBudgetRepository {
         reason: 'Failed to fetch shared budget $sharedBudgetId',
       );
       return null;
+    }
+  }
+
+  Future<Invitation> enrichInvitation(Invitation invite) async {
+    try {
+      final inviterSnap =
+          await _firestore.collection('users').doc(invite.inviterId).get();
+      final fetchedInviterEmail =
+          inviterSnap.data()?['email'] as String?;
+      final budgetSnap = await _firestore
+          .collection('shared_budgets')
+          .doc(invite.sharedBudgetId)
+          .get();
+      final budgetName =
+          budgetSnap.data()?['name'] as String? ?? 'Nimetön budjetti';
+      return invite.copyWith(
+        inviterEmail: fetchedInviterEmail ?? 'tuntematon@example.com',
+        sharedBudgetName: budgetName,
+      );
+    } catch (_) {
+      return invite.copyWith(
+        inviterEmail: 'tuntematon@example.com',
+        sharedBudgetName: 'Nimetön budjetti',
+      );
+    }
+  }
+
+  /// Deletes the shared plan and its events.
+  Future<void> deleteSharedBudget({
+    required String userId,
+    required String sharedBudgetId,
+  }) async {
+    try {
+      await _events.deleteEventsForBudget(
+        userId: userId,
+        budgetId: sharedBudgetId,
+        isSharedBudget: true,
+      );
+      await _firestore.collection('shared_budgets').doc(sharedBudgetId).delete();
+    } catch (e, stackTrace) {
+      await FirebaseCrashlytics.instance.recordError(
+        e,
+        stackTrace,
+        reason: 'Failed to delete shared budget $sharedBudgetId',
+      );
+      rethrow;
     }
   }
 }

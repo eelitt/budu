@@ -3,7 +3,6 @@ import 'package:budu/features/budget/domain/money.dart';
 import 'package:flutter/material.dart';
 import '../data/budget_repository.dart';
 import '../models/budget_model.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:uuid/uuid.dart';
 
@@ -12,9 +11,12 @@ import 'package:uuid/uuid.dart';
 /// Päivitetty: Yksinkertaistettu notify-logiikka, lisätty stream saataville budjeteille reaaliaikaan.
 /// Lisätty: WidgetsBinding.addPostFrameCallback notifyListeners:iin estämään "called during build" -virheet (ajoitetaan buildin jälkeen).
 class BudgetProvider with ChangeNotifier {
-  BudgetModel? _budget; // Nykyinen budjetti
-  BudgetModel? _lastSavedBudget; // Viimeksi tallennettu budjetti vertailua varten
-  final BudgetRepository _budgetRepository = BudgetRepository(); // Budjettirepositorio Firestore-operaatioita varten
+  BudgetProvider({BudgetRepository? budgetRepository})
+      : _budgetRepository = budgetRepository ?? BudgetRepository();
+
+  BudgetModel? _budget;
+  BudgetModel? _lastSavedBudget;
+  final BudgetRepository _budgetRepository;
   StreamSubscription? _budgetSubscription; // Firestore-kuuntelija budjetille
   Timer? _debounceTimer; // Viiveajastin tallennukselle
   bool _hasPendingChanges = false; // Onko tallentamattomia muutoksia
@@ -178,12 +180,7 @@ class BudgetProvider with ChangeNotifier {
   Future<void> deleteBudget(String userId, String budgetId) async {
     try {
       _clearError();
-      await FirebaseFirestore.instance
-          .collection('budgets')
-          .doc(userId)
-          .collection('budgets')
-          .doc(budgetId)
-          .delete();
+      await _budgetRepository.deleteBudget(userId, budgetId);
       _budget = null;
       _lastSavedBudget = null;
       _safeNotifyListeners(); // Turvallinen notify
@@ -376,12 +373,11 @@ class BudgetProvider with ChangeNotifier {
       }
 
       final updatedIncome = incomeAfterAdd(budget.income, amount);
-      await FirebaseFirestore.instance
-          .collection('budgets')
-          .doc(userId)
-          .collection('budgets')
-          .doc(budgetId)
-          .update({'income': updatedIncome});
+      await _budgetRepository.updateIncome(
+        userId: userId,
+        budgetId: budgetId,
+        income: updatedIncome,
+      );
 
       if (_budget != null && _budget!.id == budgetId) {
         _budget!.income = updatedIncome;
@@ -403,38 +399,29 @@ class BudgetProvider with ChangeNotifier {
   /// Kuuntelee budjetin muutoksia Firestoresta reaaliajassa.
   void _listenToBudget(String userId, String budgetId) {
     _budgetSubscription?.cancel();
-    _budgetSubscription = FirebaseFirestore.instance
-        .collection('budgets')
-        .doc(userId)
-        .collection('budgets')
-        .doc(budgetId)
-        .snapshots()
-        .listen((doc) {
-      if (doc.exists && doc.data() != null && doc.data()!.containsKey('income')) {
-        final budget = BudgetModel.fromMap(doc.data() as Map<String, dynamic>, doc.id);
-        if (!budget.isPlaceholder && budget.toString() != _budget?.toString()) {
+    _budgetSubscription = _budgetRepository.getBudgetStream(userId, budgetId).listen(
+      (budget) {
+        if (budget != null &&
+            !budget.isPlaceholder &&
+            budget.toString() != _budget?.toString()) {
           _budget = budget;
           _lastSavedBudget = budget.copy();
-          print('Budget updated from Firestore: ${_budget!.income}');
-          _safeNotifyListeners(); // Turvallinen notify
-        }
-      } else {
-        print('Budget document does not exist in Firestore or is not a valid budget');
-        if (_budget != null) {
+          _safeNotifyListeners();
+        } else if (budget == null && _budget != null) {
           _budget = null;
           _lastSavedBudget = null;
-          _safeNotifyListeners(); // Turvallinen notify
+          _safeNotifyListeners();
         }
-      }
-    }, onError: (e) {
-      FirebaseCrashlytics.instance.recordError(
-        e,
-        StackTrace.current,
-        reason: 'Error listening to budget updates',
-      );
-      print('Error listening to budget: $e');
-      _setError('Budjetin reaaliaikainen seuranta epäonnistui');
-    });
+      },
+      onError: (e) {
+        FirebaseCrashlytics.instance.recordError(
+          e,
+          StackTrace.current,
+          reason: 'Error listening to budget updates',
+        );
+        _setError('Budjetin reaaliaikainen seuranta epäonnistui');
+      },
+    );
   }
 
   /// Aikatauluttaa budjetin tallennuksen Firestoreen viiveellä.
@@ -505,12 +492,11 @@ class BudgetProvider with ChangeNotifier {
       }
 
       final updatedIncome = incomeAfterSubtract(budget.income, amount);
-      await FirebaseFirestore.instance
-          .collection('budgets')
-          .doc(userId)
-          .collection('budgets')
-          .doc(budgetId)
-          .update({'income': updatedIncome});
+      await _budgetRepository.updateIncome(
+        userId: userId,
+        budgetId: budgetId,
+        income: updatedIncome,
+      );
 
       if (_budget != null && _budget!.id == budgetId) {
         _budget!.income = updatedIncome;

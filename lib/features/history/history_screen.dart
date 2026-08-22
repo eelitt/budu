@@ -66,13 +66,12 @@ class _HistoryScreenState extends State<HistoryScreen> {
       setState(() => _availableBudgets = budgets);
     }
 
-    // Load events
     if (authProvider.user != null) {
-      if (_isSharedBudget) {
-        await expenseProvider.loadAllExpenses(context, authProvider.user!.uid);
-      } else {
-        await expenseProvider.loadAllExpenses(context, authProvider.user!.uid);
-      }
+      await expenseProvider.loadHistoryExpenses(
+        context,
+        authProvider.user!.uid,
+        isSharedBudget: _isSharedBudget,
+      );
     }
 
     if (mounted) {
@@ -96,13 +95,16 @@ class _HistoryScreenState extends State<HistoryScreen> {
     if (value) {
       final sharedProvider = Provider.of<SharedBudgetProvider>(context, listen: false);
       setState(() => _availableBudgets = sharedProvider.sharedBudgets);
-      await expenseProvider.loadAllExpenses(context, authProvider.user!.uid);
     } else {
       final budgetProvider = Provider.of<BudgetProvider>(context, listen: false);
       final personal = await budgetProvider.getAvailableBudgets(authProvider.user!.uid);
       setState(() => _availableBudgets = personal);
-      await expenseProvider.loadAllExpenses(context, authProvider.user!.uid);
     }
+    await expenseProvider.loadHistoryExpenses(
+      context,
+      authProvider.user!.uid,
+      isSharedBudget: value,
+    );
 
     if (mounted) setState(() => _isLoadingEvents = false);
   }
@@ -183,7 +185,11 @@ class _HistoryScreenState extends State<HistoryScreen> {
                 isSharedBudget: _isSharedBudget,
               );
             } else {
-              await expenseProvider.loadAllExpenses(context, authProvider.user!.uid);
+              await expenseProvider.loadHistoryExpenses(
+                context,
+                authProvider.user!.uid,
+                isSharedBudget: _isSharedBudget,
+              );
             }
 
             if (mounted) setState(() => _isLoadingEvents = false);

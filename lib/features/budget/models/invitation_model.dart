@@ -1,4 +1,5 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:budu/features/budget/domain/shared_rules.dart';
+import 'package:budu/features/budget/models/budget_model.dart';
 
 /// Malli kutsulle Firestoresta.
 class Invitation {
@@ -31,7 +32,7 @@ class Invitation {
       inviterId: map['inviterId'],
       inviteeEmail: map['inviteeEmail'],
       status: map['status'],
-      createdAt: (map['createdAt'] as Timestamp).toDate(),
+      createdAt: BudgetModel.parseDate(map['createdAt']) ?? DateTime.now(),
       inviterDisplayName: map['inviterDisplayName'] as String?,
       inviterEmail: map['inviterEmail'] as String?,
       sharedBudgetName: map['sharedBudgetName'] as String?,
@@ -42,9 +43,9 @@ class Invitation {
     return {
       'sharedBudgetId': sharedBudgetId,
       'inviterId': inviterId,
-      'inviteeEmail': inviteeEmail,
+      'inviteeEmail': normalizeInviteEmailForLookup(inviteeEmail),
       'status': status,
-      'createdAt': Timestamp.fromDate(createdAt),
+      'createdAt': createdAt.toIso8601String(),
     };
   }
   // Optional: copyWith for enrichment

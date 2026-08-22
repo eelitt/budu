@@ -15,7 +15,8 @@ firebase.json
 .swiftpm/
 migrate_working_dir/
 AGENTS.md
-
+firebase_rules.md
+overhaul_plan.md
 # IntelliJ related
 *.iml
 *.ipr
