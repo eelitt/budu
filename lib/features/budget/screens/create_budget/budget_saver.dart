@@ -1,4 +1,6 @@
 import 'package:budu/core/utils.dart';
+import 'package:budu/features/budget/domain/money.dart';
+import 'package:budu/features/budget/domain/save_decisions.dart';
 import 'package:budu/features/auth/providers/auth_provider.dart';
 import 'package:budu/features/budget/models/budget_model.dart';
 import 'package:budu/features/budget/providers/budget_provider.dart';
@@ -75,22 +77,7 @@ class BudgetSaver {
   }
 
   /// Validoi budjetin tulot (yksityinen, laajennettavissa expense-validoinnille).
-  String? _validateIncome(String? value) {
-    if (value == null || value.isEmpty) {
-      return null;
-    }
-    final parsed = double.tryParse(value);
-    if (parsed == null) {
-      return 'Syötä kelvollinen numero';
-    }
-    if (parsed < 0) {
-      return 'Tulot eivät voivat olla negatiivisia';
-    }
-    if (parsed > 999999) {
-      return 'Tulot eivät voi olla suurempia kuin 999999 €';
-    }
-    return null;
-  }
+  String? _validateIncome(String? value) => validateIncomeText(value);
 
   /// Tarkistaa päällekkäiset budjetit optimoitulla Firestore-queryllä.
   /// Hakee vain potentiaalisesti päällekkäiset budjetit, vähentäen lukuja/kuluja.
@@ -186,22 +173,17 @@ class BudgetSaver {
     }
 
     // Käytä annettuja totalIncome/Expenses, mutta parsaa expenses controller:eista (säilytä olemassa oleva logiikka)
-    final double income = totalIncome; // Käytä annettua, vältä uudelleenlaskentaa
-    final Map<String, Map<String, double>> expenses = {};
+    final double income = totalIncome;
+    final rawExpenses = <String, Map<String, double>>{};
     for (var category in expenseControllers.keys) {
       final subcategoryMap = expenseControllers[category]!;
-      final subExpenses = <String, double>{};
-      for (var subcategory in subcategoryMap.keys) {
-        final amount = double.tryParse(subcategoryMap[subcategory]!.text) ?? 0.0;
-        final roundedAmount = (amount * 100).roundToDouble() / 100;
-        if (roundedAmount > 0) {
-          subExpenses[subcategory] = roundedAmount;
-        }
-      }
-      if (subExpenses.isNotEmpty) { // Poista tyhjät kategoriat automaattisesti
-        expenses[category] = subExpenses;
-      }
+      rawExpenses[category] = {
+        for (var subcategory in subcategoryMap.keys)
+          subcategory: double.tryParse(subcategoryMap[subcategory]!.text) ?? 0.0,
+      };
     }
+    final Map<String, Map<String, double>> expenses =
+        sanitizePlannedExpenses(rawExpenses);
 
     if (income == 0.0 && expenses.isEmpty) {
       final confirm = await _showDialog(

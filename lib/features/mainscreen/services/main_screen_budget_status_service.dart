@@ -1,4 +1,6 @@
 import 'package:budu/features/auth/providers/auth_provider.dart';
+import 'package:budu/features/budget/domain/periods.dart';
+import 'package:budu/features/budget/domain/reminder_rules.dart';
 import 'package:budu/features/budget/providers/budget_provider.dart';
 import 'package:budu/features/notification/models/notification_message.dart';
 import 'package:budu/features/notification/providers/notification_provider.dart';
@@ -17,15 +19,13 @@ class MainScreenBudgetStatusService {
       return false;
     }
 
-    final now = DateTime.now();
-    final nextMonthStart = DateTime(now.year, now.month + 1, 1); // Seuraavan kuukauden alku
+    final next = nextMonthStart(DateTime.now());
     final availableBudgets = await budgetProvider.getAvailableBudgets(authProvider.user!.uid);
 
-    // Tarkista, onko budjetti olemassa seuraavalle kuukaudelle
     return availableBudgets.any(
       (budget) =>
-          budget.startDate.year == nextMonthStart.year &&
-          budget.startDate.month == nextMonthStart.month,
+          budget.startDate.year == next.year &&
+          budget.startDate.month == next.month,
     );
   }
 
@@ -41,56 +41,42 @@ class MainScreenBudgetStatusService {
 
     if (authProvider.user != null) {
       final now = DateTime.now();
-      final currentMonthStart = DateTime(now.year, now.month, 1); // Nykyisen kuukauden alku
-      final nextMonthStart = DateTime(now.year, now.month + 1, 1); // Seuraavan kuukauden alku
-      final currentMonthEnd = DateTime(now.year, now.month + 1, 0); // Nykyisen kuukauden loppu
+      final current = monthRange(now);
+      final nextStart = nextMonthStart(now);
+      final nextEnd = DateTime(nextStart.year, nextStart.month + 1, 0);
       final dateFormat = DateFormat('d.M.yyyy');
 
       final availableBudgets = await budgetProvider.getAvailableBudgets(authProvider.user!.uid);
+      final startDates = availableBudgets.map((b) => b.startDate).toList();
+      final decision = reminderDecision(now: now, budgetStartDates: startDates);
 
-      // Tarkista, onko budjetti luotu kuluvalle kuulle
-      final currentMonthExists = availableBudgets.any(
-        (budget) =>
-            budget.startDate.year == currentMonthStart.year &&
-            budget.startDate.month == currentMonthStart.month,
+      final nextMonthExists = startDates.any(
+        (d) => d.year == nextStart.year && d.month == nextStart.month,
       );
-
-      if (!currentMonthExists) {
-        notificationProvider.showNotification(
-          message: 'Budjettia ei ole luotu kuluvalle kuulle (${dateFormat.format(currentMonthStart)} - ${dateFormat.format(currentMonthEnd)}).',
-          type: NotificationType.warning,
-          onAction: createBudgetCallback,
-          actionText: 'Luo budjetti',
-        );
-        return;
+      if (decision != ReminderDecision.missingCurrentMonth) {
+        onNextMonthBudgetExists(nextMonthExists);
       }
 
-      // Tarkista seuraavan kuukauden budjetti
-      final nextMonthExists = availableBudgets.any(
-        (budget) =>
-            budget.startDate.year == nextMonthStart.year &&
-            budget.startDate.month == nextMonthStart.month,
-      );
-      onNextMonthBudgetExists(nextMonthExists);
-
-      if (!nextMonthExists) {
-        final daysInMonth = currentMonthEnd.day;
-        final currentDay = now.day;
-        final daysRemaining = daysInMonth - currentDay;
-
-        const daysThreshold = 3;
-        if (daysRemaining <= daysThreshold) {
+      switch (decision) {
+        case ReminderDecision.missingCurrentMonth:
           notificationProvider.showNotification(
-            message: 'Budjettia ei ole luotu seuraavalle kuulle (${dateFormat.format(nextMonthStart)} - ${dateFormat.format(DateTime(nextMonthStart.year, nextMonthStart.month + 1, 0))}).',
+            message: 'Budjettia ei ole luotu kuluvalle kuulle (${dateFormat.format(current.start)} - ${dateFormat.format(current.end)}).',
             type: NotificationType.warning,
             onAction: createBudgetCallback,
             actionText: 'Luo budjetti',
           );
-        } else {
+          break;
+        case ReminderDecision.missingNextMonth:
+          notificationProvider.showNotification(
+            message: 'Budjettia ei ole luotu seuraavalle kuulle (${dateFormat.format(nextStart)} - ${dateFormat.format(nextEnd)}).',
+            type: NotificationType.warning,
+            onAction: createBudgetCallback,
+            actionText: 'Luo budjetti',
+          );
+          break;
+        case ReminderDecision.none:
           notificationProvider.clearNotification();
-        }
-      } else {
-        notificationProvider.clearNotification();
+          break;
       }
     }
   }

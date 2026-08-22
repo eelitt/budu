@@ -1,4 +1,6 @@
 import 'package:budu/features/auth/providers/auth_provider.dart';
+import 'package:budu/features/budget/domain/chatbot_amounts.dart';
+import 'package:budu/features/budget/domain/periods.dart';
 import 'package:budu/features/budget/providers/budget_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -44,19 +46,23 @@ class ChatbotResponseProcessor {
     final budgetProvider = Provider.of<BudgetProvider>(context, listen: false);
     final availableBudgets = await budgetProvider.getAvailableBudgets(context.read<AuthProvider>().user!.uid);
     if (availableBudgets.isNotEmpty) {
-      // Viimeisin budjetti endDate:n perusteella
       final latestBudget = availableBudgets.reduce((a, b) => a.endDate.isAfter(b.endDate) ? a : b);
-      startDate = latestBudget.endDate.add(Duration(days: 1));
-      if (budgetType == 'monthly') {
-        endDate = DateTime(startDate!.year, startDate!.month + 1, 0); // Kuukauden viimeinen päivä
-      } else if (budgetType == 'biweekly') {
-        endDate = startDate!.add(Duration(days: 13)); // 2 viikon jakso
-      }
+      final period = nextPeriodAfter(
+        latestEnd: latestBudget.endDate,
+        type: budgetType ?? 'monthly',
+      );
+      startDate = period.start;
+      endDate = period.end;
     } else {
-      // Oletus: Nykyinen kuukausi
       final now = DateTime.now();
-      startDate = DateTime(now.year, now.month, 1);
-      endDate = budgetType == 'monthly' ? DateTime(now.year, now.month + 1, 0) : startDate!.add(Duration(days: 13));
+      if (budgetType == 'biweekly') {
+        startDate = DateTime(now.year, now.month, 1);
+        endDate = startDate!.add(const Duration(days: 13));
+      } else {
+        final range = monthRange(now);
+        startDate = range.start;
+        endDate = range.end;
+      }
     }
   }
 
@@ -72,11 +78,10 @@ class ChatbotResponseProcessor {
         questions[step] != "Maksatko asuntolainan lisäksi muita velkoja?" &&
         questions[step] != "Maksatko muita kuukausittaisia velkoja autorahoituksen lisäksi?" &&
         questions[step] != "Onko sinulla velkoja?") {
-      value = value ?? 0.0;
-      // Skaalataan kulut, jos budjettityyppi on biweekly
-      if (budgetType == 'biweekly') {
-        value = value / 2; // Muunnetaan kuukausikulut 2 viikon jaksolle
-      }
+      value = scaleChatbotAmount(
+        value: value ?? 0.0,
+        isBiweekly: budgetType == 'biweekly',
+      );
     }
 
     switch (questions[step]) {
@@ -113,10 +118,16 @@ class ChatbotResponseProcessor {
         if (expenses.containsKey('Asuminen')) expenses['Asuminen']!['Asuntolaina'] = value ?? 0.0;
         break;
       case "Paljonko kotivakuutuksesi maksaa vuodessa?": // Omakotitalo
-        if (expenses.containsKey('Vakuutukset')) expenses['Vakuutukset']!['Kotivakuutus'] = (value ?? 0.0) / 12;
+        if (expenses.containsKey('Vakuutukset')) {
+          expenses['Vakuutukset']!['Kotivakuutus'] =
+              scaleChatbotAmount(value: value ?? 0.0, isYearly: true);
+        }
         break;
       case "Paljonko kiinteistöverosi on vuodessa?":
-        if (expenses.containsKey('Asuminen')) expenses['Asuminen']!['Kiinteistövero'] = (value ?? 0.0) / 12;
+        if (expenses.containsKey('Asuminen')) {
+          expenses['Asuminen']!['Kiinteistövero'] =
+              scaleChatbotAmount(value: value ?? 0.0, isYearly: true);
+        }
         break;
       case "Paljonko maksat jätehuollosta (esim. roskien tyhjennys) kuukaudessa?":
       case "Paljonko maksat jätehuollosta (esim. roskien tyhjennys) 2 viikon jaksolla?":
@@ -185,13 +196,22 @@ class ChatbotResponseProcessor {
         if (carOwnership == "Kyllä") expenses['Liikkuminen']!['Polttoaine'] = value ?? 0.0;
         break;
       case "Paljonko auton vakuutukset maksavat vuodessa?":
-        if (carOwnership == "Kyllä") expenses['Vakuutukset']!['Autovakuutus'] = (value ?? 0.0) / 12;
+        if (carOwnership == "Kyllä") {
+          expenses['Vakuutukset']!['Autovakuutus'] =
+              scaleChatbotAmount(value: value ?? 0.0, isYearly: true);
+        }
         break;
       case "Paljonko maksat käyttövoima- ja ajoneuvoveroa vuodessa?":
-        if (carOwnership == "Kyllä") expenses['Liikkuminen']!['Auton verot'] = (value ?? 0.0) / 12;
+        if (carOwnership == "Kyllä") {
+          expenses['Liikkuminen']!['Auton verot'] =
+              scaleChatbotAmount(value: value ?? 0.0, isYearly: true);
+        }
         break;
       case "Paljonko maksat autosta muita kuluja vuodessa (esim. renkaiden säilytys, huolto, keskim. 600-1000 €/vuosi)?": // Auton ylläpito
-        if (carOwnership == "Kyllä") expenses['Liikkuminen']!['Auton ylläpito'] = (value ?? 0.0) / 12;
+        if (carOwnership == "Kyllä") {
+          expenses['Liikkuminen']!['Auton ylläpito'] =
+              scaleChatbotAmount(value: value ?? 0.0, isYearly: true);
+        }
         break;
       case "Paljonko varaat ruokaan kuukaudessa?":
       case "Paljonko varaat ruokaan 2 viikon jaksolla?":

@@ -1,5 +1,6 @@
 import 'dart:async';
-import 'package:budu/core/constants.dart';
+import 'package:budu/features/budget/domain/money.dart';
+import 'package:budu/features/budget/domain/tracking.dart';
 import 'package:budu/features/budget/models/expense_event.dart';
 import 'package:budu/features/budget/providers/budget_provider.dart';
 import 'package:budu/features/budget/providers/shared_budget_provider.dart';
@@ -50,23 +51,7 @@ class ExpenseProvider with ChangeNotifier {
         .fold(0.0, (sum, expense) => sum + expense.amount);
   }
 
-  Map<String, double> getCategoryTotals() {
-    final Map<String, double> totals = {};
-    final Map<String, String> reverseMapping = {};
-    Constants.categoryMapping.forEach((mainCategory, subCategories) {
-      for (var subCategory in subCategories) {
-        reverseMapping[subCategory] = mainCategory;
-      }
-    });
-
-    for (var expense in _expenses.where((e) => e.type == EventType.expense)) {
-      String categoryKey = expense.subcategory != null && reverseMapping.containsKey(expense.subcategory!)
-          ? reverseMapping[expense.subcategory!]!
-          : expense.category;
-      totals[categoryKey] = (totals[categoryKey] ?? 0) + expense.amount;
-    }
-    return totals;
-  }
+  Map<String, double> getCategoryTotals() => categoryActualTotals(_expenses);
 
   /// Lataa tapahtumat events-kokoelmasta (ensisijainen) tai legacy expenses-kokoelmasta.
   /// Tukee sekä henkilökohtaisia että yhteistalousbudjetteja.
@@ -158,7 +143,7 @@ class ExpenseProvider with ChangeNotifier {
           final sharedBudget = sharedProvider.sharedBudgets.firstWhere((b) => b.id == expense.budgetId);
           await sharedProvider.updateSharedBudget(
             sharedBudgetId: sharedBudget.id!,
-            income: sharedBudget.income + expense.amount,
+            income: incomeAfterAdd(sharedBudget.income, expense.amount),
             expenses: sharedBudget.expenses,
             startDate: sharedBudget.startDate,
             endDate: sharedBudget.endDate,
@@ -202,7 +187,7 @@ class ExpenseProvider with ChangeNotifier {
         if (isSharedBudget) {
           final sharedProvider = Provider.of<SharedBudgetProvider>(context, listen: false);
           final sharedBudget = sharedProvider.sharedBudgets.firstWhere((b) => b.id == budgetId);
-          final newIncome = (sharedBudget.income - expense.amount).clamp(0.0, double.infinity);
+          final newIncome = incomeAfterSubtract(sharedBudget.income, expense.amount);
           await sharedProvider.updateSharedBudget(
             sharedBudgetId: sharedBudget.id!,
             income: newIncome,

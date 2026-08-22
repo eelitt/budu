@@ -8,7 +8,13 @@ import 'package:uuid/uuid.dart';
 /// Tukee vanhaa rakennetta taaksepäin yhteensopivuuden vuoksi.
 /// Optimointi: Lisätty stream reaaliaikaan, batch-valmius massatoimintoihin.
 class BudgetRepository {
-  final CollectionReference _budgetsCollection = FirebaseFirestore.instance.collection('budgets');
+  BudgetRepository({FirebaseFirestore? firestore})
+      : _firestore = firestore ?? FirebaseFirestore.instance;
+
+  final FirebaseFirestore _firestore;
+
+  CollectionReference<Map<String, dynamic>> get _budgetsCollection =>
+      _firestore.collection('budgets');
 
   /// Tallentaa budjetin Firestoreen käyttäjän ID:n ja budjetin ID:n perusteella.
   /// Jos budjetilla ei ole ID:tä, generoidaan uusi UUID.
@@ -120,8 +126,7 @@ class BudgetRepository {
   /// Hakee saatavilla olevat budjetit Firestoresta (optimoitu where-ehdoilla).
   Future<List<BudgetModel>> getAvailableBudgets(String userId) async {
     try {
-      final snapshot = await FirebaseFirestore.instance
-          .collection('budgets')
+      final snapshot = await _budgetsCollection
           .doc(userId)
           .collection('budgets')
           .where('isPlaceholder', isEqualTo: false) // Optimointi: Suodata placeholderit pois
@@ -149,8 +154,7 @@ class BudgetRepository {
 
   /// Palauttaa streamin saatavilla olevista budjeteista reaaliaikaista kuuntelua varten (optimoitu limit + where).
   Stream<List<BudgetModel>> getAvailableBudgetsStream(String userId) {
-    return FirebaseFirestore.instance
-        .collection('budgets')
+    return _budgetsCollection
         .doc(userId)
         .collection('budgets')
         .where('isPlaceholder', isEqualTo: false)

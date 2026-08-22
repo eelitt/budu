@@ -41,25 +41,7 @@ class ExpenseEvent {
   /// Luo ExpenseEvent-instanssin Map-oliosta, esimerkiksi haettaessa dataa tallennuksesta.
   factory ExpenseEvent.fromMap(Map<String, dynamic> map, [String? id]) {
     try {
-      // Tuki vanhalle year/month-datamuodolle
-      String budgetId;
-      if (map.containsKey('year') && map.containsKey('month')) {
-        budgetId = '${map['year']}_${map['month']}';
-      } else {
-        budgetId = map['budgetId'] as String? ?? 'unknown';
-      }
-
-      return ExpenseEvent(
-        id: id ?? map['id'] as String? ?? 'unknown',
-        category: map['category'] as String? ?? 'Ei kategoriaa',
-        subcategory: map['subcategory'] as String?,
-        amount: (map['amount'] as num?)?.toDouble() ?? 0.0,
-        createdAt: BudgetModel.parseDate(map['createdAt']) ?? DateTime.now(), // Käytä BudgetModel:in parsingia duplikaation välttämiseksi
-        type: (map['type'] as String?) == 'income' ? EventType.income : EventType.expense,
-        budgetId: budgetId,
-        description: map['description'] as String?,
-        userId: map['userId'] as String?,
-      );
+      return ExpenseEvent.parse(map, id: id);
     } catch (e, stackTrace) {
       FirebaseCrashlytics.instance.recordError(
         e,
@@ -68,6 +50,35 @@ class ExpenseEvent {
       );
       throw FormatException('Virheellinen tapahtumadata: $e');
     }
+  }
+
+  /// Same as [fromMap] without Crashlytics. [now] is the fallback for missing dates.
+  static ExpenseEvent parse(
+    Map<String, dynamic> map, {
+    String? id,
+    DateTime? now,
+  }) {
+    final fallback = now ?? DateTime.now();
+    String budgetId;
+    if (map.containsKey('year') && map.containsKey('month')) {
+      budgetId = '${map['year']}_${map['month']}';
+    } else {
+      budgetId = map['budgetId'] as String? ?? 'unknown';
+    }
+
+    return ExpenseEvent(
+      id: id ?? map['id'] as String? ?? 'unknown',
+      category: map['category'] as String? ?? 'Ei kategoriaa',
+      subcategory: map['subcategory'] as String?,
+      amount: (map['amount'] as num?)?.toDouble() ?? 0.0,
+      createdAt: BudgetModel.parseDate(map['createdAt']) ?? fallback,
+      type: (map['type'] as String?) == 'income'
+          ? EventType.income
+          : EventType.expense,
+      budgetId: budgetId,
+      description: map['description'] as String?,
+      userId: map['userId'] as String?,
+    );
   }
 
   /// Muuntaa tapahtuman Map-olioksi tallennusta tai serialisointia varten.

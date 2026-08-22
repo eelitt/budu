@@ -1,4 +1,6 @@
 import 'package:budu/core/constants.dart';
+import 'package:budu/features/budget/domain/money.dart';
+import 'package:budu/features/budget/domain/periods.dart';
 import 'package:budu/features/budget/models/budget_model.dart';
 import 'package:flutter/material.dart';
 
@@ -21,18 +23,18 @@ class BudgetInitializer {
   void initialize() {
     // Alustetaan tyhjä budjetti, jos sourceBudget puuttuu
     final now = DateTime.now();
+    final range = monthRange(now);
     final BudgetModel budget = sourceBudget ??
         BudgetModel(
           income: 0.0,
           expenses: {},
           createdAt: now,
-          startDate: DateTime(now.year, now.month, 1), // Kuukauden ensimmäinen päivä
-          endDate: DateTime(now.year, now.month + 1, 0), // Kuukauden viimeinen päivä
+          startDate: range.start,
+          endDate: range.end,
           type: 'monthly',
         );
 
-    // Pyöristetään tulot kahden desimaalin tarkkuudella
-    final roundedIncome = (budget.income * 100).roundToDouble() / 100;
+    final roundedIncome = roundToCents(budget.income);
     incomeController.text = roundedIncome.toStringAsFixed(2);
 
     // Kopioidaan ylä- ja alakategoriat viimeisimmästä budjetista, jos budjetti on olemassa
@@ -42,7 +44,7 @@ class BudgetInitializer {
         expenseControllers[category] = {};
         for (var subcategory in subcategories.keys) {
           // Pyöristetään arvo kahden desimaalin tarkkuudella
-          final roundedValue = (subcategories[subcategory]! * 100).roundToDouble() / 100;
+          final roundedValue = roundToCents(subcategories[subcategory]!);
           expenseControllers[category]![subcategory] = TextEditingController(
             text: roundedValue.toStringAsFixed(2),
           );

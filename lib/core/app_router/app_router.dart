@@ -1,3 +1,4 @@
+import 'package:budu/features/budget/domain/periods.dart';
 import 'package:budu/features/budget/models/budget_model.dart';
 import 'package:budu/features/budget/screens/create_budget/create_budget_screen.dart';
 import 'package:budu/features/budget/screens/create_budget/shared_budget/shared_create_budget_screen.dart';
@@ -74,16 +75,15 @@ class AppRouter {
         case createBudgetRoute:
           print('AppRouter: Generoidaan reitti: $createBudgetRoute');
           final now = DateTime.now();
-          final startDate = DateTime(now.year, now.month, 1);
-          final endDate = DateTime(now.year, now.month + 1, 0);
+          final range = monthRange(now);
           return _createFadeRoute(
             CreateBudgetScreen(
               sourceBudget: BudgetModel(
                 income: 0.0,
                 expenses: {},
                 createdAt: now,
-                startDate: startDate,
-                endDate: endDate,
+                startDate: range.start,
+                endDate: range.end,
                 type: 'monthly',
               ),
             ),

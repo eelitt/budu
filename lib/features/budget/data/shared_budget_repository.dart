@@ -1,4 +1,5 @@
-import 'package:budu/features/budget/models/budget_model.dart'; // Päivitetty: Käytetään yhdistettyä BudgetModel:ia SharedBudget:in sijaan
+import 'package:budu/features/budget/domain/shared_rules.dart';
+import 'package:budu/features/budget/models/budget_model.dart';
 import 'package:budu/features/budget/models/invitation_model.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
@@ -9,7 +10,10 @@ import 'package:uuid/uuid.dart';
 /// Käyttää batch-write:eja monioperaatioissa kulujen vähentämiseksi.
 /// Päivitetty: Käytetään BudgetModel:ia kaikille budjeteille (sisältää shared-kentät optionalina).
 class SharedBudgetRepository {
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  SharedBudgetRepository({FirebaseFirestore? firestore})
+      : _firestore = firestore ?? FirebaseFirestore.instance;
+
+  final FirebaseFirestore _firestore;
 
   /// Hakee käyttäjän yhteistalousbudjetit (query optimoitu limit:llä).
   Future<List<BudgetModel>> getSharedBudgets(String userId) async {
@@ -52,7 +56,7 @@ class SharedBudgetRepository {
   /// Hakee odottavat kutsut käyttäjän sähköpostilla (query optimoitu limit:llä).
   Future<List<Invitation>> getPendingInvitations(String email) async {
     try {
-      final String normalizedEmail = email.trim().toLowerCase();
+      final String normalizedEmail = normalizeInviteEmailForLookup(email);
       final snapshot = await _firestore
           .collection('invitations')
           .where('inviteeEmail', isEqualTo: normalizedEmail)
@@ -169,13 +173,10 @@ class SharedBudgetRepository {
     required String userId,
   }) async {
     try {
-      await FirebaseFirestore.instance.runTransaction((transaction) async {
-        final invitationRef = FirebaseFirestore.instance
-            .collection('invitations')
-            .doc(invitationId);
-        final budgetRef = FirebaseFirestore.instance
-            .collection('shared_budgets')
-            .doc(sharedBudgetId);
+      await _firestore.runTransaction((transaction) async {
+        final invitationRef = _firestore.collection('invitations').doc(invitationId);
+        final budgetRef =
+            _firestore.collection('shared_budgets').doc(sharedBudgetId);
 
         transaction.update(invitationRef, {'status': 'accepted'});
         transaction.update(budgetRef, {
@@ -195,7 +196,7 @@ class SharedBudgetRepository {
 /// Decline an invitation (simple status update)
   Future<void> declineInvitation(String invitationId) async {
     try {
-      await FirebaseFirestore.instance
+      await _firestore
           .collection('invitations')
           .doc(invitationId)
           .update({'status': 'declined'});

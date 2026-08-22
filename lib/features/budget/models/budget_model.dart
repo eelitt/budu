@@ -1,3 +1,4 @@
+import 'package:budu/features/budget/domain/money.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 
@@ -68,35 +69,7 @@ class BudgetModel {
   /// Käsittelee optional-kentät null-checkeillä, säilyttäen yhteensopivuuden vanhaan dataan.
   factory BudgetModel.fromMap(Map<String, dynamic> map, String? id) {
     try {
-      DateTime startDate;
-      DateTime endDate;
-      String type = map['type'] is String ? map['type'] : 'custom';
-
-      if (map.containsKey('year') && map.containsKey('month')) {
-        final year = map['year'] as int? ?? DateTime.now().year;
-        final month = map['month'] as int? ?? DateTime.now().month;
-        startDate = DateTime(year, month, 1);
-        endDate = DateTime(year, month + 1, 0);
-        type = 'monthly';
-      } else {
-        startDate = parseDate(map['startDate']) ?? DateTime.now();
-        endDate = parseDate(map['endDate']) ?? DateTime.now();
-      }
-
-      return BudgetModel(
-        income: (map['income'] as num?)?.toDouble() ?? 0.0,
-        expenses: _parseExpenses(map['expenses']),
-        createdAt: parseDate(map['createdAt']) ?? DateTime.now(),
-        startDate: startDate,
-        endDate: endDate,
-        type: type,
-        isPlaceholder: map['isPlaceholder'] as bool? ?? false,
-        id: id,
-        sharedBudgetId: map['sharedBudgetId'] as String?,
-        users: map['users'] != null ? List<String>.from(map['users']) : null,
-        createdBy: map['createdBy'] as String?,
-        name: map['name'] as String?,
-      );
+      return BudgetModel.parse(map, id);
     } catch (e, stackTrace) {
       FirebaseCrashlytics.instance.recordError(
         e,
@@ -105,6 +78,44 @@ class BudgetModel {
       );
       throw FormatException('Virheellinen budjettidata: $e');
     }
+  }
+
+  /// Same as [fromMap] without Crashlytics. [now] is the fallback for missing dates.
+  static BudgetModel parse(
+    Map<String, dynamic> map,
+    String? id, {
+    DateTime? now,
+  }) {
+    final fallback = now ?? DateTime.now();
+    DateTime startDate;
+    DateTime endDate;
+    String type = map['type'] is String ? map['type'] : 'custom';
+
+    if (map.containsKey('year') && map.containsKey('month')) {
+      final year = map['year'] as int? ?? fallback.year;
+      final month = map['month'] as int? ?? fallback.month;
+      startDate = DateTime(year, month, 1);
+      endDate = DateTime(year, month + 1, 0);
+      type = 'monthly';
+    } else {
+      startDate = parseDate(map['startDate']) ?? fallback;
+      endDate = parseDate(map['endDate']) ?? fallback;
+    }
+
+    return BudgetModel(
+      income: (map['income'] as num?)?.toDouble() ?? 0.0,
+      expenses: _parseExpenses(map['expenses']),
+      createdAt: parseDate(map['createdAt']) ?? fallback,
+      startDate: startDate,
+      endDate: endDate,
+      type: type,
+      isPlaceholder: map['isPlaceholder'] as bool? ?? false,
+      id: id,
+      sharedBudgetId: map['sharedBudgetId'] as String?,
+      users: map['users'] != null ? List<String>.from(map['users']) : null,
+      createdBy: map['createdBy'] as String?,
+      name: map['name'] as String?,
+    );
   }
 
   /// Apumetodi päivämäärän parsimiseen, tukee Timestamp ja String (ISO 8601) -formaatteja.
@@ -136,14 +147,10 @@ class BudgetModel {
   }
 
   /// Laskee kaikkien menojen summan pääkategorioista ja niiden alakategorioista.
-  double get totalExpenses {
-    return expenses.values.fold(0.0, (sum, subcategories) {
-      return sum + subcategories.values.fold(0.0, (subSum, value) => subSum + value);
-    });
-  }
+  double get totalExpenses => totalPlannedExpenses(expenses);
 
   /// Laskee jäljellä olevan budjetin tulojen ja menojen erotuksena.
-  double get remaining => income - totalExpenses;
+  double get remaining => plannedRemaining(income, expenses);
 
   /// Luo syvän kopion BudgetModel-oliosta, säilyttäen alkuperäisen rakenteen.
   /// Sisältää optional-kentät kopiossa.
@@ -168,7 +175,7 @@ class BudgetModel {
   }
 
   /// Apu-getter: Palauttaa true, jos kyseessä on yhteistalousbudjetti (perustuu users-kenttään).
-  bool get isShared => users != null && users!.length > 1;
+  bool get isShared => isSharedBudget(users);
 
   @override
   String toString() {

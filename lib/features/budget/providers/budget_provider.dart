@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:budu/features/budget/domain/money.dart';
 import 'package:flutter/material.dart';
 import '../data/budget_repository.dart';
 import '../models/budget_model.dart';
@@ -374,7 +375,7 @@ class BudgetProvider with ChangeNotifier {
         return;
       }
 
-      final updatedIncome = (budget.income) + amount;
+      final updatedIncome = incomeAfterAdd(budget.income, amount);
       await FirebaseFirestore.instance
           .collection('budgets')
           .doc(userId)
@@ -503,7 +504,7 @@ class BudgetProvider with ChangeNotifier {
         return;
       }
 
-      final updatedIncome = (budget.income - amount).clamp(0.0, double.infinity);
+      final updatedIncome = incomeAfterSubtract(budget.income, amount);
       await FirebaseFirestore.instance
           .collection('budgets')
           .doc(userId)
