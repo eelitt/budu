@@ -16,6 +16,7 @@ import 'package:budu/features/budget/screens/create_budget/shared_budget/invite_
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
+import 'package:budu/features/budget/data/budget_type_prefs.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// Budjettinäkymä, joka näyttää budjetin tiedot, tulot ja kategoriat.
@@ -73,7 +74,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
 
     try {
       // Lue isSharedBudget SharedPreferences:stä, oletusarvo false
-      final savedIsSharedBudget = prefs.getBool('isSharedBudget') ?? false;
+      final savedIsSharedBudget = BudgetTypePrefs.read(prefs, BudgetTypePrefs.budget);
 
       // Lataa budjetit
       await sharedBudgetProvider.fetchSharedBudgets(authProvider.user!.uid);
@@ -119,7 +120,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
   /// Tallentaa toggle-painikkeen valinnan SharedPreferences:iin
   Future<void> _saveBudgetPreference(bool isSharedBudget) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('isSharedBudget', isSharedBudget);
+    await BudgetTypePrefs.write(prefs, BudgetTypePrefs.budget, isSharedBudget);
   }
 
   @override

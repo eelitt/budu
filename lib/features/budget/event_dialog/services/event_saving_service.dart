@@ -5,7 +5,6 @@ import 'package:budu/features/budget/event_dialog/event_validator.dart';
 import 'package:budu/features/budget/models/expense_event.dart';
 import 'package:budu/features/budget/providers/budget_provider.dart';
 import 'package:budu/features/budget/providers/expense_provider.dart';
-import 'package:budu/features/budget/providers/shared_budget_provider.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -108,8 +107,6 @@ class EventSavingService {
         authProvider.user!.uid,
         event,
         isSharedBudget: isSharedBudget,
-        budgetProvider: Provider.of<BudgetProvider>(context, listen: false),
-        sharedProvider: Provider.of<SharedBudgetProvider>(context, listen: false),
       );
       // Päivitetään ExpenseProvider.expenses lataamalla uudelleen
       await expenseProvider.loadExpenses(authProvider.user!.uid, stateManager.selectedBudgetId!, isSharedBudget: isSharedBudget);

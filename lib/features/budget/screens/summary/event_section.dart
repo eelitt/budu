@@ -2,9 +2,7 @@ import 'package:budu/core/utils.dart';
 import 'package:budu/features/auth/providers/auth_provider.dart';
 import 'package:budu/features/budget/models/budget_model.dart';
 import 'package:budu/features/budget/models/expense_event.dart';
-import 'package:budu/features/budget/providers/budget_provider.dart';
 import 'package:budu/features/budget/providers/expense_provider.dart';
-import 'package:budu/features/budget/providers/shared_budget_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -248,8 +246,6 @@ class _EventsSectionState extends State<EventsSection> {
                                                           expense.id,
                                                           budgetId: widget.budget.id!,
                                                           isSharedBudget: widget.isSharedBudget,
-                                                          budgetProvider: Provider.of<BudgetProvider>(context, listen: false),
-                                                          sharedProvider: Provider.of<SharedBudgetProvider>(context, listen: false),
                                                         );
                                                       } catch (e) {
                                                         ScaffoldMessenger.of(context).showSnackBar(

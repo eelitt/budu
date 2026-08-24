@@ -9,6 +9,7 @@ import 'package:budu/features/budget/screens/summary/budget_tracking/budget_trac
 import 'package:budu/features/budget/screens/summary/event_section.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:budu/features/budget/data/budget_type_prefs.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// Yhteenvetonäkymä (SummaryScreen).
@@ -46,7 +47,7 @@ class _SummaryScreenState extends State<SummaryScreen> {
   /// Lataa valinnat, budjettilistat ja alkumenot.
   Future<void> _loadPreferencesAndBudgets() async {
     final prefs = await SharedPreferences.getInstance();
-    final savedIsShared = prefs.getBool('isSharedBudget') ?? false;
+    final savedIsShared = BudgetTypePrefs.read(prefs, BudgetTypePrefs.summary);
 
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     final budgetProvider = Provider.of<BudgetProvider>(context, listen: false);
@@ -89,7 +90,7 @@ class _SummaryScreenState extends State<SummaryScreen> {
 
   Future<void> _savePreference(bool value) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('isSharedBudget', value);
+    await BudgetTypePrefs.write(prefs, BudgetTypePrefs.summary, value);
   }
 
   /// Toggle-vaihto: tallenna valinta ja lataa oikeat menot.

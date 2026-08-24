@@ -178,6 +178,7 @@ class _CreateBudgetScreenState extends State<CreateBudgetScreen> {
             previousUsers: widget.existingMemberIds,
           ),
           inviteEmails: List<String>.from(_queuedInviteEmails),
+          householdId: widget.sourceBudget?.householdId,
         );
       } else {
         await _saver.createBudget();

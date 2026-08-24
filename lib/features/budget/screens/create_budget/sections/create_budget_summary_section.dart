@@ -84,7 +84,7 @@ class SummarySection extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('Jäljellä:'),
+              const Text('Kohdistamatta:'),
               Text(
                 '${(totalIncome - totalExpenses).toStringAsFixed(2)} €',
                 style: TextStyle(

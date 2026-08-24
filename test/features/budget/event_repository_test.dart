@@ -1,6 +1,8 @@
 import 'package:budu/features/budget/data/event_repository.dart';
 import 'package:budu/features/budget/domain/tracking.dart';
+import 'package:budu/features/budget/models/budget_model.dart';
 import 'package:budu/features/budget/models/expense_event.dart';
+import 'package:budu/features/budget/providers/expense_provider.dart';
 import 'package:fake_cloud_firestore/fake_cloud_firestore.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -133,5 +135,51 @@ void main() {
     expect(events, hasLength(1));
     expect(events.first.amount, 4.0);
     expect(events.first.type, EventType.expense);
+  });
+
+  test('history load includes more than 50 events per period', () async {
+    final fake = FakeFirebaseFirestore();
+    final events = EventRepository(firestore: fake);
+    final expenses = ExpenseProvider(eventRepository: events);
+    const userId = 'user1';
+
+    Future<void> seed(String budgetId, int count) async {
+      final col = fake.collection('budgets').doc(userId).collection('events');
+      for (var i = 0; i < count; i++) {
+        await col.doc('$budgetId-$i').set(
+              eventMap(id: '$budgetId-$i', budgetId: budgetId, index: i),
+            );
+      }
+    }
+
+    await seed('jan', 60);
+    await seed('feb', 60);
+
+    await expenses.loadHistoryExpenses(
+      userId,
+      isSharedBudget: false,
+      budgets: [
+        BudgetModel(
+          income: 0,
+          expenses: const {},
+          createdAt: DateTime(2025, 1, 1),
+          startDate: DateTime(2025, 1, 1),
+          endDate: DateTime(2025, 1, 31),
+          type: 'monthly',
+          id: 'jan',
+        ),
+        BudgetModel(
+          income: 0,
+          expenses: const {},
+          createdAt: DateTime(2025, 2, 1),
+          startDate: DateTime(2025, 2, 1),
+          endDate: DateTime(2025, 2, 28),
+          type: 'monthly',
+          id: 'feb',
+        ),
+      ],
+    );
+
+    expect(expenses.expenses.length, 120);
   });
 }

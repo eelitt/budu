@@ -10,6 +10,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
+import 'package:budu/features/budget/data/budget_type_prefs.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// Näyttää tapahtumahistorian suodatettuna kategorian, tyypin, budjetin ja hakukyselyn perusteella.
@@ -42,7 +43,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
 
   Future<void> _loadPreferencesAndData() async {
     final prefs = await SharedPreferences.getInstance();
-    final savedIsShared = prefs.getBool('isSharedBudget') ?? false;
+    final savedIsShared = BudgetTypePrefs.read(prefs, BudgetTypePrefs.history);
 
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     final budgetProvider = Provider.of<BudgetProvider>(context, listen: false);
@@ -70,7 +71,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
       await expenseProvider.loadHistoryExpenses(
         authProvider.user!.uid,
         isSharedBudget: _isSharedBudget,
-        sharedBudgets: sharedProvider.sharedBudgets,
+        budgets: budgets,
       );
     }
 
@@ -81,7 +82,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
 
   Future<void> _onToggleChanged(bool value) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('isSharedBudget', value);
+    await BudgetTypePrefs.write(prefs, BudgetTypePrefs.history, value);
 
     setState(() {
       _isSharedBudget = value;
@@ -103,7 +104,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
     await expenseProvider.loadHistoryExpenses(
       authProvider.user!.uid,
       isSharedBudget: value,
-      sharedBudgets: Provider.of<SharedBudgetProvider>(context, listen: false).sharedBudgets,
+      budgets: _availableBudgets,
     );
 
     if (mounted) setState(() => _isLoadingEvents = false);
@@ -188,7 +189,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
               await expenseProvider.loadHistoryExpenses(
                 authProvider.user!.uid,
                 isSharedBudget: _isSharedBudget,
-                sharedBudgets: Provider.of<SharedBudgetProvider>(context, listen: false).sharedBudgets,
+                budgets: _availableBudgets,
               );
             }
 

@@ -30,6 +30,8 @@ class BudgetModel {
   final String? createdBy;
   /// Budjetin nimi (optional, käytössä yhteistalousbudjeteissa).
   final String? name;
+  /// Household this period belongs to (shared plans).
+  final String? householdId;
 
   BudgetModel({
     required this.income,
@@ -44,6 +46,7 @@ class BudgetModel {
     this.users,
     this.createdBy,
     this.name,
+    this.householdId,
   });
 
   /// Muuntaa budjetin Map-olioksi tallennusta tai serialisointia varten.
@@ -62,6 +65,7 @@ class BudgetModel {
     if (users != null) map['users'] = users;
     if (createdBy != null) map['createdBy'] = createdBy;
     if (name != null) map['name'] = name;
+    if (householdId != null) map['householdId'] = householdId;
     return map;
   }
 
@@ -115,6 +119,7 @@ class BudgetModel {
       users: map['users'] != null ? List<String>.from(map['users']) : null,
       createdBy: map['createdBy'] as String?,
       name: map['name'] as String?,
+      householdId: map['householdId'] as String?,
     );
   }
 
@@ -170,6 +175,7 @@ class BudgetModel {
     List<String>? users,
     String? createdBy,
     String? name,
+    String? householdId,
   }) {
     return BudgetModel(
       income: income ?? this.income,
@@ -185,6 +191,7 @@ class BudgetModel {
       users: users ?? (this.users != null ? List<String>.from(this.users!) : null),
       createdBy: createdBy ?? this.createdBy,
       name: name ?? this.name,
+      householdId: householdId ?? this.householdId,
     );
   }
 

@@ -281,6 +281,92 @@ void main() {
     final loaded = await repo.getSharedBudgetById('s2');
     expect(loaded!.users, containsAll(['creator', 'partner']));
     expect(loaded.name, 'Koti');
+    expect(loaded.householdId, isNotNull);
+  });
+
+  test('ensureHouseholds groups periods without householdId', () async {
+    final fake = FakeFirebaseFirestore();
+    final repo = SharedBudgetRepository(firestore: fake);
+    await fake.collection('shared_budgets').doc('jan').set({
+      'income': 0,
+      'expenses': <String, dynamic>{},
+      'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+      'startDate': DateTime(2025, 1, 1).toIso8601String(),
+      'endDate': DateTime(2025, 1, 31).toIso8601String(),
+      'type': 'monthly',
+      'isPlaceholder': false,
+      'users': ['creator', 'partner'],
+      'createdBy': 'creator',
+      'name': 'Koti',
+    });
+    await fake.collection('shared_budgets').doc('feb').set({
+      'income': 0,
+      'expenses': <String, dynamic>{},
+      'createdAt': DateTime(2025, 2, 1).toIso8601String(),
+      'startDate': DateTime(2025, 2, 1).toIso8601String(),
+      'endDate': DateTime(2025, 2, 28).toIso8601String(),
+      'type': 'monthly',
+      'isPlaceholder': false,
+      'users': ['creator', 'partner'],
+      'createdBy': 'creator',
+      'name': 'Koti',
+    });
+
+    final loaded = await repo.getSharedBudgets('creator');
+    expect(loaded, hasLength(2));
+    expect(loaded[0].householdId, isNotNull);
+    expect(loaded[0].householdId, loaded[1].householdId);
+  });
+
+  test('accept invite adds member to household and every period', () async {
+    final fake = FakeFirebaseFirestore();
+    final repo = SharedBudgetRepository(firestore: fake);
+    await repo.createSharedBudget(
+      userId: 'creator',
+      budget: BudgetModel(
+        income: 0,
+        expenses: const {},
+        createdAt: DateTime(2025, 1, 1),
+        startDate: DateTime(2025, 1, 1),
+        endDate: DateTime(2025, 1, 31),
+        type: 'monthly',
+        id: 'jan',
+        name: 'Koti',
+      ),
+    );
+    final jan = await repo.getSharedBudgetById('jan');
+    await repo.createSharedBudget(
+      userId: 'creator',
+      budget: BudgetModel(
+        income: 0,
+        expenses: const {},
+        createdAt: DateTime(2025, 2, 1),
+        startDate: DateTime(2025, 2, 1),
+        endDate: DateTime(2025, 2, 28),
+        type: 'monthly',
+        id: 'feb',
+        householdId: jan!.householdId,
+        name: 'Koti',
+      ),
+    );
+
+    final invitationId = await repo.createInvitationForExistingBudget(
+      sharedBudgetId: 'jan',
+      inviterId: 'creator',
+      inviterEmail: 'me@x.fi',
+      inviteeEmail: 'you@x.fi',
+      inviteeUid: 'other',
+    );
+    await repo.acceptInvitation(
+      invitationId: invitationId,
+      sharedBudgetId: 'jan',
+      userId: 'other',
+    );
+
+    final household = await repo.getHousehold(jan.householdId!);
+    expect(household!['members'], containsAll(['creator', 'other']));
+    expect((await repo.getSharedBudgetById('jan'))!.users, contains('other'));
+    expect((await repo.getSharedBudgetById('feb'))!.users, contains('other'));
   });
 
   test('createInvitation requires existing plan and rejects self', () async {

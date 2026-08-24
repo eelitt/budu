@@ -157,6 +157,7 @@ class BudgetSaver {
     String? budgetName,
     List<String>? memberIds,
     List<String>? inviteEmails,
+    String? householdId,
   }) async {
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     final budgetProvider = Provider.of<BudgetProvider>(context, listen: false);
@@ -268,6 +269,7 @@ class BudgetSaver {
               isPlaceholder: false,
               id: sharedBudgetId,
               sharedBudgetId: sharedBudgetId,
+              householdId: householdId,
               users: memberIds,
               createdBy: authProvider.user!.uid,
               name: this.budgetName ?? budgetName ?? 'Yhteistalousbudjetti',

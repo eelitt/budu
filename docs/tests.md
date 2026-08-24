@@ -68,11 +68,13 @@ Date-dependent rules take `now`. Production callers pass `DateTime.now()`.
 
 **Notifications** — after `initializeNotifications(uid)`, `markAsRead` updates `users/{uid}/notifications/{id}` (`read: true`). It does not write under a placeholder user id. Before initialize, `markAsRead` is a no-op.
 
-**Events for one budget** — `EventRepository.getEventsForBudget` returns every matching event (no 50-event cap). Extra `budgetId`s are excluded. Shared path uses `shared_budgets/{id}/events`. Empty personal `events` falls back to legacy `monthly_budgets/.../expenses`. Tracking totals on the loaded list include all of those expenses. `saveEvent` / `deleteEvent` write that same `events` collection. History `getRecentPersonalEvents` is still capped at 50.
+**Events for one budget** — `EventRepository.getEventsForBudget` returns every matching event (no 50-event cap). Extra `budgetId`s are excluded. Shared path uses `shared_budgets/{id}/events`. Empty personal `events` falls back to legacy `monthly_budgets/.../expenses`. Tracking totals on the loaded list include all of those expenses. `saveEvent` / `deleteEvent` write that same `events` collection. History uses that uncapped load for each period in the filter list.
+
+**Income events** — adding or deleting an income event does not change planned `Budget.income`.
 
 **Income field** — `BudgetRepository.updateIncome` updates `income` on `budgets/{uid}/budgets/{id}`. `adjustIncome` loads, adds or subtracts (not below 0), and writes.
 
-**Shared create** — `createSharedBudget` takes a `BudgetModel`; `users` always includes the creator.
+**Shared create** — `createSharedBudget` takes a `BudgetModel`; creates a household if `householdId` is missing; `users` always includes the creator. Sequential periods reuse `householdId`. `ensureHouseholds` groups old period docs. Accept invite adds the uid to the household and every period.
 
 ## Adding a test
 

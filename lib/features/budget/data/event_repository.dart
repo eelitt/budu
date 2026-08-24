@@ -203,57 +203,6 @@ class EventRepository {
     return deletedIds;
   }
 
-  Future<List<ExpenseEvent>> getRecentEventsForBudget({
-    required String userId,
-    required String budgetId,
-    bool isSharedBudget = false,
-    int limit = 50,
-  }) async {
-    final snap = await _eventsQuery(
-      isSharedBudget: isSharedBudget,
-      userId: userId,
-      budgetId: budgetId,
-    ).limit(limit).get();
-    return snap.docs.map((doc) => ExpenseEvent.fromMap(doc.data(), doc.id)).toList();
-  }
-
-  /// History path: still capped (overhaul B1 leftover / U2).
-  Future<List<ExpenseEvent>> getRecentPersonalEvents(
-    String userId, {
-    int limit = 50,
-  }) async {
-    final eventsSnap = await _firestore
-        .collection('budgets')
-        .doc(userId)
-        .collection('events')
-        .orderBy('createdAt', descending: true)
-        .limit(limit)
-        .get();
-    final events = eventsSnap.docs
-        .map((doc) => ExpenseEvent.fromMap(doc.data(), doc.id))
-        .toList();
-
-    final monthly = await _firestore
-        .collection('budgets')
-        .doc(userId)
-        .collection('monthly_budgets')
-        .get();
-    for (final budgetDoc in monthly.docs) {
-      final legacy = await budgetDoc.reference
-          .collection('expenses')
-          .orderBy('createdAt', descending: true)
-          .limit(limit)
-          .get();
-      events.addAll(legacy.docs.map((doc) {
-        final data = Map<String, dynamic>.from(doc.data());
-        data['id'] = doc.id;
-        return ExpenseEvent.fromMap(data);
-      }));
-    }
-    events.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-    return events;
-  }
-
   /// Deletes all events for [budgetId] (and personal legacy expenses). Batches of 500.
   Future<void> deleteEventsForBudget({
     required String userId,

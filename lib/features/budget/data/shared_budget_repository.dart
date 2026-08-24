@@ -21,16 +21,63 @@ class SharedBudgetRepository {
   final FirebaseFirestore _firestore;
   final EventRepository _events;
 
+  Future<List<BudgetModel>> _querySharedBudgets(String userId) async {
+    final snapshot = await _firestore
+        .collection('shared_budgets')
+        .where('users', arrayContains: userId)
+        .orderBy('createdAt', descending: true)
+        .limit(50)
+        .get();
+    return snapshot.docs
+        .map((doc) => BudgetModel.fromMap(doc.data(), doc.id))
+        .toList();
+  }
+
+  String _householdGroupKey(BudgetModel budget) {
+    final users = [...?(budget.users)]..sort();
+    return '${budget.createdBy ?? ''}|${budget.name ?? ''}|${users.join(',')}';
+  }
+
+  /// Groups period docs that have no householdId onto new household documents.
+  Future<void> ensureHouseholds(String userId) async {
+    final budgets = await _querySharedBudgets(userId);
+    final missing = budgets
+        .where((b) => b.householdId == null || b.householdId!.isEmpty)
+        .toList();
+    if (missing.isEmpty) return;
+
+    final groups = <String, List<BudgetModel>>{};
+    for (final budget in missing) {
+      groups.putIfAbsent(_householdGroupKey(budget), () => []).add(budget);
+    }
+    for (final group in groups.values) {
+      final sample = group.first;
+      final householdId = const Uuid().v4();
+      final members = householdUsersForNewPeriod(
+        creatorId: sample.createdBy ?? userId,
+        previousUsers: sample.users,
+      );
+      await _firestore.collection('households').doc(householdId).set({
+        'name': sample.name ?? 'Yhteistalousbudjetti',
+        'members': members,
+        'createdBy': sample.createdBy ?? userId,
+        'createdAt': DateTime.now().toIso8601String(),
+      });
+      for (final budget in group) {
+        if (budget.id == null) continue;
+        await _firestore.collection('shared_budgets').doc(budget.id).update({
+          'householdId': householdId,
+          'users': members,
+        });
+      }
+    }
+  }
+
   /// Hakee käyttäjän yhteistalousbudjetit (query optimoitu limit:llä).
   Future<List<BudgetModel>> getSharedBudgets(String userId) async {
     try {
-      final snapshot = await _firestore
-          .collection('shared_budgets')
-          .where('users', arrayContains: userId)
-          .orderBy('createdAt', descending: true)
-          .limit(50)
-          .get();
-      return snapshot.docs.map((doc) => BudgetModel.fromMap(doc.data(), doc.id)).toList();
+      await ensureHouseholds(userId);
+      return await _querySharedBudgets(userId);
     } catch (e, stackTrace) {
       await FirebaseCrashlytics.instance.recordError(
         e,
@@ -63,6 +110,13 @@ class SharedBudgetRepository {
     }
   }
 
+  Future<Map<String, dynamic>?> getHousehold(String householdId) async {
+    final snap =
+        await _firestore.collection('households').doc(householdId).get();
+    if (!snap.exists) return null;
+    return snap.data();
+  }
+
   Future<void> createSharedBudget({
     required String userId,
     required BudgetModel budget,
@@ -72,15 +126,49 @@ class SharedBudgetRepository {
       throw Exception('sharedBudgetId puuttuu');
     }
     try {
-      final memberIds = householdUsersForNewPeriod(
-        creatorId: userId,
-        previousUsers: budget.users,
-      );
+      var householdId = budget.householdId;
+      List<String> members;
+      var name = budget.name;
+
+      if (householdId == null || householdId.isEmpty) {
+        householdId = const Uuid().v4();
+        members = householdUsersForNewPeriod(
+          creatorId: userId,
+          previousUsers: budget.users,
+        );
+        await _firestore.collection('households').doc(householdId).set({
+          'name': name ?? 'Yhteistalousbudjetti',
+          'members': members,
+          'createdBy': userId,
+          'createdAt': DateTime.now().toIso8601String(),
+        });
+      } else {
+        final household = await getHousehold(householdId);
+        members = household != null
+            ? List<String>.from(household['members'] as List? ?? const [])
+            : householdUsersForNewPeriod(
+                creatorId: userId,
+                previousUsers: budget.users,
+              );
+        if (members.isEmpty) {
+          members = householdUsersForNewPeriod(
+            creatorId: userId,
+            previousUsers: budget.users,
+          );
+        }
+        final householdName = household?['name'] as String?;
+        if (householdName != null && householdName.isNotEmpty) {
+          name = householdName;
+        }
+      }
+
       final sharedBudget = budget.copyWith(
         id: sharedBudgetId,
         sharedBudgetId: sharedBudgetId,
-        users: memberIds,
+        householdId: householdId,
+        users: members,
         createdBy: userId,
+        name: name,
       );
       await _firestore
           .collection('shared_budgets')
@@ -108,15 +196,25 @@ class SharedBudgetRepository {
     if (budget == null) {
       throw Exception('Budjettia ei löydy');
     }
+    final householdId = budget.householdId;
+    List<String> memberUids = budget.users ?? const [];
+    if (householdId != null && householdId.isNotEmpty) {
+      final household = await getHousehold(householdId);
+      if (household != null) {
+        memberUids = List<String>.from(household['members'] as List? ?? memberUids);
+      }
+    }
     final pending = await getPendingInvitations(inviteeEmail);
     final pendingForBudget = pending
-        .where((invite) => invite.sharedBudgetId == sharedBudgetId)
+        .where((invite) =>
+            invite.householdId == householdId ||
+            invite.sharedBudgetId == sharedBudgetId)
         .map((invite) => invite.inviteeEmail);
     final result = validateInvite(
       inviteeEmail: inviteeEmail,
       inviterEmail: inviterEmail,
       inviteeUid: inviteeUid,
-      memberUids: budget.users ?? const [],
+      memberUids: memberUids,
       pendingEmails: pendingForBudget,
     );
     if (result != InviteValidation.ok) {
@@ -128,6 +226,7 @@ class SharedBudgetRepository {
       final invitation = Invitation(
         id: invitationId,
         sharedBudgetId: sharedBudgetId,
+        householdId: householdId,
         inviterId: inviterId,
         inviteeEmail: normalizeInviteEmailForLookup(inviteeEmail),
         status: 'pending',
@@ -154,16 +253,47 @@ class SharedBudgetRepository {
     required String userId,
   }) async {
     try {
-      await _firestore.runTransaction((transaction) async {
-        final invitationRef = _firestore.collection('invitations').doc(invitationId);
-        final budgetRef =
-            _firestore.collection('shared_budgets').doc(sharedBudgetId);
+      final inviteSnap =
+          await _firestore.collection('invitations').doc(invitationId).get();
+      final inviteData = inviteSnap.data() ?? {};
+      var householdId = inviteData['householdId'] as String?;
+      if (householdId == null || householdId.isEmpty) {
+        final period = await getSharedBudgetById(sharedBudgetId);
+        householdId = period?.householdId;
+      }
 
+      await _firestore.runTransaction((transaction) async {
+        final invitationRef =
+            _firestore.collection('invitations').doc(invitationId);
         transaction.update(invitationRef, {'status': 'accepted'});
-        transaction.update(budgetRef, {
-          'users': FieldValue.arrayUnion([userId]),
-        });
+        if (householdId != null && householdId.isNotEmpty) {
+          transaction.update(
+            _firestore.collection('households').doc(householdId),
+            {
+              'members': FieldValue.arrayUnion([userId]),
+            },
+          );
+        } else {
+          transaction.update(
+            _firestore.collection('shared_budgets').doc(sharedBudgetId),
+            {
+              'users': FieldValue.arrayUnion([userId]),
+            },
+          );
+        }
       });
+
+      if (householdId != null && householdId.isNotEmpty) {
+        final periods = await _firestore
+            .collection('shared_budgets')
+            .where('householdId', isEqualTo: householdId)
+            .get();
+        for (final doc in periods.docs) {
+          await doc.reference.update({
+            'users': FieldValue.arrayUnion([userId]),
+          });
+        }
+      }
     } catch (e, stackTrace) {
       await FirebaseCrashlytics.instance.recordError(
         e,

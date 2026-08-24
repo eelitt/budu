@@ -19,7 +19,7 @@ Two layers of money that must not be mixed:
 
 Tracking is the comparison of actual expense totals to planned caps. `Budget.remaining` is planned leftover (`income − planned expenses`), not cash after actual spending.
 
-The one exception: an **income event** also changes the plan — it adds to `Budget.income` (delete subtracts, not below 0). Expense events never change planned amounts.
+Income events and expense events never change planned amounts. Planned income is only edited on the plan (create/edit / budget-tab income field).
 
 **How does it do that?**
 
@@ -29,16 +29,16 @@ The one exception: an **income event** also changes the plan — it adds to `Bud
 4. Log events (amount, date, category/subcategory, optional note) against a selected budget.
 5. Summary/history: sum actual expenses per category and show progress vs planned caps.
 
-Personal plans live under `budgets/{uid}/…`. Household plans live under `shared_budgets/{id}` with an `users` list. Events sit in an `events` subcollection and point at a `budgetId`. Budget/event/shared **providers** persist through repositories (`BudgetRepository`, `EventRepository`, `SharedBudgetRepository`), not `FirebaseFirestore.instance`.
+Personal plans live under `budgets/{uid}/…`. Households live under `households/{id}`; periods under `shared_budgets/{id}` with `householdId` and a denormalized `users` list. Events sit in an `events` subcollection and point at a `budgetId`. Budget/event/shared **providers** persist through repositories (`BudgetRepository`, `EventRepository`, `SharedBudgetRepository`), not `FirebaseFirestore.instance`.
 
 **What are the business rules?**
 Invariants the rest of this file spells out:
 
 - A budget is a period (`monthly` / `biweekly` / `custom`). Placeholders are not real budgets.
 - Planned expenses are a two-level tree (main → sub → amount). Zero/empty nodes are dropped on save. Amounts round to 2 decimals.
-- Expense events do not mutate the plan. Income events do (add/subtract `income`).
+- Expense and income events do not mutate the plan.
 - Overlap (same type only), empty plan, and planned expenses > income are warnings, not hard blocks. Personal and household plans for the same dates are allowed.
-- Shared: invite `pending` → `accepted` (user added to `users`) or `declined`. `isShared` when `users` is non-empty. No member cap. Sequential periods copy `users` and name. Invitee must already have a user doc; invite is written only after the plan exists.
+- Shared: a **household** (`households/{id}`: name + members) owns periods (`shared_budgets` with `householdId`; `users` is a copy of members for queries). Invite `pending` → `accepted` (member added to the household and every period) or `declined`. Sequential periods reuse `householdId`. Invitee must already have a user doc; invite is written only after the household/plan exists.
 - Expense amount `≥ 0` and `≤ 99999`; category required; subcategory required if that category has subs; description `≤ 50` chars. Planned income, if set, `≥ 0` and `≤ 999999`.
 - Max 25 main categories, 20 subs each, names `≤ 20` chars, no duplicates.
 - Reminders use personal **and** shared `startDate`s: no budget this calendar month → warn; no next-month budget → warn only in the last 3 days of the month. Chatbot save is personal only; login skips chatbot if the user already has a shared budget.
@@ -103,9 +103,7 @@ On first Google sign-in, `UserProfileRepository.ensureUserDocument` creates `use
 | Planned | Budget `income` and `expenses` | Caps the user set for the period |
 | Actual | Events | What was recorded |
 
-- Adding or deleting an **expense** event does **not** change planned category amounts or `income`.
-- Adding an **income** event **adds** the amount to the budget’s `income`.
-- Deleting an income event **subtracts** from `income`, clamped at `0`.
+- Adding or deleting an **expense** or **income** event does **not** change planned category amounts or planned `income`.
 
 On budget save, amounts are rounded to 2 decimal places. Subcategories with amount `≤ 0` are omitted; main categories with no remaining subcategories are omitted.
 
@@ -197,11 +195,13 @@ Limits:
 ## Shared household
 
 - Created from the same form as a personal plan, plus a **required name** and optional email invites.
-- Plan document: `shared_budgets/{id}` with `users: [creator, …]`, `createdBy`, `name`. No member cap.
-- Sequential create copies the previous period’s income/tree, name, and full `users` list, then advances the dates.
-- Invite only after the plan exists. Invitee must already have `users/{uid}` (email lookup is trim + lowercase). Reject: empty, self, already a member, duplicate pending for that plan. Pending emails are queued on create and written after save.
-- Invite: `invitations/{id}` with `status: pending`. Invitee email is stored trimmed and lowercased.
-- Accept: one Firestore transaction — set invitation `accepted` and `arrayUnion` the user’s uid onto `users`.
+- Household document: `households/{id}` with `name`, `members`, `createdBy`.
+- Plan document: `shared_budgets/{id}` with `householdId`, denormalized `users` (copy of members), `createdBy`, `name`. No member cap.
+- Periods without `householdId` are grouped on fetch (`createdBy` + name + sorted `users`) onto a new household.
+- Sequential create reuses `householdId`; members and name come from the household.
+- Invite only after the household exists. Invitee must already have `users/{uid}`. Reject: empty, self, already a member, duplicate pending for that household.
+- Invite: `invitations/{id}` with `householdId`, `status: pending`. Email trimmed and lowercased.
+- Accept: invitation `accepted`, `arrayUnion` uid onto household `members` and every period’s `users` with that `householdId`.
 - Decline: set `status: declined`.
 - Events: `shared_budgets/{id}/events`, with `userId` of the author.
 - Chatbot save is **personal only**.
@@ -230,7 +230,8 @@ Personal **and** shared `startDate` year/month:
 users/{uid}
 budgets/{uid}/budgets/{budgetId}      personal plan
 budgets/{uid}/events                  personal events (filter by budgetId)
-shared_budgets/{id}                   household plan + users[]
+households/{id}                       name + members[]
+shared_budgets/{id}                   period plan + householdId + users[] copy
 shared_budgets/{id}/events            household events
 invitations/{id}
 
@@ -240,7 +241,7 @@ budgets/{uid}/monthly_budgets/{year}_{month}
 ```
 
 - Available personal budgets: `isPlaceholder == false`, ordered by `startDate` descending. Budget list streams often `limit(50)`.
-- Events for the **selected** budget are loaded in full (no 50-event cap) so tracking totals are complete. History `loadHistoryExpenses` still caps at 50 events per personal collection / per household plan.
+- Events for the **selected** budget are loaded in full (no 50-event cap) so tracking totals are complete. History loads every event for each period in the current list (same uncapped path).
 - Budget, event, and invitation **writes** store dates as ISO-8601 strings (`DateTime.toIso8601String()`). Reads still accept Firestore `Timestamp` (legacy shared updates / old invites). User/notification `createdAt` uses `FieldValue.serverTimestamp()` and is separate.
 - Deleting a personal or shared budget also deletes its `events` (and personal legacy expenses).
 - Personal in-memory edits debounce-save after **1 second**.

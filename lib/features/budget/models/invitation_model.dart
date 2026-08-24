@@ -5,6 +5,7 @@ import 'package:budu/features/budget/models/budget_model.dart';
 class Invitation {
   final String id;
   final String sharedBudgetId;
+  final String? householdId;
   final String inviterId;
   final String inviteeEmail;
   final String status;
@@ -16,6 +17,7 @@ class Invitation {
   Invitation({
     required this.id,
     required this.sharedBudgetId,
+    this.householdId,
     required this.inviterId,
     required this.inviteeEmail,
     required this.status,
@@ -28,7 +30,8 @@ class Invitation {
   factory Invitation.fromMap(Map<String, dynamic> map, String id) {
     return Invitation(
       id: id,
-      sharedBudgetId: map['sharedBudgetId'],
+      sharedBudgetId: map['sharedBudgetId'] as String? ?? '',
+      householdId: map['householdId'] as String?,
       inviterId: map['inviterId'],
       inviteeEmail: map['inviteeEmail'],
       status: map['status'],
@@ -42,6 +45,7 @@ class Invitation {
   Map<String, dynamic> toMap() {
     return {
       'sharedBudgetId': sharedBudgetId,
+      if (householdId != null) 'householdId': householdId,
       'inviterId': inviterId,
       'inviteeEmail': normalizeInviteEmailForLookup(inviteeEmail),
       'status': status,
@@ -56,6 +60,7 @@ class Invitation {
     return Invitation(
       id: id,
       sharedBudgetId: sharedBudgetId,
+      householdId: householdId,
       inviterId: inviterId,
       inviteeEmail: inviteeEmail,
       status: status,

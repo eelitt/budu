@@ -7,6 +7,7 @@ import 'package:budu/features/budget/models/budget_model.dart';
 import 'package:budu/features/budget/providers/budget_provider.dart';
 import 'package:budu/features/budget/providers/expense_provider.dart';
 import 'package:budu/features/budget/providers/shared_budget_provider.dart';
+import 'package:budu/features/budget/data/budget_type_prefs.dart';
 import 'package:budu/features/budget/screens/create_budget/create_budget_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -111,7 +112,7 @@ class MainScreenActionsService {
 
       // Lataa toggle-tila SharedPreferences:stä (BudgetScreenin valinta)
       final prefs = await SharedPreferences.getInstance();
-      final isSharedBudget = prefs.getBool('isSharedBudget') ?? false;
+      final isSharedBudget = BudgetTypePrefs.read(prefs, BudgetTypePrefs.budget);
 
       // Hae initialBudgetId tyypin perusteella
       String? initialBudgetId;
