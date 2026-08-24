@@ -1,4 +1,5 @@
 import 'package:budu/features/budget/data/event_repository.dart';
+import 'package:budu/features/budget/domain/money.dart';
 import 'package:budu/features/budget/domain/shared_rules.dart';
 import 'package:budu/features/budget/models/budget_model.dart';
 import 'package:budu/features/budget/models/invitation_model.dart';
@@ -40,24 +41,6 @@ class SharedBudgetRepository {
     }
   }
 
-  /// Palauttaa reaaliaikaisen streamin käyttäjän yhteistalousbudjeteista (optimoitu limit:llä).
-  Stream<List<BudgetModel>> sharedBudgetsStream(String userId) {
-    return _firestore
-        .collection('shared_budgets')
-        .where('users', arrayContains: userId)
-        .orderBy('createdAt', descending: true)
-        .limit(50)
-        .snapshots()
-        .map((snapshot) => snapshot.docs.map((doc) => BudgetModel.fromMap(doc.data(),doc.id)).toList())
-        .handleError((e, stackTrace) async {
-      await FirebaseCrashlytics.instance.recordError(
-        e,
-        stackTrace,
-        reason: 'Failed to stream shared budgets for user $userId',
-      );
-    });
-  }
-
   /// Hakee odottavat kutsut käyttäjän sähköpostilla (query optimoitu limit:llä).
   Future<List<Invitation>> getPendingInvitations(String email) async {
     try {
@@ -80,58 +63,29 @@ class SharedBudgetRepository {
     }
   }
 
-  /// Palauttaa reaaliaikaisen streamin odottavista kutsuista (optimoitu limit:llä).
-  Stream<List<Invitation>> pendingInvitationsStream(String email) {
-    return _firestore
-        .collection('invitations')
-        .where('inviteeEmail', isEqualTo: normalizeInviteEmailForLookup(email))
-        .where('status', isEqualTo: 'pending')
-        .orderBy('createdAt', descending: true)
-        .limit(10)
-        .snapshots()
-        .map((snapshot) => snapshot.docs.map((doc) => Invitation.fromMap(doc.data(), doc.id)).toList())
-        .handleError((e, stackTrace) async {
-      await FirebaseCrashlytics.instance.recordError(
-        e,
-        stackTrace,
-        reason: 'Failed to stream pending invitations for email $email',
-      );
-    });
-  }
-
-  /// Luo uuden yhteistalousbudjetin.
   Future<void> createSharedBudget({
-    required String sharedBudgetId,
     required String userId,
-    required String name,
-    required double income,
-    required Map<String, Map<String, double>> expenses,
-    required DateTime startDate,
-    required DateTime endDate,
-    required String type,
-    List<String>? users,
-    bool isPlaceholder = false,
+    required BudgetModel budget,
   }) async {
+    final sharedBudgetId = budget.id ?? budget.sharedBudgetId;
+    if (sharedBudgetId == null || sharedBudgetId.isEmpty) {
+      throw Exception('sharedBudgetId puuttuu');
+    }
     try {
       final memberIds = householdUsersForNewPeriod(
         creatorId: userId,
-        previousUsers: users,
+        previousUsers: budget.users,
       );
-      final sharedBudget = BudgetModel( // Päivitetty: Käytetään BudgetModel:ia, aseta shared-kentät
-        income: income,
-        expenses: expenses,
-        createdAt: DateTime.now(),
-        startDate: startDate,
-        endDate: endDate,
-        type: type,
-        isPlaceholder: isPlaceholder,
+      final sharedBudget = budget.copyWith(
         id: sharedBudgetId,
-        sharedBudgetId: sharedBudgetId, // Linkki itseensä shared-tapauksessa
+        sharedBudgetId: sharedBudgetId,
         users: memberIds,
         createdBy: userId,
-        name: name,
       );
-      await _firestore.collection('shared_budgets').doc(sharedBudgetId).set(sharedBudget.toMap());
+      await _firestore
+          .collection('shared_budgets')
+          .doc(sharedBudgetId)
+          .set(sharedBudget.toMap());
     } catch (e, stackTrace) {
       await FirebaseCrashlytics.instance.recordError(
         e,
@@ -237,27 +191,20 @@ class SharedBudgetRepository {
     }
   }
 
-  /// Päivittää yhteistalousbudjetin tiedot.
-  Future<void> updateSharedBudget({
-    required String sharedBudgetId,
-    required double income,
-    required Map<String, Map<String, double>> expenses,
-    required DateTime startDate,
-    required DateTime endDate,
-    required String type,
-    bool isPlaceholder = false,
-  }) async {
+  Future<void> updateSharedBudget(BudgetModel budget) async {
+    final sharedBudgetId = budget.id ?? budget.sharedBudgetId;
+    if (sharedBudgetId == null || sharedBudgetId.isEmpty) {
+      throw Exception('sharedBudgetId puuttuu');
+    }
     try {
-      final updates = {
-        'income': income,
-        'expenses': expenses,
-        'startDate': startDate.toIso8601String(),
-        'endDate': endDate.toIso8601String(),
-        'type': type,
-        'isPlaceholder': isPlaceholder,
-      };
-      await _firestore.collection('shared_budgets').doc(sharedBudgetId).update(updates);
-      await FirebaseCrashlytics.instance.log('SharedBudgetRepository: Yhteistalousbudjetti päivitetty, sharedBudgetId: $sharedBudgetId');
+      await _firestore.collection('shared_budgets').doc(sharedBudgetId).update({
+        'income': budget.income,
+        'expenses': budget.expenses,
+        'startDate': budget.startDate.toIso8601String(),
+        'endDate': budget.endDate.toIso8601String(),
+        'type': budget.type,
+        'isPlaceholder': budget.isPlaceholder,
+      });
     } catch (e, stackTrace) {
       await FirebaseCrashlytics.instance.recordError(
         e,
@@ -266,6 +213,33 @@ class SharedBudgetRepository {
       );
       rethrow;
     }
+  }
+
+  Future<double> adjustIncome({
+    required String sharedBudgetId,
+    required double amount,
+    required bool add,
+  }) async {
+    final budget = await getSharedBudgetById(sharedBudgetId);
+    if (budget == null) {
+      throw Exception('Budjettia ei löydy');
+    }
+    final updated = add
+        ? incomeAfterAdd(budget.income, amount)
+        : incomeAfterSubtract(budget.income, amount);
+    await updateSharedBudget(budget.copyWith(income: updated));
+    return updated;
+  }
+
+  Stream<BudgetModel?> watchSharedBudget(String sharedBudgetId) {
+    return _firestore
+        .collection('shared_budgets')
+        .doc(sharedBudgetId)
+        .snapshots()
+        .map((snapshot) {
+      if (!snapshot.exists || snapshot.data() == null) return null;
+      return BudgetModel.fromMap(snapshot.data()!, snapshot.id);
+    });
   }
 
   /// Hakee budjetin tiedot yhteistalousbudjetille (käyttää BudgetModel:ia).

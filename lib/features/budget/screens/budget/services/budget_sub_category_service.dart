@@ -2,7 +2,6 @@ import 'package:budu/features/budget/models/budget_model.dart';
 import 'package:budu/features/budget/providers/budget_provider.dart';
 import 'package:budu/features/budget/providers/expense_provider.dart';
 import 'package:budu/features/budget/providers/shared_budget_provider.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -32,13 +31,7 @@ class BudgetSubCategoryService {
         }
         updatedExpenses[categoryName]![subcategory] = amount;
         await sharedBudgetProvider.updateSharedBudget(
-          sharedBudgetId: sharedBudget.id!,
-          income: sharedBudget.income,
-          expenses: updatedExpenses,
-          startDate: sharedBudget.startDate,
-          endDate: sharedBudget.endDate,
-          type: sharedBudget.type,
-          isPlaceholder: sharedBudget.isPlaceholder,
+          sharedBudget.copyWith(expenses: updatedExpenses),
         );
       } else {
         // Henkilökohtainen budjetti: Päivitä budgets-kokoelma
@@ -85,13 +78,7 @@ class BudgetSubCategoryService {
           subcategories[newSubcategory] = amount;
           updatedExpenses[categoryName] = subcategories;
           await sharedBudgetProvider.updateSharedBudget(
-            sharedBudgetId: sharedBudget.id!,
-            income: sharedBudget.income,
-            expenses: updatedExpenses,
-            startDate: sharedBudget.startDate,
-            endDate: sharedBudget.endDate,
-            type: sharedBudget.type,
-            isPlaceholder: sharedBudget.isPlaceholder,
+            sharedBudget.copyWith(expenses: updatedExpenses),
           );
         }
       } else {
@@ -146,21 +133,18 @@ class BudgetSubCategoryService {
             updatedExpenses.remove(categoryName);
           }
           await sharedBudgetProvider.updateSharedBudget(
-            sharedBudgetId: sharedBudget.id!,
-            income: sharedBudget.income,
-            expenses: updatedExpenses,
-            startDate: sharedBudget.startDate,
-            endDate: sharedBudget.endDate,
-            type: sharedBudget.type,
-            isPlaceholder: sharedBudget.isPlaceholder,
+            sharedBudget.copyWith(expenses: updatedExpenses),
           );
         }
         if (deleteEvents) {
-          await deleteSharedSubcategoryEvents(
+          final expenseProvider =
+              Provider.of<ExpenseProvider>(context, listen: false);
+          await expenseProvider.deleteSubcategoryEvents(
             userId: userId,
-            sharedBudgetId: sharedBudget.id!,
+            budgetId: sharedBudget.id!,
             category: categoryName,
             subcategory: subcategory,
+            isSharedBudget: true,
           );
         }
       } else {
@@ -191,40 +175,6 @@ class BudgetSubCategoryService {
         e,
         StackTrace.current,
         reason: 'Failed to delete subcategory in BudgetSubCategoryService, isSharedBudget: $isSharedBudget',
-      );
-      rethrow;
-    }
-  }
-
-  /// Poistaa yhteistalousbudjettiin liittyvät alakategorian tapahtumat Firestoresta.
-  Future<void> deleteSharedSubcategoryEvents({
-    required String userId,
-    required String sharedBudgetId,
-    required String category,
-    required String subcategory,
-  }) async {
-    try {
-      // Hae tapahtumat Firestoresta shared_budgets-kokoelmasta
-      final query = FirebaseFirestore.instance
-          .collection('shared_budgets')
-          .doc(sharedBudgetId)
-          .collection('events')
-          .where('category', isEqualTo: category)
-          .where('subcategory', isEqualTo: subcategory);
-      final snapshot = await query.get();
-      // Poista kaikki vastaavat tapahtumat
-      for (var doc in snapshot.docs) {
-        await doc.reference.delete();
-      }
-      await FirebaseCrashlytics.instance.log(
-        'BudgetSubCategoryService: Poistettu alakategorian tapahtumat, sharedBudgetId: $sharedBudgetId, category: $category, subcategory: $subcategory',
-      );
-    } catch (e, stackTrace) {
-      // Raportoi kriittinen virhe Crashlyticsiin
-      await FirebaseCrashlytics.instance.recordError(
-        e,
-        stackTrace,
-        reason: 'Failed to delete shared subcategory events for sharedBudgetId $sharedBudgetId, category: $category, subcategory: $subcategory',
       );
       rethrow;
     }

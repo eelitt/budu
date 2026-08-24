@@ -152,13 +152,7 @@ class BudgetCategoryController with ChangeNotifier {
         }
         updatedExpenses[categoryName]![subcategory] = 0.0;
         await sharedBudgetProvider.updateSharedBudget(
-          sharedBudgetId: sharedBudget.id.toString(),
-          income: sharedBudget.income,
-          expenses: updatedExpenses,
-          startDate: sharedBudget.startDate,
-          endDate: sharedBudget.endDate,
-          type: sharedBudget.type,
-          isPlaceholder: sharedBudget.isPlaceholder,
+          sharedBudget.copyWith(expenses: updatedExpenses),
         );
         // Päivitä SharedBudgetScreenController.selectedBudget
         if (sharedController != null) {
@@ -257,13 +251,7 @@ class BudgetCategoryController with ChangeNotifier {
           subcategories[newSubcategory] = amount;
           updatedExpenses[categoryName] = subcategories;
           await sharedBudgetProvider.updateSharedBudget(
-            sharedBudgetId: sharedBudget.id.toString(),
-            income: sharedBudget.income,
-            expenses: updatedExpenses,
-            startDate: sharedBudget.startDate,
-            endDate: sharedBudget.endDate,
-            type: sharedBudget.type,
-            isPlaceholder: sharedBudget.isPlaceholder,
+            sharedBudget.copyWith(expenses: updatedExpenses),
           );
           // Päivitä SharedBudgetScreenController.selectedBudget
           if (sharedController != null) {
@@ -342,13 +330,7 @@ class BudgetCategoryController with ChangeNotifier {
             updatedExpenses.remove(categoryName);
           }
           await sharedBudgetProvider.updateSharedBudget(
-            sharedBudgetId: sharedBudget.id.toString(),
-            income: sharedBudget.income,
-            expenses: updatedExpenses,
-            startDate: sharedBudget.startDate,
-            endDate: sharedBudget.endDate,
-            type: sharedBudget.type,
-            isPlaceholder: sharedBudget.isPlaceholder,
+            sharedBudget.copyWith(expenses: updatedExpenses),
           );
           // Päivitä SharedBudgetScreenController.selectedBudget
           if (sharedController != null) {
@@ -408,13 +390,7 @@ class BudgetCategoryController with ChangeNotifier {
         final updatedExpenses = Map<String, Map<String, double>>.from(sharedBudget.expenses);
         updatedExpenses.remove(categoryName);
         await sharedBudgetProvider.updateSharedBudget(
-          sharedBudgetId: sharedBudget.id.toString(),
-          income: sharedBudget.income,
-          expenses: updatedExpenses,
-          startDate: sharedBudget.startDate,
-          endDate: sharedBudget.endDate,
-          type: sharedBudget.type,
-          isPlaceholder: sharedBudget.isPlaceholder,
+          sharedBudget.copyWith(expenses: updatedExpenses),
         );
         // Päivitä SharedBudgetScreenController.selectedBudget
         if (sharedController != null) {
@@ -422,7 +398,7 @@ class BudgetCategoryController with ChangeNotifier {
         }
       } else if (authProvider.user != null && budgetProvider.budget?.id != null) {
         // Henkilökohtainen budjetti
-        await budgetProvider.deleteExpense(
+        await budgetProvider.removePlanned(
           userId: authProvider.user!.uid,
           budgetId: budgetProvider.budget!.id!,
           category: categoryName,

@@ -68,9 +68,9 @@ class _HistoryScreenState extends State<HistoryScreen> {
 
     if (authProvider.user != null) {
       await expenseProvider.loadHistoryExpenses(
-        context,
         authProvider.user!.uid,
         isSharedBudget: _isSharedBudget,
+        sharedBudgets: sharedProvider.sharedBudgets,
       );
     }
 
@@ -101,9 +101,9 @@ class _HistoryScreenState extends State<HistoryScreen> {
       setState(() => _availableBudgets = personal);
     }
     await expenseProvider.loadHistoryExpenses(
-      context,
       authProvider.user!.uid,
       isSharedBudget: value,
+      sharedBudgets: Provider.of<SharedBudgetProvider>(context, listen: false).sharedBudgets,
     );
 
     if (mounted) setState(() => _isLoadingEvents = false);
@@ -186,9 +186,9 @@ class _HistoryScreenState extends State<HistoryScreen> {
               );
             } else {
               await expenseProvider.loadHistoryExpenses(
-                context,
                 authProvider.user!.uid,
                 isSharedBudget: _isSharedBudget,
+                sharedBudgets: Provider.of<SharedBudgetProvider>(context, listen: false).sharedBudgets,
               );
             }
 

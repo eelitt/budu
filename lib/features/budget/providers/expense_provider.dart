@@ -1,13 +1,11 @@
-import 'dart:async';
 import 'package:budu/features/budget/data/event_repository.dart';
-import 'package:budu/features/budget/domain/money.dart';
 import 'package:budu/features/budget/domain/tracking.dart';
+import 'package:budu/features/budget/models/budget_model.dart';
 import 'package:budu/features/budget/models/expense_event.dart';
 import 'package:budu/features/budget/providers/budget_provider.dart';
 import 'package:budu/features/budget/providers/shared_budget_provider.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 
 /// Hallinnoi meno- ja tulotapahtumia Firestoressa.
 /// Tukee sekä henkilökohtaisia (budgets/{userId}/events, legacy monthly_budgets/{budgetId}/expenses)
@@ -24,7 +22,6 @@ class ExpenseProvider with ChangeNotifier {
 
   final EventRepository _eventRepository;
   List<ExpenseEvent> _expenses = [];
-  StreamSubscription? _expenseSubscription;
   String? _errorMessage;
 
   List<ExpenseEvent> get expenses => _expenses;
@@ -76,10 +73,11 @@ class ExpenseProvider with ChangeNotifier {
   /// Yhteistalous-tapahtumaan lisätään automaattisesti userId (kuka lisäsi).
   /// Tulotapahtuma päivittää budjetin income-kentän (personal tai shared).
   Future<void> addExpense(
-    BuildContext context,
     String userId,
     ExpenseEvent expense, {
     bool isSharedBudget = false,
+    required BudgetProvider budgetProvider,
+    required SharedBudgetProvider sharedProvider,
   }) async {
     try {
       _clearError();
@@ -93,22 +91,14 @@ class ExpenseProvider with ChangeNotifier {
       _expenses.add(expense.copyWith(userId: isSharedBudget ? userId : expense.userId));
       _expenses.sort((a, b) => b.createdAt.compareTo(a.createdAt));
 
-      // Päivitä budjetin tulot, jos tulo
       if (expense.type == EventType.income) {
         if (isSharedBudget) {
-          final sharedProvider = Provider.of<SharedBudgetProvider>(context, listen: false);
-          final sharedBudget = sharedProvider.sharedBudgets.firstWhere((b) => b.id == expense.budgetId);
-          await sharedProvider.updateSharedBudget(
-            sharedBudgetId: sharedBudget.id!,
-            income: incomeAfterAdd(sharedBudget.income, expense.amount),
-            expenses: sharedBudget.expenses,
-            startDate: sharedBudget.startDate,
-            endDate: sharedBudget.endDate,
-            type: sharedBudget.type,
-            isPlaceholder: sharedBudget.isPlaceholder,
+          await sharedProvider.adjustIncome(
+            sharedBudgetId: expense.budgetId,
+            amount: expense.amount,
+            add: true,
           );
         } else {
-          final budgetProvider = Provider.of<BudgetProvider>(context, listen: false);
           await budgetProvider.addToIncome(
             userId: userId,
             budgetId: expense.budgetId,
@@ -129,33 +119,25 @@ class ExpenseProvider with ChangeNotifier {
   /// Poistaa tapahtuman – tukee molempia budjettityyppejä.
   /// Tulotapahtuman poisto päivittää budjetin income-kentän.
   Future<void> deleteExpense(
-    BuildContext context,
     String userId,
     String expenseId, {
     bool isSharedBudget = false,
     required String budgetId,
+    required BudgetProvider budgetProvider,
+    required SharedBudgetProvider sharedProvider,
   }) async {
     try {
       _clearError();
       final expense = _expenses.firstWhere((e) => e.id == expenseId);
 
-      // Tulotapahtuman poisto → päivitä income
       if (expense.type == EventType.income) {
         if (isSharedBudget) {
-          final sharedProvider = Provider.of<SharedBudgetProvider>(context, listen: false);
-          final sharedBudget = sharedProvider.sharedBudgets.firstWhere((b) => b.id == budgetId);
-          final newIncome = incomeAfterSubtract(sharedBudget.income, expense.amount);
-          await sharedProvider.updateSharedBudget(
-            sharedBudgetId: sharedBudget.id!,
-            income: newIncome,
-            expenses: sharedBudget.expenses,
-            startDate: sharedBudget.startDate,
-            endDate: sharedBudget.endDate,
-            type: sharedBudget.type,
-            isPlaceholder: sharedBudget.isPlaceholder,
+          await sharedProvider.adjustIncome(
+            sharedBudgetId: budgetId,
+            amount: expense.amount,
+            add: false,
           );
         } else {
-          final budgetProvider = Provider.of<BudgetProvider>(context, listen: false);
           await budgetProvider.subtractFromIncome(
             userId: userId,
             budgetId: budgetId,
@@ -183,17 +165,15 @@ class ExpenseProvider with ChangeNotifier {
 
   /// History toggle: personal events only, or shared events only.
   Future<void> loadHistoryExpenses(
-    BuildContext context,
     String userId, {
     required bool isSharedBudget,
+    List<BudgetModel> sharedBudgets = const [],
   }) async {
     try {
       _clearError();
       if (isSharedBudget) {
         _expenses = [];
-        final shared =
-            Provider.of<SharedBudgetProvider>(context, listen: false).sharedBudgets;
-        for (final budget in shared) {
+        for (final budget in sharedBudgets) {
           if (budget.id == null) continue;
           _expenses.addAll(
             await _eventRepository.getRecentEventsForBudget(
@@ -219,59 +199,7 @@ class ExpenseProvider with ChangeNotifier {
     }
   }
 
-  /// History: personal + shared recent events (still capped at 50 per collection).
-  Future<void> loadAllExpenses(BuildContext context, String userId) async {
-    try {
-      _clearError();
-      _expenses = await _eventRepository.getRecentPersonalEvents(userId);
-      final sharedBudgetProvider =
-          Provider.of<SharedBudgetProvider>(context, listen: false);
-      for (final sharedBudget in sharedBudgetProvider.sharedBudgets) {
-        _expenses.addAll(
-          await _eventRepository.getRecentEventsForBudget(
-            userId: userId,
-            budgetId: sharedBudget.id!,
-            isSharedBudget: true,
-          ),
-        );
-      }
-      _expenses.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-      notifyListeners();
-      _listenToExpenses(userId);
-    } catch (e, stackTrace) {
-      await FirebaseCrashlytics.instance.recordError(
-        e,
-        stackTrace,
-        reason: 'Kaikkien menojen lataus epäonnistui käyttäjälle $userId',
-      );
-      _setError('Kaikkien menojen lataus epäonnistui: $e');
-      rethrow;
-    }
-  }
-
-  /// Peruuttaa reaaliaikaisen kuuntelun.
-  void cancelSubscriptions() {
-    _expenseSubscription?.cancel();
-    _expenseSubscription = null;
-  }
-
-  void _listenToExpenses(String userId) {
-    _expenseSubscription?.cancel();
-    _expenseSubscription = _eventRepository.watchPersonalEvents(userId).listen(
-      (events) {
-        _expenses = events;
-        notifyListeners();
-      },
-      onError: (e, stackTrace) {
-        FirebaseCrashlytics.instance.recordError(
-          e,
-          stackTrace,
-          reason: 'Stream-virhe kuunnellessa menojen päivityksiä käyttäjälle $userId',
-        );
-        _setError('Menojen reaaliaikainen seuranta epäonnistui: $e');
-      },
-    );
-  }
+  void cancelSubscriptions() {}
 
   Future<bool> hasSubcategoryEvents({
     required String userId,
@@ -354,11 +282,5 @@ class ExpenseProvider with ChangeNotifier {
       _setError('Kaikkien meno- ja tulotapahtumien poistaminen epäonnistui: $e');
       throw Exception('Kaikkien meno- ja tulotapahtumien poistaminen epäonnistui: $e');
     }
-  }
-
-  @override
-  void dispose() {
-    _expenseSubscription?.cancel();
-    super.dispose();
   }
 }

@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'package:budu/features/budget/domain/money.dart';
 import 'package:flutter/material.dart';
 import '../data/budget_repository.dart';
 import '../models/budget_model.dart';
@@ -82,24 +81,6 @@ class BudgetProvider with ChangeNotifier {
     }
   }
 
-  /// Tarkistaa, onko budjetti olemassa annetulle käyttäjälle ja budjetti-ID:lle.
-  Future<bool> budgetExists(String userId, String budgetId) async {
-    try {
-      _clearError();
-      final budget = await _budgetRepository.getBudget(userId, budgetId);
-      return budget != null && !budget.isPlaceholder;
-    } catch (e) {
-      await FirebaseCrashlytics.instance.recordError(
-        e,
-        StackTrace.current,
-        reason: 'Failed to check budget existence',
-      );
-      print('Error checking budget existence: $e');
-      _setError('Budjetin olemassaolon tarkistus epäonnistui');
-      return false;
-    }
-  }
-
   /// Hakee saatavilla olevat budjetit Firestoresta.
   Future<List<BudgetModel>> getAvailableBudgets(String userId) async {
     try {
@@ -114,40 +95,6 @@ class BudgetProvider with ChangeNotifier {
       print('Error fetching budgets: $e');
       _setError('Budjettien haku epäonnistui');
       return [];
-    }
-  }
-
-  /// Palauttaa streamin saatavilla olevista budjeteista reaaliaikaiseen kuunteluun.
-  Stream<List<BudgetModel>> getAvailableBudgetsStream(String userId) {
-    return _budgetRepository.getAvailableBudgetsStream(userId);
-  }
-
-  /// Kopioi budjetin uuteen aikaväliin Firestoreen.
-  Future<void> copyBudgetToNewPeriod(
-      String userId, BudgetModel sourceBudget, DateTime newStartDate, DateTime newEndDate, String newType) async {
-    try {
-      _clearError();
-      final newBudget = BudgetModel(
-        income: sourceBudget.income,
-        expenses: Map.from(sourceBudget.expenses),
-        createdAt: DateTime.now(),
-        startDate: newStartDate,
-        endDate: newEndDate,
-        type: newType,
-        isPlaceholder: false,
-      );
-      await _budgetRepository.saveBudget(userId, newBudget);
-      print('New budget created for $newStartDate to $newEndDate');
-      _safeNotifyListeners(); // Turvallinen notify
-    } catch (e) {
-      await FirebaseCrashlytics.instance.recordError(
-        e,
-        StackTrace.current,
-        reason: 'Failed to copy budget to new period',
-      );
-      print('Error copying budget: $e');
-      _setError('Budjetin kopiointi epäonnistui');
-      rethrow;
     }
   }
 
@@ -260,8 +207,8 @@ class BudgetProvider with ChangeNotifier {
     }
   }
 
-  /// Poistaa menon tai alakategorian budjetista.
-  Future<void> deleteExpense({
+  /// Removes a planned main category, or [subCategory] under it.
+  Future<void> removePlanned({
     required String userId,
     required String budgetId,
     required String category,
@@ -291,33 +238,6 @@ class BudgetProvider with ChangeNotifier {
     }
   }
 
-  /// Päivittää budjetin menon arvon.
-  Future<void> updateExpense({
-    required String userId,
-    required String budgetId,
-    required String category,
-    required double amount,
-  }) async {
-    if (_budget == null) return;
-    try {
-      _clearError();
-      if (!_budget!.expenses.containsKey(category)) {
-        _budget!.expenses[category] = {};
-      }
-      _budget!.expenses[category]!['default'] = amount;
-      _scheduleSave(userId);
-    } catch (e) {
-      await FirebaseCrashlytics.instance.recordError(
-        e,
-        StackTrace.current,
-        reason: 'Failed to update budget expense',
-      );
-      print('Error updating expense: $e');
-      _setError('Menon päivitys epäonnistui');
-      rethrow;
-    }
-  }
-
   /// Päivittää budjetin tulot.
   Future<void> updateIncome({
     required String userId,
@@ -343,7 +263,6 @@ class BudgetProvider with ChangeNotifier {
     }
   }
 
-  /// Lisää tuloja budjettiin.
   Future<void> addToIncome({
     required String userId,
     required String budgetId,
@@ -351,46 +270,22 @@ class BudgetProvider with ChangeNotifier {
   }) async {
     try {
       _clearError();
-      final exists = await budgetExists(userId, budgetId);
-      if (!exists) {
-        final newBudget = BudgetModel(
-          income: 0.0,
-          expenses: {},
-          createdAt: DateTime.now(),
-          startDate: DateTime.now(),
-          endDate: DateTime.now(),
-          type: 'custom',
-          isPlaceholder: true,
-        );
-        await _budgetRepository.saveBudget(userId, newBudget);
-      }
-
-      final budget = await _budgetRepository.getBudget(userId, budgetId);
-      if (budget == null) {
-        print('Cannot add to income: Failed to load budget for $budgetId');
-        _setError('Budjetin lataus epäonnistui tulojen lisäämiseksi');
-        return;
-      }
-
-      final updatedIncome = incomeAfterAdd(budget.income, amount);
-      await _budgetRepository.updateIncome(
+      final updatedIncome = await _budgetRepository.adjustIncome(
         userId: userId,
         budgetId: budgetId,
-        income: updatedIncome,
+        amount: amount,
+        add: true,
       );
-
       if (_budget != null && _budget!.id == budgetId) {
         _budget!.income = updatedIncome;
       }
-      print('Adding to income: $amount, new income: $updatedIncome');
-      _safeNotifyListeners(); // Turvallinen notify
+      _safeNotifyListeners();
     } catch (e) {
       await FirebaseCrashlytics.instance.recordError(
         e,
         StackTrace.current,
         reason: 'Failed to add to budget income',
       );
-      print('Error adding to income: $e');
       _setError('Tulojen lisäys epäonnistui');
       rethrow;
     }
@@ -477,39 +372,22 @@ class BudgetProvider with ChangeNotifier {
   }) async {
     try {
       _clearError();
-      final exists = await budgetExists(userId, budgetId);
-      if (!exists) {
-        print('Cannot subtract from income: Budget does not exist for $budgetId');
-        _setError('Budjetin olemassaolon tarkistus epäonnistui tulojen vähentämiseksi');
-        return;
-      }
-
-      final budget = await _budgetRepository.getBudget(userId, budgetId);
-      if (budget == null) {
-        print('Cannot subtract from income: Failed to load budget for $budgetId');
-        _setError('Budjetin lataus epäonnistui tulojen vähentämiseksi');
-        return;
-      }
-
-      final updatedIncome = incomeAfterSubtract(budget.income, amount);
-      await _budgetRepository.updateIncome(
+      final updatedIncome = await _budgetRepository.adjustIncome(
         userId: userId,
         budgetId: budgetId,
-        income: updatedIncome,
+        amount: amount,
+        add: false,
       );
-
       if (_budget != null && _budget!.id == budgetId) {
         _budget!.income = updatedIncome;
       }
-      print('Subtracting from income: $amount, new income: $updatedIncome');
-      _safeNotifyListeners(); // Turvallinen notify
+      _safeNotifyListeners();
     } catch (e) {
       await FirebaseCrashlytics.instance.recordError(
         e,
         StackTrace.current,
         reason: 'Failed to subtract from budget income',
       );
-      print('Error subtracting from income: $e');
       _setError('Tulojen vähentäminen epäonnistui');
       rethrow;
     }

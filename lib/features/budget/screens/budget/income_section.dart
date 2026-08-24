@@ -123,13 +123,7 @@ class _IncomeSectionState extends State<IncomeSection> {
         // Yhteistalousbudjetti
         final budget = widget.selectedSharedBudget!;
         sharedBudgetProvider.updateSharedBudget(
-          sharedBudgetId: budget.id.toString(),
-          income: amount,
-          expenses: budget.expenses,
-          startDate: budget.startDate,
-          endDate: budget.endDate,
-          type: budget.type,
-          isPlaceholder: budget.isPlaceholder,
+          budget.copyWith(income: amount),
         );
       } else if (budgetProvider.budget?.id != null) {
         // Henkilökohtainen budjetti

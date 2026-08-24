@@ -1,4 +1,5 @@
 import 'package:budu/features/budget/data/event_repository.dart';
+import 'package:budu/features/budget/domain/money.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import '../models/budget_model.dart';
@@ -23,16 +24,11 @@ class BudgetRepository {
 
   /// Tallentaa budjetin Firestoreen käyttäjän ID:n ja budjetin ID:n perusteella.
   /// Jos budjetilla ei ole ID:tä, generoidaan uusi UUID.
-  /// Tukee optional batch-write:a kuluja vähentäen (jos annettu, ei committaa tässä).
-  Future<void> saveBudget(String userId, BudgetModel budget, {WriteBatch? batch}) async {
+  Future<void> saveBudget(String userId, BudgetModel budget) async {
     try {
       final budgetId = budget.id ?? const Uuid().v4();
       final docRef = _budgetsCollection.doc(userId).collection('budgets').doc(budgetId);
-      if (batch != null) {
-        batch.set(docRef, budget.toMap());
-      } else {
-        await docRef.set(budget.toMap());
-      }
+      await docRef.set(budget.toMap());
     } catch (e) {
       // Raportoidaan virhe Crashlyticsiin
       await FirebaseCrashlytics.instance.recordError(
@@ -157,26 +153,6 @@ class BudgetRepository {
     }
   }
 
-  /// Palauttaa streamin saatavilla olevista budjeteista reaaliaikaista kuuntelua varten (optimoitu limit + where).
-  Stream<List<BudgetModel>> getAvailableBudgetsStream(String userId) {
-    return _budgetsCollection
-        .doc(userId)
-        .collection('budgets')
-        .where('isPlaceholder', isEqualTo: false)
-        .orderBy('startDate', descending: true)
-        .limit(50) // Optimointi: Limittaa tulokset kuluja vähentäen
-        .snapshots()
-        .map((snapshot) => snapshot.docs.map((doc) => BudgetModel.fromMap(doc.data(), doc.id)).toList())
-        .handleError((e) {
-      FirebaseCrashlytics.instance.recordError(
-        e,
-        StackTrace.current,
-        reason: 'Failed to stream available budgets',
-      );
-      throw Exception('Saatavilla olevien budjettien stream epäonnistui: $e');
-    });
-  }
-
   Future<void> updateIncome({
     required String userId,
     required String budgetId,
@@ -196,6 +172,24 @@ class BudgetRepository {
       );
       throw Exception('Tulojen päivitys epäonnistui: $e');
     }
+  }
+
+  /// Load, add or subtract [amount], write. Missing plan throws.
+  Future<double> adjustIncome({
+    required String userId,
+    required String budgetId,
+    required double amount,
+    required bool add,
+  }) async {
+    final budget = await getBudget(userId, budgetId);
+    if (budget == null) {
+      throw Exception('Budjettia ei löydy');
+    }
+    final updated = add
+        ? incomeAfterAdd(budget.income, amount)
+        : incomeAfterSubtract(budget.income, amount);
+    await updateIncome(userId: userId, budgetId: budgetId, income: updated);
+    return updated;
   }
 
   /// Deletes the plan and all events (including legacy expenses) in batches.

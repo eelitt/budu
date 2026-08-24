@@ -6,7 +6,6 @@ import 'package:budu/features/budget/providers/shared_budget_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:rxdart/rxdart.dart';
 
 /// Kontrolleri yhteistalousbudjettien tilan hallintaan.
@@ -34,7 +33,7 @@ class SharedBudgetScreenController {
 
   bool get isInitialized => _isInitialized;
   bool get isLoadingBudget => _isLoadingBudget;
-StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _selectedBudgetSubscription;
+  StreamSubscription<BudgetModel?>? _selectedBudgetSubscription;
 
   Future<void> _initialize() async {
     _isInitialized = true;
@@ -60,17 +59,10 @@ Future<void> loadBudget({
     _selectedBudget.add(initialBudget);
 
     // 2. Realtime listener for live updates (shared multi-user)
-    _selectedBudgetSubscription = FirebaseFirestore.instance
-        .collection('shared_budgets')
-        .doc(sharedBudgetId)
-        .snapshots()
-        .listen((snapshot) {
-      if (snapshot.exists && snapshot.data() != null) {
-        final updated = BudgetModel.fromMap(snapshot.data()!, snapshot.id);
-        _selectedBudget.add(updated);
-      } else {
-        _selectedBudget.add(null); // Deleted/invalid
-      }
+    _selectedBudgetSubscription = sharedBudgetProvider
+        .watchSharedBudget(sharedBudgetId)
+        .listen((updated) {
+      _selectedBudget.add(updated);
     }, onError: (e) {
       FirebaseCrashlytics.instance.recordError(e, StackTrace.current,
           reason: 'Realtime shared budget listener failed: $sharedBudgetId');
@@ -118,13 +110,7 @@ Future<void> loadBudget({
 
       final budget = sharedBudgetProvider.sharedBudgets.firstWhere((b) => b.id == sharedBudgetId);
       await sharedBudgetProvider.updateSharedBudget(
-        sharedBudgetId: sharedBudgetId,
-        income: budget.income,
-        expenses: {},
-        startDate: budget.startDate,
-        endDate: budget.endDate,
-        type: budget.type,
-        isPlaceholder: budget.isPlaceholder,
+        budget.copyWith(expenses: {}),
       );
       await expenseProvider.deleteAllExpensesForBudget(
         userId: userId,

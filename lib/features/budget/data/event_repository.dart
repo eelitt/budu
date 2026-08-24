@@ -254,15 +254,6 @@ class EventRepository {
     return events;
   }
 
-  Stream<List<ExpenseEvent>> watchPersonalEvents(String userId) {
-    return _firestore
-        .collection('budgets')
-        .doc(userId)
-        .collection('events')
-        .snapshots()
-        .asyncMap((_) => getRecentPersonalEvents(userId));
-  }
-
   /// Deletes all events for [budgetId] (and personal legacy expenses). Batches of 500.
   Future<void> deleteEventsForBudget({
     required String userId,

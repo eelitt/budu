@@ -70,7 +70,9 @@ Date-dependent rules take `now`. Production callers pass `DateTime.now()`.
 
 **Events for one budget** — `EventRepository.getEventsForBudget` returns every matching event (no 50-event cap). Extra `budgetId`s are excluded. Shared path uses `shared_budgets/{id}/events`. Empty personal `events` falls back to legacy `monthly_budgets/.../expenses`. Tracking totals on the loaded list include all of those expenses. `saveEvent` / `deleteEvent` write that same `events` collection. History `getRecentPersonalEvents` is still capped at 50.
 
-**Income field** — `BudgetRepository.updateIncome` updates `income` on `budgets/{uid}/budgets/{id}`.
+**Income field** — `BudgetRepository.updateIncome` updates `income` on `budgets/{uid}/budgets/{id}`. `adjustIncome` loads, adds or subtracts (not below 0), and writes.
+
+**Shared create** — `createSharedBudget` takes a `BudgetModel`; `users` always includes the creator.
 
 ## Adding a test
 

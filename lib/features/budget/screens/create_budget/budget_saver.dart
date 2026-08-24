@@ -243,26 +243,35 @@ class BudgetSaver {
         // Yhteistalousbudjetti: Käytä provideria, mutta lisää batch-tuki jos provider tukee
         if (isEditing) {
           await sharedBudgetProvider.updateSharedBudget(
-            sharedBudgetId: sharedBudgetId,
-            income: income,
-            expenses: expenses,
-            startDate: startDate,
-            endDate: endDate,
-            type: type,
-            isPlaceholder: false,
+            BudgetModel(
+              income: income,
+              expenses: expenses,
+              createdAt: DateTime.now(),
+              startDate: startDate,
+              endDate: endDate,
+              type: type,
+              isPlaceholder: false,
+              id: sharedBudgetId,
+              sharedBudgetId: sharedBudgetId,
+            ),
           );
         } else {
           await sharedBudgetProvider.createSharedBudget(
-            sharedBudgetId: sharedBudgetId,
             userId: authProvider.user!.uid,
-            name: this.budgetName ?? budgetName ?? 'Yhteistalousbudjetti',
-            income: income,
-            expenses: expenses,
-            startDate: startDate,
-            endDate: endDate,
-            type: type,
-            users: memberIds,
-            isPlaceholder: false,
+            budget: BudgetModel(
+              income: income,
+              expenses: expenses,
+              createdAt: DateTime.now(),
+              startDate: startDate,
+              endDate: endDate,
+              type: type,
+              isPlaceholder: false,
+              id: sharedBudgetId,
+              sharedBudgetId: sharedBudgetId,
+              users: memberIds,
+              createdBy: authProvider.user!.uid,
+              name: this.budgetName ?? budgetName ?? 'Yhteistalousbudjetti',
+            ),
           );
           final inviterEmail = authProvider.user!.email ?? '';
           for (final email in inviteEmails ?? const <String>[]) {

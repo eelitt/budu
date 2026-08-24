@@ -240,7 +240,7 @@ budgets/{uid}/monthly_budgets/{year}_{month}
 ```
 
 - Available personal budgets: `isPlaceholder == false`, ordered by `startDate` descending. Budget list streams often `limit(50)`.
-- Events for the **selected** budget are loaded in full (no 50-event cap) so tracking totals are complete. History’s `loadAllExpenses` still caps per collection at 50 (overhaul B1 remainder / U2).
+- Events for the **selected** budget are loaded in full (no 50-event cap) so tracking totals are complete. History `loadHistoryExpenses` still caps at 50 events per personal collection / per household plan.
 - Budget, event, and invitation **writes** store dates as ISO-8601 strings (`DateTime.toIso8601String()`). Reads still accept Firestore `Timestamp` (legacy shared updates / old invites). User/notification `createdAt` uses `FieldValue.serverTimestamp()` and is separate.
 - Deleting a personal or shared budget also deletes its `events` (and personal legacy expenses).
 - Personal in-memory edits debounce-save after **1 second**.

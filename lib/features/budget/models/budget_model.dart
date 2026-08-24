@@ -155,22 +155,36 @@ class BudgetModel {
   /// Luo syvän kopion BudgetModel-oliosta, säilyttäen alkuperäisen rakenteen.
   /// Sisältää optional-kentät kopiossa.
   BudgetModel copy() {
+    return copyWith();
+  }
+
+  BudgetModel copyWith({
+    double? income,
+    Map<String, Map<String, double>>? expenses,
+    DateTime? startDate,
+    DateTime? endDate,
+    String? type,
+    bool? isPlaceholder,
+    String? id,
+    String? sharedBudgetId,
+    List<String>? users,
+    String? createdBy,
+    String? name,
+  }) {
     return BudgetModel(
-      income: income,
-      expenses: expenses.map((category, subcategories) => MapEntry(
-        category,
-        Map<String, double>.from(subcategories),
-      )),
+      income: income ?? this.income,
+      expenses: (expenses ?? this.expenses).map((category, subcategories) =>
+          MapEntry(category, Map<String, double>.from(subcategories))),
       createdAt: createdAt,
-      startDate: startDate,
-      endDate: endDate,
-      type: type,
-      isPlaceholder: isPlaceholder,
-      id: id,
-      sharedBudgetId: sharedBudgetId,
-      users: users != null ? List<String>.from(users!) : null,
-      createdBy: createdBy,
-      name: name,
+      startDate: startDate ?? this.startDate,
+      endDate: endDate ?? this.endDate,
+      type: type ?? this.type,
+      isPlaceholder: isPlaceholder ?? this.isPlaceholder,
+      id: id ?? this.id,
+      sharedBudgetId: sharedBudgetId ?? this.sharedBudgetId,
+      users: users ?? (this.users != null ? List<String>.from(this.users!) : null),
+      createdBy: createdBy ?? this.createdBy,
+      name: name ?? this.name,
     );
   }
 

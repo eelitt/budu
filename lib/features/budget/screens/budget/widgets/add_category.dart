@@ -66,13 +66,7 @@ class AddCategory extends StatelessWidget {
         final updatedExpenses = Map<String, Map<String, double>>.from(budget.expenses);
         updatedExpenses[categoryName] = {};
         await sharedBudgetProvider.updateSharedBudget(
-          sharedBudgetId: budget.id.toString(),
-          income: budget.income,
-          expenses: updatedExpenses,
-          startDate: budget.startDate,
-          endDate: budget.endDate,
-          type: budget.type,
-          isPlaceholder: budget.isPlaceholder,
+          budget.copyWith(expenses: updatedExpenses),
         );
         // Päivitä SharedBudgetScreenController.selectedBudget
         if (context.mounted) {

@@ -49,6 +49,30 @@ void main() {
     expect(loaded!.income, 250);
   });
 
+  test('adjustIncome adds and subtracts without going below 0', () async {
+    final fake = FakeFirebaseFirestore();
+    final repo = BudgetRepository(firestore: fake);
+    await repo.saveBudget('user1', _personal(id: 'b1'));
+    expect(
+      await repo.adjustIncome(
+        userId: 'user1',
+        budgetId: 'b1',
+        amount: 20,
+        add: true,
+      ),
+      120,
+    );
+    expect(
+      await repo.adjustIncome(
+        userId: 'user1',
+        budgetId: 'b1',
+        amount: 200,
+        add: false,
+      ),
+      0,
+    );
+  });
+
   test('missing budget is null', () async {
     final fake = FakeFirebaseFirestore();
     final repo = BudgetRepository(firestore: fake);
@@ -241,15 +265,18 @@ void main() {
     final fake = FakeFirebaseFirestore();
     final repo = SharedBudgetRepository(firestore: fake);
     await repo.createSharedBudget(
-      sharedBudgetId: 's2',
       userId: 'creator',
-      name: 'Koti',
-      income: 10,
-      expenses: const {},
-      startDate: DateTime(2025, 2, 1),
-      endDate: DateTime(2025, 2, 28),
-      type: 'monthly',
-      users: ['partner', 'creator'],
+      budget: BudgetModel(
+        income: 10,
+        expenses: const {},
+        createdAt: DateTime(2025, 2, 1),
+        startDate: DateTime(2025, 2, 1),
+        endDate: DateTime(2025, 2, 28),
+        type: 'monthly',
+        id: 's2',
+        users: ['partner', 'creator'],
+        name: 'Koti',
+      ),
     );
     final loaded = await repo.getSharedBudgetById('s2');
     expect(loaded!.users, containsAll(['creator', 'partner']));
@@ -272,14 +299,17 @@ void main() {
     );
 
     await repo.createSharedBudget(
-      sharedBudgetId: 's1',
       userId: 'creator',
-      name: 'Koti',
-      income: 0,
-      expenses: const {},
-      startDate: DateTime(2025, 1, 1),
-      endDate: DateTime(2025, 1, 31),
-      type: 'monthly',
+      budget: BudgetModel(
+        income: 0,
+        expenses: const {},
+        createdAt: DateTime(2025, 1, 1),
+        startDate: DateTime(2025, 1, 1),
+        endDate: DateTime(2025, 1, 31),
+        type: 'monthly',
+        id: 's1',
+        name: 'Koti',
+      ),
     );
 
     expect(
