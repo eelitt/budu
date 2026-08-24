@@ -31,3 +31,6 @@
 
 ## 1.0.9
 - Lisätty yhteistalousbudjetti
+
+## 1.1.0
+- Bugikorjauksia

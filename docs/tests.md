@@ -42,7 +42,7 @@ Date-dependent rules take `now`. Production callers pass `DateTime.now()`.
 
 **Money** — round to 2 decimals; planned totals and remaining (can be negative); `isShared` when `users` is non-empty; drop ≤0 sub-amounts and empty mains on sanitize; income add; income subtract clamped at 0; `BudgetModel.copy()` does not share nested maps.
 
-**Periods** — calendar month range (Feb leap/non-leap, December); next month wrapping year; days left in month; overlap (same day and shared endpoint overlap; adjacent days do not); `hasOverlappingBudgetPeriod` uses those ranges on loaded personal+shared plans and ignores `excludeId` (edit); next period after latest end (monthly vs +13 days biweekly).
+**Periods** — calendar month range (Feb leap/non-leap, December); next month wrapping year; days left in month; overlap (same day and shared endpoint overlap; adjacent days do not); `hasOverlappingBudgetPeriod` uses the list the saver passes (personal-only or household-only) and ignores `excludeId` (edit); next period after latest end (monthly vs +13 days biweekly).
 
 **Reminders** — no budget whose `startDate` is in the current month → `missingCurrentMonth`; else no next-month start and ≤3 days left → `missingNextMonth`; otherwise `none`. A start mid-month still counts as that month.
 
@@ -52,7 +52,7 @@ Date-dependent rules take `now`. Production callers pass `DateTime.now()`.
 
 **Save decisions** — income text: empty ok, else number ≥ 0 and ≤ 999999 (hard reject). Decision order: income error → overlap warning → empty plan → expenses &gt; income → ok. After confirm, `ignoreEmpty` / `ignoreOverspend` skip that step. There is no “continue with income too large” warning.
 
-**Shared** — invite status `pending` / `accepted` / `declined`; only `pending` may go to accepted or declined; lookup email is trim + lowercase; `Invitation.toMap` writes that normalized email.
+**Shared** — invite status `pending` / `accepted` / `declined`; only `pending` may go to accepted or declined; lookup email is trim + lowercase; `Invitation.toMap` writes that normalized email. `validateInvite` rejects empty, self, missing user, already member, duplicate pending. `householdUsersForNewPeriod` always includes the creator and copies previous members. Create invitation requires the plan doc; sequential create copies `users`.
 
 **Delete** — `BudgetRepository.deleteBudget` removes the plan, matching `events`, and legacy expenses. `deleteSharedBudget` removes the shared plan and its events. Other `budgetId`s’ events stay.
 

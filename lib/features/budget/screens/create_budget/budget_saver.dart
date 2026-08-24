@@ -7,7 +7,6 @@ import 'package:budu/features/budget/models/budget_model.dart';
 import 'package:budu/features/budget/providers/budget_provider.dart';
 import 'package:budu/features/budget/providers/shared_budget_provider.dart';
 import 'package:budu/features/notification/providers/notification_provider.dart';
-import 'package:cloud_firestore/cloud_firestore.dart'; // Lisätty batch-tukeen
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
@@ -117,22 +116,25 @@ class BudgetSaver {
 
   String? _validateIncome(String? value) => validateIncomeText(value);
 
-  /// Personal: `budgets/{uid}/budgets`. Shared: `shared_budgets`.
-  /// Uses parsed dates. Load failures are rethrown (not treated as no overlap).
+  /// Personal vs personal, household vs household. Same month of both types is allowed.
   Future<bool> _checkOverlappingBudgets(
     String userId, {
+    required bool isShared,
     String? excludeId,
   }) async {
     final budgetProvider = Provider.of<BudgetProvider>(context, listen: false);
     final sharedBudgetProvider =
         Provider.of<SharedBudgetProvider>(context, listen: false);
     try {
-      final personal = await budgetProvider.getAvailableBudgets(userId);
-      await sharedBudgetProvider.fetchSharedBudgets(userId);
-      final existing = [
-        ...personal,
-        ...sharedBudgetProvider.sharedBudgets,
-      ].map((b) => (id: b.id, start: b.startDate, end: b.endDate));
+      final List<BudgetModel> sameKind;
+      if (isShared) {
+        await sharedBudgetProvider.fetchSharedBudgets(userId);
+        sameKind = sharedBudgetProvider.sharedBudgets;
+      } else {
+        sameKind = await budgetProvider.getAvailableBudgets(userId);
+      }
+      final existing =
+          sameKind.map((b) => (id: b.id, start: b.startDate, end: b.endDate));
       return hasOverlappingBudgetPeriod(
         start: startDate,
         end: endDate,
@@ -149,13 +151,12 @@ class BudgetSaver {
     }
   }
 
-  /// Tallentaa budjetin Firestoreen ja suorittaa tarvittavat validoinnit.
-  /// Tukee optional batch-writea skaalauksen vuoksi (ei riko olemassa olevaa).
   Future<String> createBudget({
     String? budgetId,
     String? sharedBudgetId,
     String? budgetName,
-    WriteBatch? batch,
+    List<String>? memberIds,
+    List<String>? inviteEmails,
   }) async {
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     final budgetProvider = Provider.of<BudgetProvider>(context, listen: false);
@@ -198,6 +199,7 @@ class BudgetSaver {
 
     var overlaps = await _checkOverlappingBudgets(
       authProvider.user!.uid,
+      isShared: sharedBudgetId != null,
       excludeId: isEditing ? budgetId : null,
     );
     var ignoreEmpty = false;
@@ -253,14 +255,24 @@ class BudgetSaver {
           await sharedBudgetProvider.createSharedBudget(
             sharedBudgetId: sharedBudgetId,
             userId: authProvider.user!.uid,
-            name: this.budgetName ?? 'Yhteistalousbudjetti',
+            name: this.budgetName ?? budgetName ?? 'Yhteistalousbudjetti',
             income: income,
             expenses: expenses,
             startDate: startDate,
             endDate: endDate,
             type: type,
+            users: memberIds,
             isPlaceholder: false,
           );
+          final inviterEmail = authProvider.user!.email ?? '';
+          for (final email in inviteEmails ?? const <String>[]) {
+            await sharedBudgetProvider.inviteUser(
+              sharedBudgetId: sharedBudgetId,
+              inviterId: authProvider.user!.uid,
+              inviterEmail: inviterEmail,
+              inviteeEmail: email,
+            );
+          }
         }
         await FirebaseCrashlytics.instance.log('BudgetSaver: Yhteistalousbudjetti ${isEditing ? 'päivitetty' : 'tallennettu'}, sharedBudgetId: $sharedBudgetId');
       } else {

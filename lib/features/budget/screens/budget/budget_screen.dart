@@ -12,6 +12,7 @@ import 'package:budu/features/budget/screens/budget/widgets/add_category.dart';
 import 'package:budu/features/budget/screens/budget/widgets/budget_month_selector.dart';
 import 'package:budu/features/budget/screens/budget/widgets/budget_confirmation_dialogs.dart';
 import 'package:budu/features/budget/screens/budget/widgets/category_list_wrapper.dart';
+import 'package:budu/features/budget/screens/create_budget/shared_budget/invite_to_budget_dialog.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
@@ -293,15 +294,30 @@ class _BudgetScreenState extends State<BudgetScreen> {
                                   size: 24,
                                 ),
                                 const SizedBox(width: 12),
-                                Text(
-                                  _isSharedBudget ? 'Muokkaa yhteistalousbudjettia' : 'Muokkaa budjettia',
-                                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                                        fontSize: _isSharedBudget ? 15 : 18,
-                                        fontWeight: FontWeight.w800,
-                                        color: Colors.black87,
-                                      ),
-                                      maxLines: _isSharedBudget ? 2 : 1,
+                                Expanded(
+                                  child: Text(
+                                    _isSharedBudget ? 'Muokkaa yhteistalousbudjettia' : 'Muokkaa budjettia',
+                                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                                          fontSize: _isSharedBudget ? 15 : 18,
+                                          fontWeight: FontWeight.w800,
+                                          color: Colors.black87,
+                                        ),
+                                        maxLines: _isSharedBudget ? 2 : 1,
+                                  ),
                                 ),
+                                if (_isSharedBudget && budget.id != null)
+                                  IconButton(
+                                    icon: const Icon(Icons.person_add),
+                                    tooltip: 'Kutsu käyttäjä',
+                                    onPressed: () {
+                                      showDialog(
+                                        context: context,
+                                        builder: (_) => InviteToExistingBudgetDialog(
+                                          sharedBudgetId: budget.id!,
+                                        ),
+                                      );
+                                    },
+                                  ),
                               ],
                             ),
                             const SizedBox(height: 12),

@@ -146,13 +146,11 @@ Future<void> loadBudget({
   /// Poistaa budjetin ja siihen liittyvät tapahtumat.
   Future<void> deleteBudget({required String userId, required String sharedBudgetId}) async {
     try {
-      final expenseProvider = Provider.of<ExpenseProvider>(context, listen: false);
-      await expenseProvider.deleteAllExpensesForBudget(
+      await Provider.of<SharedBudgetProvider>(context, listen: false)
+          .deleteSharedBudget(
         userId: userId,
-        budgetId: sharedBudgetId,
-        isSharedBudget: true,
+        sharedBudgetId: sharedBudgetId,
       );
-      await FirebaseFirestore.instance.collection('shared_budgets').doc(sharedBudgetId).delete();
       _selectedBudget.add(null);
       onBudgetDeleted?.call();
       await FirebaseCrashlytics.instance.log('SharedBudgetScreenController: Shared budget deleted, ID: $sharedBudgetId');

@@ -109,9 +109,14 @@ class SharedBudgetRepository {
     required DateTime startDate,
     required DateTime endDate,
     required String type,
+    List<String>? users,
     bool isPlaceholder = false,
   }) async {
     try {
+      final memberIds = householdUsersForNewPeriod(
+        creatorId: userId,
+        previousUsers: users,
+      );
       final sharedBudget = BudgetModel( // Päivitetty: Käytetään BudgetModel:ia, aseta shared-kentät
         income: income,
         expenses: expenses,
@@ -122,13 +127,11 @@ class SharedBudgetRepository {
         isPlaceholder: isPlaceholder,
         id: sharedBudgetId,
         sharedBudgetId: sharedBudgetId, // Linkki itseensä shared-tapauksessa
-        users: [userId],
+        users: memberIds,
         createdBy: userId,
         name: name,
       );
-      print('SharedBudgetRepository: Luodaan yhteistalousbudjetti, sharedBudgetId: $sharedBudgetId, data: ${sharedBudget.toMap()}');
       await _firestore.collection('shared_budgets').doc(sharedBudgetId).set(sharedBudget.toMap());
-      await FirebaseCrashlytics.instance.log('SharedBudgetRepository: Yhteistalousbudjetti luotu, ID: $sharedBudgetId');
     } catch (e, stackTrace) {
       await FirebaseCrashlytics.instance.recordError(
         e,
@@ -139,12 +142,33 @@ class SharedBudgetRepository {
     }
   }
 
-  /// Luo uuden kutsun olemassa olevalle yhteistalousbudjetille.
+  /// Invite to an existing household plan. Plan must already exist.
   Future<String> createInvitationForExistingBudget({
     required String sharedBudgetId,
     required String inviterId,
+    required String inviterEmail,
     required String inviteeEmail,
+    required String? inviteeUid,
   }) async {
+    final budget = await getSharedBudgetById(sharedBudgetId);
+    if (budget == null) {
+      throw Exception('Budjettia ei löydy');
+    }
+    final pending = await getPendingInvitations(inviteeEmail);
+    final pendingForBudget = pending
+        .where((invite) => invite.sharedBudgetId == sharedBudgetId)
+        .map((invite) => invite.inviteeEmail);
+    final result = validateInvite(
+      inviteeEmail: inviteeEmail,
+      inviterEmail: inviterEmail,
+      inviteeUid: inviteeUid,
+      memberUids: budget.users ?? const [],
+      pendingEmails: pendingForBudget,
+    );
+    if (result != InviteValidation.ok) {
+      throw Exception(inviteValidationMessage(result));
+    }
+
     try {
       final invitationId = const Uuid().v4();
       final invitation = Invitation(
@@ -155,9 +179,7 @@ class SharedBudgetRepository {
         status: 'pending',
         createdAt: DateTime.now(),
       );
-      print('SharedBudgetRepository: Luodaan kutsu, invitationId: $invitationId, sharedBudgetId: $sharedBudgetId, data: ${invitation.toMap()}');
       await _firestore.collection('invitations').doc(invitationId).set(invitation.toMap());
-      await FirebaseCrashlytics.instance.log('SharedBudgetRepository: Kutsu luotu, ID: $invitationId, sharedBudgetId: $sharedBudgetId');
       return invitationId;
     } catch (e, stackTrace) {
       await FirebaseCrashlytics.instance.recordError(

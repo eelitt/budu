@@ -237,6 +237,82 @@ void main() {
     expect(enriched.sharedBudgetName, 'Perhe');
   });
 
+  test('createSharedBudget copies previous members including creator', () async {
+    final fake = FakeFirebaseFirestore();
+    final repo = SharedBudgetRepository(firestore: fake);
+    await repo.createSharedBudget(
+      sharedBudgetId: 's2',
+      userId: 'creator',
+      name: 'Koti',
+      income: 10,
+      expenses: const {},
+      startDate: DateTime(2025, 2, 1),
+      endDate: DateTime(2025, 2, 28),
+      type: 'monthly',
+      users: ['partner', 'creator'],
+    );
+    final loaded = await repo.getSharedBudgetById('s2');
+    expect(loaded!.users, containsAll(['creator', 'partner']));
+    expect(loaded.name, 'Koti');
+  });
+
+  test('createInvitation requires existing plan and rejects self', () async {
+    final fake = FakeFirebaseFirestore();
+    final repo = SharedBudgetRepository(firestore: fake);
+
+    expect(
+      () => repo.createInvitationForExistingBudget(
+        sharedBudgetId: 'missing',
+        inviterId: 'creator',
+        inviterEmail: 'me@x.fi',
+        inviteeEmail: 'you@x.fi',
+        inviteeUid: 'u2',
+      ),
+      throwsA(isA<Exception>()),
+    );
+
+    await repo.createSharedBudget(
+      sharedBudgetId: 's1',
+      userId: 'creator',
+      name: 'Koti',
+      income: 0,
+      expenses: const {},
+      startDate: DateTime(2025, 1, 1),
+      endDate: DateTime(2025, 1, 31),
+      type: 'monthly',
+    );
+
+    expect(
+      () => repo.createInvitationForExistingBudget(
+        sharedBudgetId: 's1',
+        inviterId: 'creator',
+        inviterEmail: 'me@x.fi',
+        inviteeEmail: 'me@x.fi',
+        inviteeUid: 'creator',
+      ),
+      throwsA(isA<Exception>()),
+    );
+
+    final id = await repo.createInvitationForExistingBudget(
+      sharedBudgetId: 's1',
+      inviterId: 'creator',
+      inviterEmail: 'me@x.fi',
+      inviteeEmail: 'you@x.fi',
+      inviteeUid: 'u2',
+    );
+    expect(id, isNotEmpty);
+    expect(
+      () => repo.createInvitationForExistingBudget(
+        sharedBudgetId: 's1',
+        inviterId: 'creator',
+        inviterEmail: 'me@x.fi',
+        inviteeEmail: 'you@x.fi',
+        inviteeUid: 'u2',
+      ),
+      throwsA(isA<Exception>()),
+    );
+  });
+
   test('pending invitations match normalized email', () async {
     final fake = FakeFirebaseFirestore();
     final repo = SharedBudgetRepository(firestore: fake);

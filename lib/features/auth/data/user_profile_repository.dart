@@ -58,7 +58,7 @@ class UserProfileRepository {
       final snap = await _doc(uid).get();
       if (snap.exists) return;
       await _doc(uid).set({
-        'email': email,
+        'email': email.trim().toLowerCase(),
         'isPremium': false,
         'isAdmin': false,
         'createdAt': FieldValue.serverTimestamp(),
@@ -70,6 +70,33 @@ class UserProfileRepository {
         reason: 'Failed to create user document $uid',
       );
       throw Exception('Failed to create user document: $e');
+    }
+  }
+
+  /// Lookup by trimmed lowercase email. Missing or permission-denied → null.
+  Future<String?> getUidByEmail(String email) async {
+    try {
+      final normalized = email.trim().toLowerCase();
+      if (normalized.isEmpty) return null;
+      final snapshot = await _firestore
+          .collection('users')
+          .where('email', isEqualTo: normalized)
+          .limit(1)
+          .get();
+      if (snapshot.docs.isEmpty) return null;
+      return snapshot.docs.first.id;
+    } on FirebaseException catch (e) {
+      if (e.code == 'permission-denied' || e.code == 'failed-precondition') {
+        return null;
+      }
+      rethrow;
+    } catch (e, stackTrace) {
+      await FirebaseCrashlytics.instance.recordError(
+        e,
+        stackTrace,
+        reason: 'Failed to look up user by email',
+      );
+      rethrow;
     }
   }
 

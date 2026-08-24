@@ -8,11 +8,9 @@ import 'package:budu/features/budget/providers/budget_provider.dart';
 import 'package:budu/features/budget/providers/expense_provider.dart';
 import 'package:budu/features/budget/providers/shared_budget_provider.dart';
 import 'package:budu/features/budget/screens/create_budget/create_budget_screen.dart';
-import 'package:budu/features/budget/screens/create_budget/shared_budget/invitation_dialog.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
-import 'package:uuid/uuid.dart';
 import 'package:shared_preferences/shared_preferences.dart'; // Lisätty: SharedPreferences toggle-tilan lukuun
 
 /// Käsittelee pääsivun toimintovalikon (AppBar) valintoja.
@@ -86,43 +84,21 @@ class MainScreenActionsService {
     }
   }
 
-  /// Navigates to shared budget creation screen for sequential budgets.
-  /// Generates a new sharedBudgetId, carries over existing partner (if any) and budget name.
-  /// Used only when a shared budget already exists.
-  void _navigateToSequentialSharedBudget(BuildContext context) {
-    final authProvider = Provider.of<AuthProvider>(context, listen: false);
-    final sharedProvider = Provider.of<SharedBudgetProvider>(context, listen: false);
-
-    final currentUid = authProvider.user!.uid;
+  void _openHouseholdCreate(BuildContext context) {
+    final sharedProvider =
+        Provider.of<SharedBudgetProvider>(context, listen: false);
     final latest = sharedProvider.latestSharedBudget;
-
-    final newSharedBudgetId = const Uuid().v4();
-
-    String? partnerId;
-    String budgetName = 'Yhteistalousbudjetti';
-
-    if (latest != null) {
-      budgetName = latest.name ?? budgetName;
-      final others = latest.users?.where((u) => u != currentUid);
-      partnerId = others?.isNotEmpty == true ? others!.first : null;
-    }
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (context.mounted) {
-        Navigator.pushNamed(
-          context,
-          AppRouter.sharedCreateBudgetRoute,
-          arguments: {
-            'sharedBudgetId': newSharedBudgetId,
-            'user1Id': currentUid,
-            'user2Id': partnerId,
-            'budgetName': budgetName,
-            'inviteeEmail': null,
-            'isNew': true,
-          },
-        );
-      }
-    });
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => CreateBudgetScreen(
+          isShared: true,
+          sourceBudget: latest,
+          householdName: latest?.name,
+          existingMemberIds: latest?.users ?? const [],
+        ),
+      ),
+    );
   }
 
   /// Käsittelee toimintovalikon valinnat.
@@ -195,18 +171,7 @@ class MainScreenActionsService {
     } else if (value == 'create_budget') {
       createBudgetForNextMonth(context, () {});
     } else if (value == 'create_shared_budget') {
-      final sharedProvider = Provider.of<SharedBudgetProvider>(context, listen: false);
-
-      if (sharedProvider.sharedBudgets.isEmpty) {
-        // First-time shared budget: show invitation dialog to invite partner
-        showDialog(
-          context: context,
-          builder: (_) => const InvitationDialog(),
-        );
-      } else {
-        // Sequential shared budget: skip invitation, go directly to creation with templating
-        _navigateToSequentialSharedBudget(context);
-      }
+      _openHouseholdCreate(context);
     } else if (value == 'settings') {
       Navigator.push(
         context,

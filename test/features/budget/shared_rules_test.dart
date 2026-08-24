@@ -44,4 +44,81 @@ void main() {
     );
     expect(invite.toMap()['inviteeEmail'], 'foo@bar.com');
   });
+
+  test('householdUsersForNewPeriod always includes creator and copies others', () {
+    expect(
+      householdUsersForNewPeriod(creatorId: 'a', previousUsers: null),
+      ['a'],
+    );
+    expect(
+      householdUsersForNewPeriod(
+        creatorId: 'a',
+        previousUsers: ['b', 'a', 'c'],
+      ),
+      containsAll(['a', 'b', 'c']),
+    );
+  });
+
+  test('validateInvite rejects empty, self, missing user, member, duplicate', () {
+    expect(
+      validateInvite(
+        inviteeEmail: '  ',
+        inviterEmail: 'me@x.fi',
+        inviteeUid: 'u2',
+        memberUids: ['u1'],
+        pendingEmails: const [],
+      ),
+      InviteValidation.emptyEmail,
+    );
+    expect(
+      validateInvite(
+        inviteeEmail: ' Me@X.FI ',
+        inviterEmail: 'me@x.fi',
+        inviteeUid: 'u1',
+        memberUids: const [],
+        pendingEmails: const [],
+      ),
+      InviteValidation.self,
+    );
+    expect(
+      validateInvite(
+        inviteeEmail: 'you@x.fi',
+        inviterEmail: 'me@x.fi',
+        inviteeUid: null,
+        memberUids: const [],
+        pendingEmails: const [],
+      ),
+      InviteValidation.userNotFound,
+    );
+    expect(
+      validateInvite(
+        inviteeEmail: 'you@x.fi',
+        inviterEmail: 'me@x.fi',
+        inviteeUid: 'u2',
+        memberUids: ['u2'],
+        pendingEmails: const [],
+      ),
+      InviteValidation.alreadyMember,
+    );
+    expect(
+      validateInvite(
+        inviteeEmail: 'you@x.fi',
+        inviterEmail: 'me@x.fi',
+        inviteeUid: 'u2',
+        memberUids: ['u1'],
+        pendingEmails: ['  YOU@x.fi '],
+      ),
+      InviteValidation.duplicatePending,
+    );
+    expect(
+      validateInvite(
+        inviteeEmail: 'you@x.fi',
+        inviterEmail: 'me@x.fi',
+        inviteeUid: 'u2',
+        memberUids: ['u1'],
+        pendingEmails: const [],
+      ),
+      InviteValidation.ok,
+    );
+  });
 }

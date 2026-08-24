@@ -22,4 +22,14 @@ void main() {
     final repo = UserProfileRepository(firestore: fake);
     expect(await repo.getProfile('missing'), isNull);
   });
+
+  test('getUidByEmail is case-insensitive and null when missing', () async {
+    final fake = FakeFirebaseFirestore();
+    final repo = UserProfileRepository(firestore: fake);
+    await repo.ensureUserDocument(uid: 'u1', email: 'foo@bar.com');
+
+    expect(await repo.getUidByEmail('  Foo@Bar.COM '), 'u1');
+    expect(await repo.getUidByEmail('nobody@bar.com'), isNull);
+    expect(await repo.getUidByEmail('  '), isNull);
+  });
 }

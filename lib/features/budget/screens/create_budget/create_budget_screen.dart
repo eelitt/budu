@@ -1,7 +1,10 @@
 import 'package:budu/core/app_router/app_router.dart';
 import 'package:budu/features/auth/providers/auth_provider.dart';
+import 'package:budu/features/budget/domain/periods.dart';
+import 'package:budu/features/budget/domain/shared_rules.dart';
 import 'package:budu/features/budget/models/budget_model.dart';
 import 'package:budu/features/budget/providers/budget_provider.dart';
+import 'package:budu/features/budget/providers/shared_budget_provider.dart';
 import 'package:budu/features/budget/screens/create_budget/budget_calculator.dart';
 import 'package:budu/features/budget/screens/create_budget/budget_initializer.dart';
 import 'package:budu/features/budget/screens/create_budget/budget_saver.dart';
@@ -13,15 +16,21 @@ import 'package:budu/features/budget/screens/create_budget/sections/create_budge
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
+import 'package:uuid/uuid.dart';
 
-/// Näkymä, jossa käyttäjä voi luoda uuden budjetin.
-/// Näyttää aikavälin valinnan, tulot, menot ja yhteenvedon, ja tallentaa budjetin Firestoreen.
+/// Personal budget form. When [isShared], also name + invite queue.
 class CreateBudgetScreen extends StatefulWidget {
-  final BudgetModel? sourceBudget; // Lähdebudjetti, josta tiedot kopioidaan (valinnainen)
+  final BudgetModel? sourceBudget;
+  final bool isShared;
+  final String? householdName;
+  final List<String> existingMemberIds;
 
   const CreateBudgetScreen({
     super.key,
     this.sourceBudget,
+    this.isShared = false,
+    this.householdName,
+    this.existingMemberIds = const [],
   });
 
   @override
@@ -29,20 +38,46 @@ class CreateBudgetScreen extends StatefulWidget {
 }
 
 class _CreateBudgetScreenState extends State<CreateBudgetScreen> {
-  late TextEditingController _incomeController; // Tekstikentän ohjain tulojen syöttämiseen
-  final Map<String, Map<String, TextEditingController>> _expenseControllers = {}; // Kategorioiden ja alakategorioiden ohjaimet
-  String? _errorMessage; // Virheviesti tallennuksen epäonnistuessa
-  late BudgetInitializer _initializer; // Budjetin alustaja
-  late BudgetCalculator _calculator; // Budjetin laskin
-  late BudgetSaver _saver; // Budjetin tallentaja
-  DateTime? _startDate; // Valittu aloituspäivä
-  DateTime? _endDate; // Valittu päättymispäivä
-  String? _type; // Valittu budjetin tyyppi
+  late TextEditingController _incomeController;
+  late TextEditingController _nameController;
+  late TextEditingController _inviteEmailController;
+  final Map<String, Map<String, TextEditingController>> _expenseControllers = {};
+  String? _errorMessage;
+  late BudgetInitializer _initializer;
+  late BudgetCalculator _calculator;
+  late BudgetSaver _saver;
+  DateTime? _startDate;
+  DateTime? _endDate;
+  String? _type;
+  final List<String> _queuedInviteEmails = [];
+
+  late final DateTime _initialStart;
+  late final DateTime _initialEnd;
+  late final String _initialType;
 
   @override
   void initState() {
     super.initState();
     _incomeController = TextEditingController();
+    _nameController = TextEditingController(text: widget.householdName ?? '');
+    _inviteEmailController = TextEditingController();
+    if (widget.sourceBudget?.id != null) {
+      final period = nextPeriodAfter(
+        latestEnd: widget.sourceBudget!.endDate,
+        type: widget.sourceBudget!.type,
+      );
+      _initialStart = period.start;
+      _initialEnd = period.end;
+      _initialType = widget.sourceBudget!.type;
+    } else {
+      final range = monthRange(DateTime.now());
+      _initialStart = range.start;
+      _initialEnd = range.end;
+      _initialType = 'monthly';
+    }
+    _startDate = _initialStart;
+    _endDate = _initialEnd;
+    _type = _initialType;
     _initializer = BudgetInitializer(
       sourceBudget: widget.sourceBudget,
       incomeController: _incomeController,
@@ -55,16 +90,20 @@ class _CreateBudgetScreenState extends State<CreateBudgetScreen> {
       setStateCallback: () => setState(() {}),
     );
     _initializer.initialize();
-    // Alustetaan BudgetSaver oletusarvoilla, päivitetään aikavälin valinnan jälkeen
-    _saver = BudgetSaver(
+    _saver = _buildSaver();
+  }
+
+  BudgetSaver _buildSaver() {
+    return BudgetSaver(
       context: context,
       incomeController: _incomeController,
       expenseControllers: _expenseControllers,
-      startDate: DateTime.now(),
-      endDate: DateTime.now(),
-      type: 'monthly',
+      startDate: _startDate ?? _initialStart,
+      endDate: _endDate ?? _initialEnd,
+      type: _type ?? _initialType,
       totalIncome: _calculator.totalIncome,
       totalExpenses: _calculator.totalExpenses,
+      budgetName: widget.isShared ? _nameController.text.trim() : null,
     );
   }
 
@@ -72,10 +111,85 @@ class _CreateBudgetScreenState extends State<CreateBudgetScreen> {
   void dispose() {
     _initializer.dispose();
     _incomeController.dispose();
+    _nameController.dispose();
+    _inviteEmailController.dispose();
     _expenseControllers.forEach((_, subControllers) {
       subControllers.forEach((_, controller) => controller.dispose());
     });
     super.dispose();
+  }
+
+  Future<void> _queueInvite() async {
+    final auth = Provider.of<AuthProvider>(context, listen: false);
+    final shared = Provider.of<SharedBudgetProvider>(context, listen: false);
+    final email = _inviteEmailController.text;
+    final result = await shared.validateNewInvite(
+      inviterEmail: auth.user?.email ?? '',
+      inviteeEmail: email,
+      memberUids: householdUsersForNewPeriod(
+        creatorId: auth.user?.uid ?? '',
+        previousUsers: widget.existingMemberIds,
+      ),
+      queuedEmails: _queuedInviteEmails,
+    );
+    if (!mounted) return;
+    if (result != InviteValidation.ok) {
+      setState(() => _errorMessage = inviteValidationMessage(result));
+      return;
+    }
+    setState(() {
+      _queuedInviteEmails.add(normalizeInviteEmailForLookup(email));
+      _inviteEmailController.clear();
+      _errorMessage = null;
+    });
+  }
+
+  Future<void> _save() async {
+    if (_startDate == null || _endDate == null || _type == null) {
+      setState(() {
+        _errorMessage = 'Valitse budjetin tyyppi ja aikaväli';
+      });
+      await FirebaseCrashlytics.instance
+          .log('Budjetin tallennus epäonnistui: Aikaväli tai tyyppi puuttuu');
+      return;
+    }
+    if (_startDate!.isAfter(_endDate!)) {
+      setState(() {
+        _errorMessage = 'Alkamispäivä ei voi olla päättymispäivän jälkeen';
+      });
+      await FirebaseCrashlytics.instance
+          .log('Budjetin tallennus epäonnistui: Virheellinen aikaväli');
+      return;
+    }
+    if (widget.isShared && _nameController.text.trim().isEmpty) {
+      setState(() => _errorMessage = 'Syötä budjetin nimi');
+      return;
+    }
+
+    final auth = Provider.of<AuthProvider>(context, listen: false);
+    _saver = _buildSaver();
+    try {
+      if (widget.isShared) {
+        await _saver.createBudget(
+          sharedBudgetId: const Uuid().v4(),
+          budgetName: _nameController.text.trim(),
+          memberIds: householdUsersForNewPeriod(
+            creatorId: auth.user!.uid,
+            previousUsers: widget.existingMemberIds,
+          ),
+          inviteEmails: List<String>.from(_queuedInviteEmails),
+        );
+      } else {
+        await _saver.createBudget();
+      }
+    } catch (_) {
+      // Saver already set errorMessage / showed dialogs.
+    }
+    if (mounted) {
+      setState(() {
+        _errorMessage = _saver.errorMessage;
+      });
+    }
   }
 
   @override
@@ -86,7 +200,7 @@ class _CreateBudgetScreenState extends State<CreateBudgetScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text('Luo budjetti'),
+        title: Text(widget.isShared ? 'Luo yhteistalousbudjetti' : 'Luo budjetti'),
         leading: userId != null
             ? FutureBuilder<List<BudgetModel>>(
                 future: budgetProvider.getAvailableBudgets(userId),
@@ -96,11 +210,12 @@ class _CreateBudgetScreenState extends State<CreateBudgetScreen> {
                       child: Center(child: CircularProgressIndicator()),
                     );
                   }
-                  final hasBudgets = snapshot.hasData && snapshot.data!.isNotEmpty;
+                  final hasBudgets =
+                      snapshot.hasData && snapshot.data!.isNotEmpty;
                   return IconButton(
                     icon: const Icon(Icons.arrow_back),
                     onPressed: () {
-                      if (hasBudgets) {
+                      if (hasBudgets || widget.isShared) {
                         Navigator.pushNamed(
                           context,
                           AppRouter.mainRoute,
@@ -131,29 +246,79 @@ class _CreateBudgetScreenState extends State<CreateBudgetScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Otsikko budjetin aikavälille
+            if (widget.isShared) ...[
+              TextField(
+                controller: _nameController,
+                decoration: const InputDecoration(
+                  labelText: 'Budjetin nimi',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 16),
+              if (widget.existingMemberIds.length > 1)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Text(
+                    'Edellisen jakson jäsenet siirtyvät tähän budjettiin (${widget.existingMemberIds.length}).',
+                    style: const TextStyle(fontSize: 14),
+                  ),
+                ),
+              const Text(
+                'Kutsu käyttäjiä',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _inviteEmailController,
+                      decoration: const InputDecoration(
+                        labelText: 'Sähköposti',
+                        border: OutlineInputBorder(),
+                      ),
+                      keyboardType: TextInputType.emailAddress,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  ElevatedButton(
+                    onPressed: _queueInvite,
+                    child: const Text('Kutsu'),
+                  ),
+                ],
+              ),
+              if (_queuedInviteEmails.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                ..._queuedInviteEmails.map(
+                  (email) => ListTile(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(email),
+                    trailing: IconButton(
+                      icon: const Icon(Icons.close),
+                      onPressed: () {
+                        setState(() => _queuedInviteEmails.remove(email));
+                      },
+                    ),
+                  ),
+                ),
+              ],
+              const SizedBox(height: 24),
+            ],
             const Text(
               'Budjetin aikaväli',
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
-            // Aikavälin valinta
             BudgetDateSection(
+              initialStart: _initialStart,
+              initialEnd: _initialEnd,
+              initialType: _initialType,
               onTypeChanged: (type) {
                 if (mounted) {
                   setState(() {
                     _type = type;
-                    // Päivitä BudgetSaver
-                    _saver = BudgetSaver(
-                      context: context,
-                      incomeController: _incomeController,
-                      expenseControllers: _expenseControllers,
-                      startDate: _startDate ?? DateTime.now(),
-                      endDate: _endDate ?? DateTime.now(),
-                      type: _type ?? 'monthly',
-                      totalIncome: _calculator.totalIncome,
-                      totalExpenses: _calculator.totalExpenses,
-                    );
+                    _saver = _buildSaver();
                   });
                 }
               },
@@ -161,17 +326,7 @@ class _CreateBudgetScreenState extends State<CreateBudgetScreen> {
                 if (mounted) {
                   setState(() {
                     _startDate = startDate;
-                    // Päivitä BudgetSaver
-                    _saver = BudgetSaver(
-                      context: context,
-                      incomeController: _incomeController,
-                      expenseControllers: _expenseControllers,
-                      startDate: _startDate ?? DateTime.now(),
-                      endDate: _endDate ?? DateTime.now(),
-                      type: _type ?? 'monthly',
-                      totalIncome: _calculator.totalIncome,
-                      totalExpenses: _calculator.totalExpenses,
-                    );
+                    _saver = _buildSaver();
                   });
                 }
               },
@@ -179,31 +334,18 @@ class _CreateBudgetScreenState extends State<CreateBudgetScreen> {
                 if (mounted) {
                   setState(() {
                     _endDate = endDate;
-                    // Päivitä BudgetSaver
-                    _saver = BudgetSaver(
-                      context: context,
-                      incomeController: _incomeController,
-                      expenseControllers: _expenseControllers,
-                      startDate: _startDate ?? DateTime.now(),
-                      endDate: _endDate ?? DateTime.now(),
-                      type: _type ?? 'monthly',
-                      totalIncome: _calculator.totalIncome,
-                      totalExpenses: _calculator.totalExpenses,
-                    );
+                    _saver = _buildSaver();
                   });
                 }
               },
             ),
             const SizedBox(height: 24),
-            // Tulot-osio
             IncomeSection(incomeController: _incomeController),
             const SizedBox(height: 24),
-            // Menot-osio
             ExpensesSection(
               expenseControllers: _expenseControllers,
               onUpdate: () => setState(() {}),
             ),
-            // Näyttää virheviestin
             if (_errorMessage != null) ...[
               const SizedBox(height: 16),
               Text(
@@ -212,7 +354,6 @@ class _CreateBudgetScreenState extends State<CreateBudgetScreen> {
               ),
             ],
             const SizedBox(height: 24),
-            // Yhteenveto-osio
             SummarySection(
               totalIncome: _calculator.totalIncome,
               totalExpenses: _calculator.totalExpenses,
@@ -220,31 +361,7 @@ class _CreateBudgetScreenState extends State<CreateBudgetScreen> {
               endDate: _endDate,
             ),
             const SizedBox(height: 24),
-            // Tallenna-painike
-            SaveButton(
-              onPressed: () async {
-                if (_startDate == null || _endDate == null || _type == null) {
-                  setState(() {
-                    _errorMessage = 'Valitse budjetin tyyppi ja aikaväli';
-                  });
-                  await FirebaseCrashlytics.instance.log('Budjetin tallennus epäonnistui: Aikaväli tai tyyppi puuttuu');
-                  return;
-                }
-                if (_startDate!.isAfter(_endDate!)) {
-                  setState(() {
-                    _errorMessage = 'Alkamispäivä ei voi olla päättymispäivän jälkeen';
-                  });
-                  await FirebaseCrashlytics.instance.log('Budjetin tallennus epäonnistui: Virheellinen aikaväli');
-                  return;
-                }
-                await _saver.createBudget();
-                if (mounted) {
-                  setState(() {
-                    _errorMessage = _saver.errorMessage;
-                  });
-                }
-              },
-            ),
+            SaveButton(onPressed: _save),
           ],
         ),
       ),

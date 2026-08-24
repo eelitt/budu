@@ -1,7 +1,6 @@
 import 'package:budu/features/budget/domain/periods.dart';
 import 'package:budu/features/budget/models/budget_model.dart';
 import 'package:budu/features/budget/screens/create_budget/create_budget_screen.dart';
-import 'package:budu/features/budget/screens/create_budget/shared_budget/shared_create_budget_screen.dart';
 import 'package:budu/features/budget/screens/summary/summary_screen.dart';
 import 'package:budu/features/chatbot/providers/chatbot_provider.dart';
 import 'package:budu/features/chatbot/screens/chatbot/chatbot_screen.dart';
@@ -17,7 +16,7 @@ import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 /// Hallinnoi sovelluksen reittejä ja siirtymiä.
 /// Käyttää fade-animaatiota kaikissa reiteissä yhtenäisyyden vuoksi.
 /// Optimointi: Virheenkäsittely Crashlytics-loggauksella, tyypitys arguments:ille.
-/// Päivitetty: Lisätty optional 'isNew'-tuki sharedCreateBudgetRoute:lle (ei riko vanhaa, parantaa uuden budjetin luontia).
+/// Household create uses [CreateBudgetScreen] with `isShared: true`, not a separate route.
 class AppRouter {
   static const String loginRoute = '/login';
   static const String mainRoute = '/main';
@@ -26,7 +25,6 @@ class AppRouter {
   static const String historyRoute = '/history';
   static const String chatbotRoute = '/chatbot';
   static const String createBudgetRoute = '/create-budget';
-  static const String sharedCreateBudgetRoute = '/shared-create-budget';
 
   // Mukautettu siirtymäanimaatio FadeTransition (yhtenäinen kaikille reiteille)
   static PageRouteBuilder _createFadeRoute(Widget page) {
@@ -86,27 +84,6 @@ class AppRouter {
                 endDate: range.end,
                 type: 'monthly',
               ),
-            ),
-          );
-        case sharedCreateBudgetRoute:
-          print('AppRouter: Generoidaan reitti: $sharedCreateBudgetRoute');
-          final args = settings.arguments as Map<String, dynamic>?;
-          if (args == null ||
-              args['sharedBudgetId'] == null ||
-              args['user1Id'] == null ||
-              args['budgetName'] == null) {
-            print('AppRouter: Virheelliset argumentit sharedCreateBudgetRoute:lle: $args');
-            FirebaseCrashlytics.instance.log('AppRouter: Virheelliset argumentit sharedCreateBudgetRoute:lle: $args');
-            return _createFadeRoute(const LoginScreen());
-          }
-          return _createFadeRoute(
-            SharedCreateBudgetScreen(
-              sharedBudgetId: args['sharedBudgetId'] as String,
-              user1Id: args['user1Id'] as String,
-              user2Id: args['user2Id'] as String?,
-              budgetName: args['budgetName'] as String,
-              inviteeEmail: args['inviteeEmail'] as String?, // Lisätty: Välitetään inviteeEmail, jos annettu
-              isNew: args['isNew'] as bool? ?? false, // Lisätty: Välitetään isNew optionalina (default false)
             ),
           );
         default:

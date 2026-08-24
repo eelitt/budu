@@ -13,12 +13,18 @@ class BudgetDateSection extends StatefulWidget {
   final Function(String?) onTypeChanged; // Callback tyypin muutokselle
   final Function(DateTime?) onStartDateChanged; // Callback aloituspäivän muutokselle
   final Function(DateTime?) onEndDateChanged; // Callback päättymispäivän muutokselle
+  final DateTime? initialStart;
+  final DateTime? initialEnd;
+  final String? initialType;
 
   const BudgetDateSection({
     super.key,
     required this.onTypeChanged,
     required this.onStartDateChanged,
     required this.onEndDateChanged,
+    this.initialStart,
+    this.initialEnd,
+    this.initialType,
   });
 
   @override
@@ -57,6 +63,24 @@ class _BudgetDateSectionState extends State<BudgetDateSection> {
   /// Lataa ehdotettu aikaväli viimeisimmän budjetin perusteella
   Future<void> _loadSuggestedPeriod() async {
     try {
+      if (widget.initialStart != null && widget.initialEnd != null) {
+        if (mounted) {
+          final startDate = widget.initialStart!;
+          final endDate = widget.initialEnd!;
+          _selectedType = widget.initialType ?? 'monthly';
+          setState(() {
+            _suggestedStartDate = startDate;
+            _suggestedEndDate = endDate;
+            _startDateController.text = DateFormat('d.M.yyyy').format(startDate);
+            _endDateController.text = DateFormat('d.M.yyyy').format(endDate);
+            _isLoading = false;
+            widget.onTypeChanged(_selectedType);
+            widget.onStartDateChanged(startDate);
+            widget.onEndDateChanged(endDate);
+          });
+        }
+        return;
+      }
       final authProvider = Provider.of<AuthProvider>(context, listen: false);
       final budgetProvider = Provider.of<BudgetProvider>(context, listen: false);
       if (authProvider.user != null) {

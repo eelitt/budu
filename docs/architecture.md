@@ -9,7 +9,7 @@ Models: `lib/features/budget/models/`. Limits and default categories: `lib/core/
 ## Core logic (read this first)
 
 **What does it do?**
-A signed-in user plans income and expense caps for a date range, records actual income and expense events against that plan, and sees whether spending is within the caps. A plan can be personal or shared with another person via email invite.
+A signed-in user plans income and expense caps for a date range, records actual income and expense events against that plan, and sees whether spending is within the caps. A plan can be personal or a household plan shared with other people via email invite.
 
 **What is the core logic?**
 Two layers of money that must not be mixed:
@@ -37,10 +37,10 @@ Invariants the rest of this file spells out:
 - A budget is a period (`monthly` / `biweekly` / `custom`). Placeholders are not real budgets.
 - Planned expenses are a two-level tree (main → sub → amount). Zero/empty nodes are dropped on save. Amounts round to 2 decimals.
 - Expense events do not mutate the plan. Income events do (add/subtract `income`).
-- Overlap, empty plan, and planned expenses > income are warnings, not hard blocks.
+- Overlap (same type only), empty plan, and planned expenses > income are warnings, not hard blocks. Personal and household plans for the same dates are allowed.
+- Shared: invite `pending` → `accepted` (user added to `users`) or `declined`. `isShared` when `users` is non-empty. No member cap. Sequential periods copy `users` and name. Invitee must already have a user doc; invite is written only after the plan exists.
 - Expense amount `≥ 0` and `≤ 99999`; category required; subcategory required if that category has subs; description `≤ 50` chars. Planned income, if set, `≥ 0` and `≤ 999999`.
 - Max 25 main categories, 20 subs each, names `≤ 20` chars, no duplicates.
-- Shared: invite `pending` → `accepted` (user added to `users`) or `declined`. `isShared` when `users` is non-empty.
 - Reminders use personal **and** shared `startDate`s: no budget this calendar month → warn; no next-month budget → warn only in the last 3 days of the month. Chatbot save is personal only; login skips chatbot if the user already has a shared budget.
 - Chatbot: 2-week answers stored as monthly/2; yearly answers stored as /12. Chatbot saves personal budgets only.
 
@@ -131,7 +131,7 @@ Creating from scratch seeds empty main categories from `categoryMapping` (no sub
 
 The user can continue after confirming:
 
-- The new range overlaps an existing personal (`budgets/{uid}/budgets`) or shared (`shared_budgets`) budget (`startDate ≤ newEnd` and `endDate ≥ newStart`). Editing skips the budget being saved. A failed overlap load does not count as “no overlap”.
+- The new range overlaps another plan of the **same kind** (personal vs personal, or household vs household). Personal and household for the same dates do not warn. Editing skips the budget being saved. A failed overlap load does not count as “no overlap”.
 - Income is `0` and there are no planned expenses.
 - Planned expenses exceed planned income.
 
@@ -196,8 +196,11 @@ Limits:
 
 ## Shared household
 
-- Plan document: `shared_budgets/{id}` with `users: [creator, …]`, `createdBy`, `name`.
-- Invite: `invitations/{id}` with `status: pending`. Invitee email is stored trimmed and lowercased (`Invitation.toMap` / create invitation).
+- Created from the same form as a personal plan, plus a **required name** and optional email invites.
+- Plan document: `shared_budgets/{id}` with `users: [creator, …]`, `createdBy`, `name`. No member cap.
+- Sequential create copies the previous period’s income/tree, name, and full `users` list, then advances the dates.
+- Invite only after the plan exists. Invitee must already have `users/{uid}` (email lookup is trim + lowercase). Reject: empty, self, already a member, duplicate pending for that plan. Pending emails are queued on create and written after save.
+- Invite: `invitations/{id}` with `status: pending`. Invitee email is stored trimmed and lowercased.
 - Accept: one Firestore transaction — set invitation `accepted` and `arrayUnion` the user’s uid onto `users`.
 - Decline: set `status: declined`.
 - Events: `shared_budgets/{id}/events`, with `userId` of the author.
