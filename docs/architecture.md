@@ -251,6 +251,34 @@ budgets/{uid}/monthly_budgets/{year}_{month}
 
 ---
 
+## Application updater
+
+The updater runs from the login flow and can also be started from the main-screen developer menu. It supports Android APK updates; it does not update the application through an app store.
+
+### Current flow
+
+1. `LoginScreen` creates an `UpdateManager` and starts `checkAndHandleUpdate` during initialization.
+2. `UpdateManager` asks `UpdateHandler` to perform the check through `UpdateService`.
+3. `UpdateService` reads the public version file at `https://raw.githubusercontent.com/eelitt/budu/main/version.txt` and compares it with the installed package version. It returns this result as typed `UpdateInfo` data.
+4. If the version is newer, `UpdateService` requests `https://api.github.com/repos/eelitt/budu/releases/latest`, selects the first `.apk` asset, and returns its public `browser_download_url`. A newer version without an APK is represented separately from an available downloadable update.
+6. `UpdateHandler` checks Android install permission and network connectivity, then presents the update confirmation dialog.
+7. After confirmation, `UpdateManager` creates one broadcast download stream per attempt. The progress dialog and completion handling consume that same stream, so the APK is downloaded only once. `UpdateService` streams the file into the platform temporary directory and calls `OpenFile.open` to hand it to Android's package installer.
+8. On a successful install handoff, `UpdateHandler` stores `isUpdated` and `updatedVersion` in `SharedPreferences` and clears its required-update state.
+
+The developer-menu changelog path uses the public GitHub Contents API at `https://api.github.com/repos/eelitt/budu/contents/changelog.txt` and requests the raw file contents. No GitHub token or bundled `.env` configuration is used by the updater.
+
+### Updater state and caveats
+
+- `UpdateService` owns version lookup, GitHub requests, APK download, temporary-file storage, and opening the APK. Public metadata requests have timeouts and validate version/release responses.
+- `UpdateHandler` owns the update result, install permission, connectivity, download state, and update persistence.
+- `UpdateManager` coordinates dialogs and the download flow. It shares one broadcast download stream between progress rendering and completion handling.
+- `MainScreenUpdateDialogService` contains a separate manual/debug update-check path.
+- The current release API response must contain at least one `.apk` asset. A newer `version.txt` without an APK asset produces no downloadable update.
+- Update requests are unauthenticated because the repository and release metadata are public. The APK download uses the asset's `browser_download_url`.
+- The updater implementation and planned simplification are documented in [`updater_rework.md`](updater_rework.md).
+
+---
+
 ## Caveats (as implemented)
 
 - `Budget.remaining` is planned leftover, not actual remaining cash.

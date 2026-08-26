@@ -13,28 +13,14 @@ class MainScreenUpdateDialogService {
     BuildContext context, {
     String? debugVersion,
   }) async {
+    if (debugVersion == null) return;
+
     try {
-      String currentVersion;
-      String latestVersion;
-      String? apkUrl;
+      // Debug-tila: Simuloi päivitysdialogi
+      final currentVersion = await _updateService.getAppVersion();
+      final latestVersion = debugVersion;
 
-      if (debugVersion != null) {
-        // Debug-tila: Simuloi päivitysdialogi
-        currentVersion = await _updateService.getAppVersion();
-        latestVersion = debugVersion;
-        apkUrl = 'https://example.com/test.apk'; // Simuloitu APK-URL
-      } else {
-        // Normaali päivitystarkistus
-        final updateInfo = await _updateService.checkForUpdate(context);
-        if (!(updateInfo['isUpdateAvailable'] ?? false)) {
-          return; // Ei päivitystä, ei näytetä dialogia
-        }
-        currentVersion = updateInfo['currentVersion'] as String;
-        latestVersion = updateInfo['latestVersion'] as String;
-        apkUrl = updateInfo['apkUrl'] as String?;
-      }
-
-      if (context.mounted && apkUrl != null) {
+      if (context.mounted) {
         await showDialog(
           context: context,
           barrierDismissible: false,

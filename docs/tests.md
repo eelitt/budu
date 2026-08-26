@@ -34,6 +34,8 @@ Production rules sit in `lib/features/budget/domain/`. Tests call those function
 | ISO date writes + Timestamp reads | `date_encoding_test.dart` |
 | `NotificationProvider.markAsRead` | `test/features/notification/notification_mark_as_read_test.dart` |
 | `UserProfileRepository` | `test/features/auth/user_profile_repository_test.dart` |
+| Updater result states, version comparison, metadata validation, and APK URL selection | `test/features/update/update_info_test.dart` |
+| Updater download invocation | `test/features/update/update_handler_test.dart` |
 
 Repositories are constructed with `FakeFirebaseFirestore` (`fake_cloud_firestore` dev dependency). Use `BudgetModel.parse` / `ExpenseEvent.parse` in unit tests, not `fromMap` — `fromMap` logs Crashlytics on failure.
 

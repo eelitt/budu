@@ -1,25 +1,25 @@
 import 'package:budu/core/utils.dart'; // Lisätty showErrorSnackBar-import
 import 'package:budu/features/update/dialogs/update_dialog.dart';
-import 'package:budu/features/update/providers/update_provider.dart';
 import 'package:budu/features/update/services/update_service.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:open_file/open_file.dart';
-import 'package:package_info_plus/package_info_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart'; // Lisätty Crashlytics-import
 
 /// Käsittelee sovelluksen päivitykset, mukaan lukien tarkistus, lataus ja asennusoikeudet.
 class UpdateHandler with ChangeNotifier {
-  final UpdateService _updateService = UpdateService(); // Päivityspalvelu
+  UpdateHandler({UpdateService? updateService})
+      : _updateService = updateService ?? UpdateService();
+
+  final UpdateService _updateService; // Päivityspalvelu
   bool _isUpdateRequired = false; // Onko päivitys pakollinen
   String? _apkUrl; // APK-tiedoston lataus-URL
   String? _latestVersion; // Uusin versio
+  String? _currentVersion; // Sovelluksen nykyinen versio
   double _downloadProgress = 0.0; // Latausprogressi (0-100)
   bool _isDownloading = false; // Onko lataus käynnissä
-  String? _currentVersion; // Sovelluksen nykyinen versio
 
   // Getterit tilamuuttujille
   bool get isUpdateRequired => _isUpdateRequired;
@@ -27,20 +27,17 @@ class UpdateHandler with ChangeNotifier {
   double get downloadProgress => _downloadProgress;
   String? get apkUrl => _apkUrl;
   String? get latestVersion => _latestVersion;
-  String? get currentVersion => _currentVersion;
 
   /// Tarkistaa, onko sovellukselle saatavilla päivitys, ja näyttää päivitysdialogin.
-  Future<void> checkForAppUpdate(BuildContext context, UpdateProvider updateProvider) async {
+  Future<void> checkForAppUpdate(BuildContext context) async {
     try {
-      await updateProvider.checkForUpdate(context);
+      final updateInfo = await _updateService.checkForUpdate();
+      _currentVersion = updateInfo.currentVersion;
 
-      if (updateProvider.isUpdateAvailable && updateProvider.apkUrl != null) {
+      if (updateInfo.isUpdateAvailable) {
         _isUpdateRequired = true;
-        _apkUrl = updateProvider.apkUrl;
-        _latestVersion = updateProvider.latestVersion;
-
-        final packageInfo = await PackageInfo.fromPlatform();
-        _currentVersion = packageInfo.version;
+        _apkUrl = updateInfo.apkUrl;
+        _latestVersion = updateInfo.latestVersion;
 
         final hasInstallPermission = await _checkInstallPermission();
         if (!hasInstallPermission) {
@@ -86,7 +83,7 @@ class UpdateHandler with ChangeNotifier {
                     TextButton(
                       onPressed: () {
                         Navigator.pop(context);
-                        checkForAppUpdate(context, updateProvider);
+                        checkForAppUpdate(context);
                       },
                       child: const Text('Yritä uudelleen'),
                     ),
@@ -128,7 +125,7 @@ class UpdateHandler with ChangeNotifier {
   /// Tarkistaa, onko laitteella internet-yhteys.
   Future<bool> _checkConnectivity() async {
     final connectivityResult = await Connectivity().checkConnectivity();
-    return connectivityResult != ConnectivityResult.none;
+    return !connectivityResult.contains(ConnectivityResult.none);
   }
 
   /// Näyttää päivitysdialogin, joka kysyy käyttäjältä, haluaako hän ladata päivityksen.
@@ -204,9 +201,10 @@ class UpdateHandler with ChangeNotifier {
   }
 
   /// Pyytää asennusoikeudet ja ohjaa käyttäjän asetuksiin, jos oikeuksia ei ole.
-  Future<void> requestInstallPermission(BuildContext context, String apkUrl, String latestVersion) async {
-    if (context.mounted) {
-      await showDialog(
+  Future<bool> requestInstallPermission(BuildContext context) async {
+    if (!context.mounted) return false;
+
+    final openSettings = await showDialog<bool>(
         context: context,
         barrierDismissible: false,
         builder: (context) {
@@ -216,36 +214,7 @@ class UpdateHandler with ChangeNotifier {
             actions: [
               TextButton(
                 onPressed: () async {
-                  Navigator.pop(context);
-                  await openAppSettings();
-                  if (context.mounted) {
-                    await showDialog(
-                      context: context,
-                      barrierDismissible: false,
-                      builder: (context) {
-                        return AlertDialog(
-                          title: const Text('Yritä uudelleen'),
-                          content: const Text('Haluatko yrittää asennusta uudelleen?'),
-                          actions: [
-                            TextButton(
-                              onPressed: () {
-                                Navigator.pop(context);
-                              },
-                              child: const Text('Kyllä'),
-                            ),
-                            TextButton(
-                              onPressed: () {
-                                Navigator.pop(context);
-                                final updateProvider = Provider.of<UpdateProvider>(context, listen: false);
-                                checkForAppUpdate(context, updateProvider);
-                              },
-                              child: const Text('Ei'),
-                            ),
-                          ],
-                        );
-                      },
-                    );
-                  }
+                  Navigator.pop(context, true);
                 },
                 child: const Text('Avaa asetukset'),
               ),
@@ -253,6 +222,10 @@ class UpdateHandler with ChangeNotifier {
           );
         },
       );
-    }
+
+    if (openSettings != true) return false;
+    await openAppSettings();
+    if (!context.mounted) return false;
+    return _checkInstallPermission();
   }
 }

@@ -9,7 +9,6 @@ import 'features/auth/providers/user_provider.dart';
 import 'features/budget/providers/budget_provider.dart';
 import 'features/budget/providers/expense_provider.dart';
 import 'features/notification/providers/notification_provider.dart';
-import 'features/update/providers/update_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -29,7 +28,6 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => BudgetProvider()),
         ChangeNotifierProvider(create: (_) => ExpenseProvider()),
         ChangeNotifierProvider(create: (_) => NotificationProvider()),
-        ChangeNotifierProvider(create: (_) => UpdateProvider()),
         ChangeNotifierProvider(create: (_) => SharedBudgetProvider()),
       ],
       child: MaterialApp(

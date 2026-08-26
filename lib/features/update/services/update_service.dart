@@ -1,13 +1,17 @@
 import 'dart:convert';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
-import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:open_file/open_file.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
+import '../models/update_info.dart';
 import 'dart:io';
 
 class UpdateService {
+  UpdateService({http.Client? client}) : _client = client ?? http.Client();
+
+  final http.Client _client;
+  static const _requestTimeout = Duration(seconds: 10);
   static final _versionUrl = Uri.parse(
     'https://raw.githubusercontent.com/eelitt/budu/main/version.txt',
   );
@@ -31,16 +35,16 @@ class UpdateService {
   }
 
   // Tarkastetaan GitHubista, onko uutta versiota saatavilla
-  Future<Map<String, dynamic>> checkForUpdate(BuildContext context) async {
+  Future<UpdateInfo> checkForUpdate() async {
     final currentVersion = await getAppVersion();
 
-    final response = await http.get(
+    final response = await _client.get(
       _versionUrl,
       headers: {
         'Accept': 'application/vnd.github.v3.raw',
         'User-Agent': 'Budu',
       },
-    );
+    ).timeout(_requestTimeout);
 
     if (response.statusCode != 200) {
       FirebaseCrashlytics.instance.recordError(
@@ -48,33 +52,53 @@ class UpdateService {
         StackTrace.current,
         reason: 'GitHub-version tarkistus epäonnistui',
       );
-      return {'isUpdateAvailable': false};
+      return UpdateInfo(
+        currentVersion: currentVersion,
+        latestVersion: currentVersion,
+        hasNewerVersion: false,
+      );
     }
 
     final latestVersion = response.body.trim();
-    final isUpdateAvailable = _isNewerVersion(latestVersion, currentVersion);
+    if (!_isValidVersion(latestVersion)) {
+      return UpdateInfo(
+        currentVersion: currentVersion,
+        latestVersion: currentVersion,
+        hasNewerVersion: false,
+      );
+    }
+    final isNewerVersion = isNewerVersionString(latestVersion, currentVersion);
     String? apkUrl;
 
-    if (isUpdateAvailable) {
-      apkUrl = await _fetchApkUrl(latestVersion);
+    if (isNewerVersion) {
+      apkUrl = await _fetchApkUrl();
     }
-    
-    return {
-      'isUpdateAvailable': isUpdateAvailable,
-      'latestVersion': latestVersion,
-      'apkUrl': apkUrl,
-      'currentVersion': currentVersion,
-    };
+
+    return UpdateInfo(
+      currentVersion: currentVersion,
+      latestVersion: latestVersion,
+        hasNewerVersion: isNewerVersion,
+      apkUrl: apkUrl,
+    );
+  }
+
+  bool _isValidVersion(String version) {
+    return RegExp(r'^\d+(\.\d+)*$').hasMatch(version);
   }
 
   // Tarkastetaan, onko uudempi versio
-  bool _isNewerVersion(String latest, String current) {
+  static bool isNewerVersionString(String latest, String current) {
     try {
-      final latestParts = latest.split('.').map(int.parse).toList();
-      final currentParts = current.split('.').map(int.parse).toList();
-      for (int i = 0; i < latestParts.length; i++) {
-        if (latestParts[i] > currentParts[i]) return true;
-        if (latestParts[i] < currentParts[i]) return false;
+      final latestParts = latest.trim().split('.').map(int.parse).toList();
+      final currentParts = current.trim().split('.').map(int.parse).toList();
+      final componentCount = latestParts.length > currentParts.length
+          ? latestParts.length
+          : currentParts.length;
+      for (int i = 0; i < componentCount; i++) {
+        final latestPart = i < latestParts.length ? latestParts[i] : 0;
+        final currentPart = i < currentParts.length ? currentParts[i] : 0;
+        if (latestPart > currentPart) return true;
+        if (latestPart < currentPart) return false;
       }
       return false;
     } catch (e) {
@@ -88,14 +112,14 @@ class UpdateService {
   }
 
   // Haetaan APK-tiedoston URL GitHub Releases -osiosta
-  Future<String?> _fetchApkUrl(String latestVersion) async {
-    final releaseResponse = await http.get(
+  Future<String?> _fetchApkUrl() async {
+    final releaseResponse = await _client.get(
       _releasesUrl,
       headers: {
         'Accept': 'application/vnd.github+json',
         'User-Agent': 'Budu',
       },
-    );
+    ).timeout(_requestTimeout);
 
     if (releaseResponse.statusCode != 200) {
       FirebaseCrashlytics.instance.recordError(
@@ -106,25 +130,36 @@ class UpdateService {
       return null;
     }
 
-    final releaseData = jsonDecode(releaseResponse.body) as Map<String, dynamic>;
+    dynamic decoded;
+    try {
+      decoded = jsonDecode(releaseResponse.body);
+    } catch (_) {
+      return null;
+    }
+    if (decoded is! Map<String, dynamic>) {
+      return null;
+    }
+    final releaseData = decoded;
     final assets = releaseData['assets'] as List<dynamic>?;
 
     if (assets == null || assets.isEmpty) {
       return null;
     }
 
-    final apkAsset = assets
-        .cast<Map<String, dynamic>>()
-        .firstWhere(
-          (asset) => (asset['name'] as String).endsWith('.apk'),
-          orElse: () => <String, dynamic>{},
-        );
-
-    if (apkAsset.isEmpty) {
-      return null;
+    for (final asset in assets) {
+      if (asset is Map<String, dynamic>) {
+        final name = asset['name'];
+        final downloadUrl = asset['browser_download_url'];
+        if (name is String &&
+            downloadUrl is String &&
+            name.toLowerCase().endsWith('.apk') &&
+            downloadUrl.isNotEmpty) {
+          return downloadUrl;
+        }
+      }
     }
 
-    return apkAsset['browser_download_url'] as String;
+    return null;
   }
 
   // Ladataan ja avataan APK-tiedosto, palautetaan tulos ja päivitysprogression
@@ -139,7 +174,8 @@ class UpdateService {
       request.headers['User-Agent'] = 'Budu';
 
       // Suoritetaan lataus Stream-muodossa
-      final streamedResponse = await request.send();
+      final streamedResponse =
+          await _client.send(request).timeout(_requestTimeout);
 
       if (streamedResponse.statusCode != 200) {
         throw Exception('Päivityksen lataaminen epäonnistui: HTTP ${streamedResponse.statusCode}');
@@ -152,7 +188,7 @@ class UpdateService {
       final sink = apkFile.openWrite();
 
       // Kuunnellaan latausstreamia ja päivitetään progress
-      await for (var chunk in streamedResponse.stream) {
+      await for (var chunk in streamedResponse.stream.timeout(_requestTimeout)) {
         receivedBytes += chunk.length;
         sink.add(chunk);
 
