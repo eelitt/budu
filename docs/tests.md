@@ -10,7 +10,19 @@ From the repo root:
 flutter test
 ```
 
-All cases live under `test/features/budget/`. There is no widget test that pumps `MyApp` (that would initialize Firebase).
+Android updater integration tests require a connected Android device. The runner refuses to start when Flutter reports no Android device:
+
+```powershell
+.\tool\run_android_integration_tests.ps1
+```
+
+To select a specific connected device:
+
+```powershell
+.\tool\run_android_integration_tests.ps1 -DeviceId <device-id>
+```
+
+Unit cases live under `test/features/`; most domain cases are under `test/features/budget/`. The device integration case lives under `integration_test/` and is not run by the normal `flutter test` command. There is no regular widget test that pumps `MyApp` because that would initialize Firebase; the Android integration test initializes Firebase explicitly.
 
 ## Layout
 
@@ -73,6 +85,8 @@ Date-dependent rules take `now`. Production callers pass `DateTime.now()`.
 
 **Events for one budget** — `EventRepository.getEventsForBudget` returns every matching event (no 50-event cap). Extra `budgetId`s are excluded. Shared path uses `shared_budgets/{id}/events`. Empty personal `events` falls back to legacy `monthly_budgets/.../expenses`. Tracking totals on the loaded list include all of those expenses. `saveEvent` / `deleteEvent` write that same `events` collection. History uses that uncapped load for each period in the filter list.
 
+**Android updater integration** — `integration_test/updater_android_test.dart` runs only through the device runner, which uses `flutter drive` and refuses to start without an Android device. It launches `MyApp`, reads the installed Android package version, and verifies the public GitHub update metadata contract. APK installation and system-settings permission flows still require manual device validation.
+
 **Event loading races** — `ExpenseProvider.loadExpenses` ignores an older asynchronous result when a newer budget selection has started loading.
 
 **Income events** — adding or deleting an income event does not change planned `Budget.income`.
@@ -89,8 +103,33 @@ Date-dependent rules take `now`. Production callers pass `DateTime.now()`.
 4. For Firestore, inject `FakeFirebaseFirestore` into the repository constructor.
 5. `flutter test`.
 
+### Android updater integration
+
+The Android test requires:
+
+- a connected Android phone or emulator visible to `flutter devices --machine`
+- USB debugging enabled and the device authorized
+- a working Android build toolchain
+- network access to the public GitHub endpoints
+
+Run it only through the device runner:
+
+```powershell
+.\tool\run_android_integration_tests.ps1
+```
+
+The runner selects the first connected Android device. To select one explicitly:
+
+```powershell
+.\tool\run_android_integration_tests.ps1 -DeviceId <device-id>
+```
+
+The runner fails before starting Flutter when no Android device is available or when the requested device ID is not connected. Do not include `integration_test/updater_android_test.dart` in the normal `flutter test` command; Flutter treats the integration and unit test modes separately in this project.
+
+The current integration test verifies app launch, Firebase initialization, installed-version lookup, and public update metadata. It does not perform a real APK installation, grant the unknown-apps permission, return from Android settings, or verify post-install `SharedPreferences` state.
+
 If the code today is surprising, test that surprise and mention it in `architecture.md` caveats. Do not “fix” a caveat in the same change as extracting it unless that is the task.
 
 ## Not covered here
 
-Widget trees, Google sign-in, Crashlytics, auto-update, chatbot question copy/routing, theme, Cloud Functions stub. Persistence tests use the fake only; they do not hit a real project or emulator.
+Widget trees, Google sign-in, Crashlytics, full auto-update installation flow, chatbot question copy/routing, theme, and Cloud Functions stub. Unit persistence tests use the fake Firestore only; they do not hit a real project. The updater integration test is the exception: it runs on a connected Android device and reaches the public GitHub endpoints, but it still does not install a release APK.

@@ -261,9 +261,9 @@ The updater runs from the login flow and can also be started from the main-scree
 2. `UpdateManager` asks `UpdateHandler` to perform the check through `UpdateService`.
 3. `UpdateService` reads the public version file at `https://raw.githubusercontent.com/eelitt/budu/main/version.txt` and compares it with the installed package version. It returns this result as typed `UpdateInfo` data.
 4. If the version is newer, `UpdateService` requests `https://api.github.com/repos/eelitt/budu/releases/latest`, selects the first `.apk` asset, and returns its public `browser_download_url`. A newer version without an APK is represented separately from an available downloadable update.
-6. `UpdateHandler` checks Android install permission and network connectivity, then presents the update confirmation dialog.
-7. After confirmation, `UpdateManager` creates one broadcast download stream per attempt. The progress dialog and completion handling consume that same stream, so the APK is downloaded only once. `UpdateService` streams the file into the platform temporary directory and calls `OpenFile.open` to hand it to Android's package installer.
-8. On a successful install handoff, `UpdateHandler` stores `isUpdated` and `updatedVersion` in `SharedPreferences` and clears its required-update state.
+5. `UpdateHandler` checks Android install permission and network connectivity, then presents the update confirmation dialog. If install permission is missing, it can open Android settings and reports whether permission was granted. If connectivity is missing, it offers a retry of the update check.
+6. After confirmation, `UpdateManager` creates one broadcast download stream per attempt. The progress dialog and completion handling consume that same stream, so the APK is downloaded only once. `UpdateService` streams the file into the platform temporary directory and calls `OpenFile.open` to hand it to Android's package installer.
+7. On a successful install handoff, `UpdateHandler` stores `isUpdated` and `updatedVersion` in `SharedPreferences` and clears its required-update state.
 
 The developer-menu changelog path uses the public GitHub Contents API at `https://api.github.com/repos/eelitt/budu/contents/changelog.txt` and requests the raw file contents. No GitHub token or bundled `.env` configuration is used by the updater.
 
@@ -271,11 +271,18 @@ The developer-menu changelog path uses the public GitHub Contents API at `https:
 
 - `UpdateService` owns version lookup, GitHub requests, APK download, temporary-file storage, and opening the APK. Public metadata requests have timeouts and validate version/release responses.
 - `UpdateHandler` owns the update result, install permission, connectivity, download state, and update persistence.
-- `UpdateManager` coordinates dialogs and the download flow. It shares one broadcast download stream between progress rendering and completion handling.
-- `MainScreenUpdateDialogService` contains a separate manual/debug update-check path.
+- `UpdateManager` coordinates dialogs and the download flow. It shares one broadcast download stream between progress rendering and completion handling, and owns the explicit download retry loop and progress-dialog cleanup.
+- Normal developer-menu checks use `UpdateManager`; `MainScreenUpdateDialogService` is retained only for the explicit debug update simulation.
 - The current release API response must contain at least one `.apk` asset. A newer `version.txt` without an APK asset produces no downloadable update.
 - Update requests are unauthenticated because the repository and release metadata are public. The APK download uses the asset's `browser_download_url`.
-- The updater implementation and planned simplification are documented in [`updater_rework.md`](updater_rework.md).
+- `UpdateHandler` still owns the connectivity retry prompt, which calls the update-check flow again. The updater implementation and remaining rework notes are documented in [`updater_rework.md`](updater_rework.md).
+
+### Updater testing
+
+- Unit tests run without Firebase initialization and cover typed update results, version comparison, malformed metadata, APK asset selection, and the one-download service contract.
+- The Android integration smoke test is `integration_test/updater_android_test.dart`. It initializes Firebase, launches `MyApp`, reads the installed Android package version, and requests the public GitHub metadata.
+- The integration test is intentionally not part of the normal `flutter test` run. Use `tool/run_android_integration_tests.ps1`, which selects a connected Android device and invokes `flutter drive`.
+- The integration smoke test does not install an APK or open Android system settings. Those flows require a real release with a higher version and manual device verification.
 
 ---
 
