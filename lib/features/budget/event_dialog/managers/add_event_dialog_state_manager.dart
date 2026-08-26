@@ -169,5 +169,6 @@ class AddEventDialogStateManager with ChangeNotifier {
   void dispose() {
     amountController.dispose();
     descriptionController.dispose();
+    super.dispose();
   }
 }

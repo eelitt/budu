@@ -9,7 +9,6 @@ import 'package:budu/features/history/event_list_item.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
-import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:budu/features/budget/data/budget_type_prefs.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -43,6 +42,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
 
   Future<void> _loadPreferencesAndData() async {
     final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
     final savedIsShared = BudgetTypePrefs.read(prefs, BudgetTypePrefs.history);
 
     final authProvider = Provider.of<AuthProvider>(context, listen: false);

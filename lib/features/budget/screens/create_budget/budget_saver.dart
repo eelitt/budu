@@ -272,10 +272,10 @@ class BudgetSaver {
               householdId: householdId,
               users: memberIds,
               createdBy: authProvider.user!.uid,
-              name: this.budgetName ?? budgetName ?? 'Yhteistalousbudjetti',
+              name: this.budgetName,
             ),
           );
-          final inviterEmail = authProvider.user!.email ?? '';
+          final inviterEmail = authProvider.user!.email;
           for (final email in inviteEmails ?? const <String>[]) {
             await sharedBudgetProvider.inviteUser(
               sharedBudgetId: sharedBudgetId,
@@ -304,12 +304,14 @@ class BudgetSaver {
       }
 
       notificationProvider.clearNotification();
-      showSnackBar(
-        context,
-        'Budjetti tallennettu onnistuneesti',
-        duration: const Duration(seconds: 3),
-        backgroundColor: Colors.green,
-      );
+      if (context.mounted) {
+        showSnackBar(
+          context,
+          'Budjetti tallennettu onnistuneesti',
+          duration: const Duration(seconds: 3),
+          backgroundColor: Colors.green,
+        );
+      }
 
       return newBudgetId;
     } catch (e, stackTrace) {

@@ -86,7 +86,7 @@ class _PendingInvitesDialogState extends State<PendingInvitesDialog> {
                                       showSnackBar(context, 'Kutsu hyväksytty!', backgroundColor: Colors.green);
 
                                       // Reload – päivittää listan (voi mennä tyhjään viestiin)
-                                      await sharedProvider.fetchPendingInvitations(authProvider.user!.email!);
+                                      await sharedProvider.fetchPendingInvitations(authProvider.user!.email);
                                     } catch (e) {
                                       showErrorSnackBar(context, 'Hyväksyminen epäonnistui');
                                     } finally {
@@ -106,7 +106,7 @@ class _PendingInvitesDialogState extends State<PendingInvitesDialog> {
                                       showSnackBar(context, 'Kutsu hylätty');
 
                                       // Reload – päivittää listan
-                                      await sharedProvider.fetchPendingInvitations(authProvider.user!.email!);
+                                      await sharedProvider.fetchPendingInvitations(authProvider.user!.email);
                                     } catch (e) {
                                       showErrorSnackBar(context, 'Hylkääminen epäonnistui');
                                     } finally {

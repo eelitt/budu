@@ -16,13 +16,13 @@ class MainScreenBudgetStatusService {
   Future<bool> checkNextMonthBudget(BuildContext context) async {
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     final budgetProvider = Provider.of<BudgetProvider>(context, listen: false);
+    final sharedProvider = Provider.of<SharedBudgetProvider>(context, listen: false);
     if (authProvider.user == null) {
       return false;
     }
 
     final next = nextMonthStart(DateTime.now());
     final personal = await budgetProvider.getAvailableBudgets(authProvider.user!.uid);
-    final sharedProvider = Provider.of<SharedBudgetProvider>(context, listen: false);
     await sharedProvider.fetchSharedBudgets(authProvider.user!.uid);
     final shared = sharedProvider.sharedBudgets;
     return [...personal, ...shared].any(
@@ -40,6 +40,7 @@ class MainScreenBudgetStatusService {
   ) async {
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     final budgetProvider = Provider.of<BudgetProvider>(context, listen: false);
+    final sharedProvider = Provider.of<SharedBudgetProvider>(context, listen: false);
     final notificationProvider = Provider.of<NotificationProvider>(context, listen: false);
 
     if (authProvider.user != null) {
@@ -50,7 +51,6 @@ class MainScreenBudgetStatusService {
       final dateFormat = DateFormat('d.M.yyyy');
 
       final personal = await budgetProvider.getAvailableBudgets(authProvider.user!.uid);
-      final sharedProvider = Provider.of<SharedBudgetProvider>(context, listen: false);
       await sharedProvider.fetchSharedBudgets(authProvider.user!.uid);
       final startDates = [
         ...personal.map((b) => b.startDate),

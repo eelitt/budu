@@ -11,15 +11,13 @@ import 'package:rxdart/rxdart.dart';
 /// Kontrolleri yhteistalousbudjettien tilan hallintaan.
 /// Käsittelee budjetin lataamista, nollausta ja poistamista.
 /// Käyttää BehaviorSubject:ia budjetin tilan reaaliaikaiseen seurantaan.
-/// Päivitetty: Lisätty _isDisposed-lippu ja mounted-check (estää deactivated context-viittaus dispose:n jälkeen), timeout loadBudget:iin (5s, handle null), virheenkäsittely loggauksella. Modulaarinen (ei riko).
+/// Päivitetty: Lisätty mounted-check (estää deactivated context-viittaus dispose:n jälkeen), timeout loadBudget:iin (5s, handle null), virheenkäsittely loggauksella. Modulaarinen (ei riko).
 class SharedBudgetScreenController {
   final BuildContext context;
   final VoidCallback onStateChanged;
   final VoidCallback? onBudgetDeleted;
   bool _isInitialized = false;
   bool _isLoadingBudget = false;
-  bool _isDisposed = false; // Lisätty: Lippu tarkistamaan, onko disposed (estää async-crash)
-
   final BehaviorSubject<BudgetModel?> _selectedBudget = BehaviorSubject<BudgetModel?>();
   ValueStream<BudgetModel?> get selectedBudget => _selectedBudget.stream;
 

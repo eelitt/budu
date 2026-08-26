@@ -1,5 +1,4 @@
 import 'dart:async'; // Lisätty: Timer debounce:lle
-import 'package:budu/core/app_router/app_router.dart';
 import 'package:budu/core/utils.dart';
 import 'package:budu/features/auth/providers/auth_provider.dart';
 import 'package:budu/features/budget/models/budget_model.dart';
@@ -277,7 +276,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
                           borderRadius: BorderRadius.circular(12),
                           boxShadow: [
                             BoxShadow(
-                              color: Colors.black.withOpacity(0.15),
+                              color: Colors.black.withValues(alpha: 0.15),
                               blurRadius: 8,
                               offset: const Offset(0, 4),
                             ),
@@ -486,7 +485,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
                           borderRadius: BorderRadius.circular(12),
                           boxShadow: [
                             BoxShadow(
-                              color: Colors.black.withOpacity(0.15),
+                              color: Colors.black.withValues(alpha: 0.15),
                               blurRadius: 8,
                               offset: const Offset(0, 4),
                             ),

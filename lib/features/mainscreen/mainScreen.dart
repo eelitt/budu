@@ -64,7 +64,7 @@ class _MainScreenState extends State<MainScreen> {
    // Defer load until after current build frame (safe from build-phase notify)
       WidgetsBinding.instance.addPostFrameCallback((_) async {
         final sharedProvider = Provider.of<SharedBudgetProvider>(context, listen: false);
-        final userEmail = authProvider.user!.email!;
+        final userEmail = authProvider.user!.email;
         
         // Optional: Log for debug
        // print('SharedBudgetProvider: Haetaan odottavat kutsut email:lle $userEmail');

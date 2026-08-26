@@ -47,6 +47,7 @@ class _SummaryScreenState extends State<SummaryScreen> {
   /// Lataa valinnat, budjettilistat ja alkumenot.
   Future<void> _loadPreferencesAndBudgets() async {
     final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
     final savedIsShared = BudgetTypePrefs.read(prefs, BudgetTypePrefs.summary);
 
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
@@ -61,7 +62,7 @@ class _SummaryScreenState extends State<SummaryScreen> {
     BudgetModel? initialShared;
     if (sharedProvider.sharedBudgets.isNotEmpty) {
       final sorted = List<BudgetModel>.from(sharedProvider.sharedBudgets)
-        ..sort((a, b) => b.startDate!.compareTo(a.startDate!));
+        ..sort((a, b) => b.startDate.compareTo(a.startDate));
       initialShared = sorted.first;
     }
 
@@ -77,7 +78,11 @@ class _SummaryScreenState extends State<SummaryScreen> {
     // Lataa alkumenot nykyiselle budjetille
     final initialBudgetId = _getCurrentBudgetId();
     if (initialBudgetId != null && mounted) {
-      await expenseProvider.loadExpenses(authProvider.user!.uid, initialBudgetId);
+      await expenseProvider.loadExpenses(
+        authProvider.user!.uid,
+        initialBudgetId,
+        isSharedBudget: _isSharedBudget,
+      );
     }
   }
 
@@ -101,7 +106,7 @@ class _SummaryScreenState extends State<SummaryScreen> {
       _isSharedBudget = value;
       if (value && _selectedSharedBudget == null && Provider.of<SharedBudgetProvider>(context, listen: false).sharedBudgets.isNotEmpty) {
         final sorted = List<BudgetModel>.from(Provider.of<SharedBudgetProvider>(context, listen: false).sharedBudgets)
-          ..sort((a, b) => b.startDate!.compareTo(a.startDate!));
+          ..sort((a, b) => b.startDate.compareTo(a.startDate));
         _selectedSharedBudget = sorted.first;
       }
     });

@@ -38,7 +38,6 @@ class BudgetScreenController {
   /// Alustaa budjetin lataamisen ja asettaa nykyisen budjetin.
   Future<void> _initializeBudget() async {
     try {
-      final budgetProvider = Provider.of<BudgetProvider>(context, listen: false);
       final authProvider = Provider.of<AuthProvider>(context, listen: false);
 
       if (authProvider.user != null) {

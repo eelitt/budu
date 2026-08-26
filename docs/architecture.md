@@ -242,6 +242,9 @@ budgets/{uid}/monthly_budgets/{year}_{month}
 
 - Available personal budgets: `isPlaceholder == false`, ordered by `startDate` descending. Budget list streams often `limit(50)`.
 - Events for the **selected** budget are loaded in full (no 50-event cap) so tracking totals are complete. History loads every event for each period in the current list (same uncapped path).
+- Summary owns loading events for the currently selected budget; tracking, distribution, and event views consume the resulting provider state and do not initiate duplicate loads. The initial load passes the personal/shared storage path explicitly.
+- If multiple selected-budget loads overlap, only the newest request may replace the provider’s in-memory events. A slower result from an older selection is ignored.
+- The create-budget screen reuses one budget-list request for its lifetime instead of starting a new budget-list read on every rebuild. The request is refreshed only by an explicit new screen flow.
 - Budget, event, and invitation **writes** store dates as ISO-8601 strings (`DateTime.toIso8601String()`). Reads still accept Firestore `Timestamp` (legacy shared updates / old invites). User/notification `createdAt` uses `FieldValue.serverTimestamp()` and is separate.
 - Deleting a personal or shared budget also deletes its `events` (and personal legacy expenses).
 - Personal in-memory edits debounce-save after **1 second**.

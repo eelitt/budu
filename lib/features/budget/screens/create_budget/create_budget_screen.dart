@@ -54,6 +54,7 @@ class _CreateBudgetScreenState extends State<CreateBudgetScreen> {
   late final DateTime _initialStart;
   late final DateTime _initialEnd;
   late final String _initialType;
+  Future<List<BudgetModel>>? _availableBudgetsFuture;
 
   @override
   void initState() {
@@ -61,6 +62,12 @@ class _CreateBudgetScreenState extends State<CreateBudgetScreen> {
     _incomeController = TextEditingController();
     _nameController = TextEditingController(text: widget.householdName ?? '');
     _inviteEmailController = TextEditingController();
+    final userId = Provider.of<AuthProvider>(context, listen: false).user?.uid;
+    if (userId != null) {
+      _availableBudgetsFuture =
+        Provider.of<BudgetProvider>(context, listen: false)
+          .getAvailableBudgets(userId);
+    }
     if (widget.sourceBudget?.id != null) {
       final period = nextPeriodAfter(
         latestEnd: widget.sourceBudget!.endDate,
@@ -196,7 +203,6 @@ class _CreateBudgetScreenState extends State<CreateBudgetScreen> {
   @override
   Widget build(BuildContext context) {
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
-    final budgetProvider = Provider.of<BudgetProvider>(context, listen: false);
     final userId = authProvider.user?.uid;
 
     return Scaffold(
@@ -204,7 +210,7 @@ class _CreateBudgetScreenState extends State<CreateBudgetScreen> {
         title: Text(widget.isShared ? 'Luo yhteistalousbudjetti' : 'Luo budjetti'),
         leading: userId != null
             ? FutureBuilder<List<BudgetModel>>(
-                future: budgetProvider.getAvailableBudgets(userId),
+            future: _availableBudgetsFuture,
                 builder: (context, snapshot) {
                   if (snapshot.connectionState == ConnectionState.waiting) {
                     return const Material(

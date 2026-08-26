@@ -30,6 +30,7 @@ Production rules sit in `lib/features/budget/domain/`. Tests call those function
 | `ExpenseEvent.parse` | `expense_event_parse_test.dart` |
 | `BudgetRepository` / `SharedBudgetRepository` | `budget_repository_test.dart` |
 | `EventRepository` | `event_repository_test.dart` |
+| `ExpenseProvider` stale-load protection | `expense_provider_test.dart` |
 | ISO date writes + Timestamp reads | `date_encoding_test.dart` |
 | `NotificationProvider.markAsRead` | `test/features/notification/notification_mark_as_read_test.dart` |
 | `UserProfileRepository` | `test/features/auth/user_profile_repository_test.dart` |
@@ -69,6 +70,8 @@ Date-dependent rules take `now`. Production callers pass `DateTime.now()`.
 **Notifications** — after `initializeNotifications(uid)`, `markAsRead` updates `users/{uid}/notifications/{id}` (`read: true`). It does not write under a placeholder user id. Before initialize, `markAsRead` is a no-op.
 
 **Events for one budget** — `EventRepository.getEventsForBudget` returns every matching event (no 50-event cap). Extra `budgetId`s are excluded. Shared path uses `shared_budgets/{id}/events`. Empty personal `events` falls back to legacy `monthly_budgets/.../expenses`. Tracking totals on the loaded list include all of those expenses. `saveEvent` / `deleteEvent` write that same `events` collection. History uses that uncapped load for each period in the filter list.
+
+**Event loading races** — `ExpenseProvider.loadExpenses` ignores an older asynchronous result when a newer budget selection has started loading.
 
 **Income events** — adding or deleting an income event does not change planned `Budget.income`.
 

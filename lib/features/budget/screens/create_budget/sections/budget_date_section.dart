@@ -1,5 +1,4 @@
 import 'package:budu/features/auth/providers/auth_provider.dart';
-import 'package:budu/features/budget/models/budget_model.dart';
 import 'package:budu/features/budget/providers/budget_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';

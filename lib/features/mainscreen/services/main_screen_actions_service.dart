@@ -153,12 +153,14 @@ class MainScreenActionsService {
         print('MainScreenActionsService: AddEventDialog suljettu');
         if (result != null && result['success'] == true) {
           final isExpense = result['isExpense'] as bool;
-          showSnackBar(
-            context,
-            isExpense ? 'Meno lisätty onnistuneesti!' : 'Tulo lisätty onnistuneesti!',
-            duration: const Duration(seconds: 3),
-            backgroundColor: Colors.green,
-          );
+          if (context.mounted) {
+            showSnackBar(
+              context,
+              isExpense ? 'Meno lisätty onnistuneesti!' : 'Tulo lisätty onnistuneesti!',
+              duration: const Duration(seconds: 3),
+              backgroundColor: Colors.green,
+            );
+          }
 
           if (authProvider.user != null && initialBudgetId != null) {
             await expenseProvider.loadExpenses(

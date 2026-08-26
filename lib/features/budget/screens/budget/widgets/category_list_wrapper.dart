@@ -57,7 +57,7 @@ class CategoryListWrapper extends StatelessWidget {
           )
         : Consumer<BudgetProvider>(
             builder: (context, budgetProvider, child) {
-              final expenses = budget?.expenses ?? {};
+              final expenses = budget.expenses;
 
               // Järjestetään kategoriat aakkosjärjestykseen
               final sortedCategories = expenses.keys.toList()..sort();

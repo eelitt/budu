@@ -1,10 +1,8 @@
-import 'package:budu/features/auth/providers/auth_provider.dart';
 import 'package:budu/features/budget/models/budget_model.dart';
 import 'package:budu/features/budget/providers/expense_provider.dart';
 import 'package:budu/features/budget/screens/summary/budget_tracking/category_expansion_tile.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 
 /// Näyttää budjetin kategorioiden seurannan yhteenvetosivulla.
 /// Tukee nyt täysin sekä henkilökohtaista että yhteistalousbudjettia:
@@ -32,39 +30,6 @@ final bool isSharedBudget;
 
 class _BudgetTrackingSectionState extends State<BudgetTrackingSection> {
   bool _isExpanded = true;
-
-  @override
-  void initState() {
-    super.initState();
-    // Ladataan menot/tapahtumat build-vaiheen jälkeen (varmistaa oikea budgetId)
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        _loadExpenses();
-      }
-    });
-  }
-
-  /// Lataa menot/tapahtumat välitetylle budjetille (henkilökohtainen tai yhteistalous).
-  Future<void> _loadExpenses() async {
-    try {
-      final expenseProvider = Provider.of<ExpenseProvider>(context, listen: false);
-      final authProvider = Provider.of<AuthProvider>(context, listen: false);
-      if (authProvider.user != null) {
-        await expenseProvider.loadExpenses(authProvider.user!.uid, widget.budget.id!, isSharedBudget: widget.isSharedBudget);
-      }
-    } catch (e, stackTrace) {
-      await FirebaseCrashlytics.instance.recordError(
-        e,
-        stackTrace,
-        reason: 'Failed to load expenses for budget ${widget.budget.id}',
-      );
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Tapahtumien lataus epäonnistui: $e')),
-        );
-      }
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -109,7 +74,7 @@ class _BudgetTrackingSectionState extends State<BudgetTrackingSection> {
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.15),
+            color: Colors.black.withValues(alpha: 0.15),
             blurRadius: 8,
             offset: const Offset(0, 4),
           ),

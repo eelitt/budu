@@ -53,7 +53,7 @@ class _InviteToExistingBudgetDialogState
       await sharedBudgetProvider.inviteUser(
         sharedBudgetId: widget.sharedBudgetId,
         inviterId: authProvider.user!.uid,
-        inviterEmail: authProvider.user!.email!,
+        inviterEmail: authProvider.user!.email,
         inviteeEmail: inviteeEmail,
       );
       await FirebaseCrashlytics.instance.log(

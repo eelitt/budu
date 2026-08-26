@@ -65,6 +65,7 @@ class AppBarDebug {
   Future<void> checkForUpdate(BuildContext context) async {
     try {
       final prefs = await SharedPreferences.getInstance();
+      if (!context.mounted) return;
       final isDebugUpdate = prefs.getBool('debug_update_enabled') ?? false;
 
       if (isDebugUpdate) {

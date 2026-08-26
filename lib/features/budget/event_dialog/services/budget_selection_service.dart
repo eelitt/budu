@@ -84,8 +84,6 @@ class BudgetSelectionService {
     required VoidCallback onNoBudgets,
     required bool isSharedBudget, // Lisätty: Budjettityyppi
   }) async {
-    final authProvider = Provider.of<AuthProvider>(context, listen: false);
-
     // Haetaan saatavilla olevat budjetit tyypin perusteella
     final availableBudgets = await loadAvailableBudgets(isSharedBudget: isSharedBudget);
     print('Available budgets: $availableBudgets'); // Debug-tuloste

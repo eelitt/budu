@@ -87,7 +87,7 @@ class _BudgetCategorySectionState extends State<BudgetCategorySection> {
       child: Consumer2<BudgetCategoryController, BudgetProvider>(
         builder: (context, controller, budgetProvider, child) {
           // Haetaan kategorian menot budjettityypin perusteella
-          final expenses = widget.budget?.expenses[widget.categoryName] ?? {};
+          final expenses = widget.budget.expenses[widget.categoryName] ?? {};
           final Map<String, double> displayedExpenses = {};
           // Muunnetaan menot näyttömuotoon: 'default'-alakategoria korvataan kategorian nimellä
           expenses.forEach((subcategory, value) {

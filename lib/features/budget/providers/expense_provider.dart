@@ -20,6 +20,7 @@ class ExpenseProvider with ChangeNotifier {
   final EventRepository _eventRepository;
   List<ExpenseEvent> _expenses = [];
   String? _errorMessage;
+  int _loadRequestId = 0;
 
   List<ExpenseEvent> get expenses => _expenses;
   String? get errorMessage => _errorMessage;
@@ -50,13 +51,16 @@ class ExpenseProvider with ChangeNotifier {
 
   /// Lataa kaikki tapahtumat valitulle budjetille (ensisijainen events-kokoelma, muuten legacy).
   Future<void> loadExpenses(String userId, String budgetId, {bool isSharedBudget = false}) async {
+    final requestId = ++_loadRequestId;
     try {
       _clearError();
-      _expenses = await _eventRepository.getEventsForBudget(
+      final loadedExpenses = await _eventRepository.getEventsForBudget(
         userId: userId,
         budgetId: budgetId,
         isSharedBudget: isSharedBudget,
       );
+      if (requestId != _loadRequestId) return;
+      _expenses = loadedExpenses;
       notifyListeners();
     } catch (e, stackTrace) {
       await FirebaseCrashlytics.instance.recordError(e, stackTrace,
