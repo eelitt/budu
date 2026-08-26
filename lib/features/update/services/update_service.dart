@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
 import 'package:open_file/open_file.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -9,6 +8,13 @@ import 'package:path_provider/path_provider.dart';
 import 'dart:io';
 
 class UpdateService {
+  static final _versionUrl = Uri.parse(
+    'https://raw.githubusercontent.com/eelitt/budu/main/version.txt',
+  );
+  static final _releasesUrl = Uri.parse(
+    'https://api.github.com/repos/eelitt/budu/releases/latest',
+  );
+
   // Haetaan sovelluksen versio dynaamisesti package_info_plus-paketilla
   Future<String> getAppVersion() async {
     try {
@@ -26,26 +32,13 @@ class UpdateService {
 
   // Tarkastetaan GitHubista, onko uutta versiota saatavilla
   Future<Map<String, dynamic>> checkForUpdate(BuildContext context) async {
-    // Varmistetaan, että .env-arvot ovat saatavilla
-    final versionUrl = dotenv.env['VERSION_URL'];
-    final apiToken = dotenv.env['GITHUB_API_TOKEN'];
-
-    if (versionUrl == null || versionUrl.isEmpty) {
-      FirebaseCrashlytics.instance.recordError(
-        Exception('VERSION_URL puuttuu .env-tiedostosta'),
-        StackTrace.current,
-        reason: 'Päivitystarkistus epäonnistui',
-      );
-      return {'isUpdateAvailable': false};
-    }
-
     final currentVersion = await getAppVersion();
 
     final response = await http.get(
-      Uri.parse(versionUrl),
+      _versionUrl,
       headers: {
-        if (apiToken != null && apiToken.isNotEmpty) 'Authorization': 'token $apiToken',
         'Accept': 'application/vnd.github.v3.raw',
+        'User-Agent': 'Budu',
       },
     );
 
@@ -96,25 +89,11 @@ class UpdateService {
 
   // Haetaan APK-tiedoston URL GitHub Releases -osiosta
   Future<String?> _fetchApkUrl(String latestVersion) async {
-    final repoOwner = dotenv.env['GITHUB_OWNER'];
-    final repoName = dotenv.env['GITHUB_REPO'];
-    final apiToken = dotenv.env['GITHUB_API_TOKEN'];
-
-    if (repoOwner == null || repoOwner.isEmpty || repoName == null || repoName.isEmpty) {
-      FirebaseCrashlytics.instance.recordError(
-        Exception('GITHUB_OWNER tai GITHUB_REPO puuttuu .env-tiedostosta'),
-        StackTrace.current,
-        reason: 'Päivitystiedon haku epäonnistui',
-      );
-      return null;
-    }
-
-    final releasesUrl = Uri.parse('https://api.github.com/repos/$repoOwner/$repoName/releases/latest');
     final releaseResponse = await http.get(
-      releasesUrl,
+      _releasesUrl,
       headers: {
-        if (apiToken != null && apiToken.isNotEmpty) 'Authorization': 'token $apiToken',
         'Accept': 'application/vnd.github+json',
+        'User-Agent': 'Budu',
       },
     );
 
@@ -145,7 +124,7 @@ class UpdateService {
       return null;
     }
 
-    return apkAsset['url'] as String;
+    return apkAsset['browser_download_url'] as String;
   }
 
   // Ladataan ja avataan APK-tiedosto, palautetaan tulos ja päivitysprogression
@@ -153,15 +132,11 @@ class UpdateService {
     String apkUrl,
     String latestVersion,
   ) async* {
-    final apiToken = dotenv.env['GITHUB_API_TOKEN'];
-
     try {
       // Valmistellaan latauspyyntö
       final request = http.Request('GET', Uri.parse(apkUrl));
-      if (apiToken != null && apiToken.isNotEmpty) {
-        request.headers['Authorization'] = 'token $apiToken';
-      }
       request.headers['Accept'] = 'application/octet-stream';
+      request.headers['User-Agent'] = 'Budu';
 
       // Suoritetaan lataus Stream-muodossa
       final streamedResponse = await request.send();

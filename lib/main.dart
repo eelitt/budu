@@ -2,8 +2,6 @@ import 'package:budu/features/budget/providers/shared_budget_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_crashlytics/firebase_crashlytics.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'core/app_router/app_router.dart';
 import 'core/theme.dart';
 import 'features/auth/providers/auth_provider.dart';
@@ -16,17 +14,6 @@ import 'features/update/providers/update_provider.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp();
-  try {
-    await dotenv.load(fileName: ".env");
-    print('Loaded .env file successfully');
-  } catch (e) {
-    print('Failed to load .env file: $e');
-    FirebaseCrashlytics.instance.recordError(
-      e,
-      StackTrace.current,
-      reason: 'Failed to load .env file',
-    );
-  }
   runApp(const MyApp());
 }
 
