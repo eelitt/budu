@@ -38,7 +38,12 @@ class _LoginScreenState extends State<LoginScreen> {
   void initState() {
     super.initState();
     _updateManager = UpdateManager();
-    _initializeStartup();
+    // AuthProvider.initialize notifies loading synchronously before its first
+    // await. Starting startup from initState would notify during build.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _initializeStartup();
+    });
   }
 
   SessionBootstrapService _bootstrapService() {
