@@ -1,3 +1,4 @@
+import 'package:budu/features/auth/domain/auth_errors.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 
@@ -50,6 +51,7 @@ class UserProfileRepository {
   }
 
   /// Creates `users/{uid}` if missing. Existing docs are left unchanged.
+  /// Failures are typed [AuthFailure]; presentation reports Crashlytics.
   Future<void> ensureUserDocument({
     required String uid,
     required String email,
@@ -63,13 +65,13 @@ class UserProfileRepository {
         'isAdmin': false,
         'createdAt': FieldValue.serverTimestamp(),
       });
-    } catch (e, stackTrace) {
-      await FirebaseCrashlytics.instance.recordError(
-        e,
-        stackTrace,
-        reason: 'Failed to create user document $uid',
+    } catch (e) {
+      if (e is AuthFailure) rethrow;
+      throw AuthFailure(
+        kind: AuthErrorKind.profileEnsure,
+        message: 'Failed to create user document',
+        cause: e,
       );
-      throw Exception('Failed to create user document: $e');
     }
   }
 

@@ -1,5 +1,7 @@
 param(
-  [string]$DeviceId
+  [string]$DeviceId,
+  [ValidateSet('all', 'updater', 'login')]
+  [string]$Target = 'all'
 )
 
 $devices = @(flutter devices --machine | ConvertFrom-Json)
@@ -19,5 +21,26 @@ if ($null -eq $device) {
   throw "Android device '$DeviceId' was not found."
 }
 
-flutter drive --driver=test_driver/integration_test.dart --target=integration_test/updater_android_test.dart -d $device.id
-exit $LASTEXITCODE
+$targets = switch ($Target) {
+  'updater' { @('integration_test/updater_android_test.dart') }
+  'login' { @('integration_test/login_android_test.dart') }
+  default {
+    @(
+      'integration_test/updater_android_test.dart',
+      'integration_test/login_android_test.dart'
+    )
+  }
+}
+
+foreach ($testTarget in $targets) {
+  Write-Host "Running $testTarget on $($device.id)"
+  flutter drive `
+    --driver=test_driver/integration_test.dart `
+    --target=$testTarget `
+    -d $device.id
+  if ($LASTEXITCODE -ne 0) {
+    exit $LASTEXITCODE
+  }
+}
+
+exit 0

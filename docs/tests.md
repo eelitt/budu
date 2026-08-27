@@ -10,10 +10,17 @@ From the repo root:
 flutter test
 ```
 
-Android updater integration tests require a connected Android device. The runner refuses to start when Flutter reports no Android device:
+Android integration tests require a connected Android device. The runner refuses to start when Flutter reports no Android device:
 
 ```powershell
 .\tool\run_android_integration_tests.ps1
+```
+
+Run only updater or login smoke:
+
+```powershell
+.\tool\run_android_integration_tests.ps1 -Target updater
+.\tool\run_android_integration_tests.ps1 -Target login
 ```
 
 To select a specific connected device:
@@ -22,7 +29,7 @@ To select a specific connected device:
 .\tool\run_android_integration_tests.ps1 -DeviceId <device-id>
 ```
 
-Unit cases live under `test/features/`; most domain cases are under `test/features/budget/`. The device integration case lives under `integration_test/` and is not run by the normal `flutter test` command. There is no regular widget test that pumps `MyApp` because that would initialize Firebase; the Android integration test initializes Firebase explicitly.
+Unit cases live under `test/features/`; most domain cases are under `test/features/budget/`. Device integration cases live under `integration_test/` and are not run by the normal `flutter test` command. There is no regular widget test that pumps `MyApp` because that would initialize Firebase; the Android integration tests initialize Firebase explicitly.
 
 ## Layout
 
@@ -46,8 +53,14 @@ Production rules sit in `lib/features/budget/domain/`. Tests call those function
 | ISO date writes + Timestamp reads | `date_encoding_test.dart` |
 | `NotificationProvider.markAsRead` | `test/features/notification/notification_mark_as_read_test.dart` |
 | `UserProfileRepository` | `test/features/auth/user_profile_repository_test.dart` |
+| `AuthProvider` session transitions | `test/features/auth/auth_provider_test.dart` |
+| `decideLoginDestination` | `test/features/auth/login_destination_test.dart` |
+| `SessionBootstrapService` | `test/features/auth/session_bootstrap_service_test.dart` |
+| `LoginStartupCoordinator` auth vs update gate | `test/features/auth/login_startup_coordinator_test.dart` |
+| Android login session-readiness smoke | `integration_test/login_android_test.dart` |
 | Updater result states, version comparison, metadata validation, and APK URL selection | `test/features/update/update_info_test.dart` |
 | Updater download invocation | `test/features/update/update_handler_test.dart` |
+| Android updater metadata smoke | `integration_test/updater_android_test.dart` |
 
 Repositories are constructed with `FakeFirebaseFirestore` (`fake_cloud_firestore` dev dependency). Use `BudgetModel.parse` / `ExpenseEvent.parse` in unit tests, not `fromMap` — `fromMap` logs Crashlytics on failure.
 

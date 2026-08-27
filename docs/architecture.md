@@ -94,6 +94,16 @@ Links an invitee email to a `sharedBudgetId`.
 
 On first Google sign-in, `UserProfileRepository.ensureUserDocument` creates `users/{uid}` if missing (`email`, `isPremium: false`, `isAdmin: false`, `createdAt`). Sign-in is Google only (`AuthRepository`). Profile reads go through the same repository (`UserProvider`).
 
+`AuthProvider` owns observable session state (`loading` / `authenticated` / `unauthenticated`) and notifies listeners on those transitions. After auth, `SessionBootstrapService` loads personal and shared budgets and returns a typed destination:
+
+- no personal and no shared budgets → chatbot
+- shared budgets only → main screen (no personal preload)
+- any personal budgets → main screen (preload newest personal budget + events)
+
+Decision: `lib/features/auth/domain/login_destination.dart`. Bootstrap: `lib/features/auth/services/session_bootstrap_service.dart`. Startup gate: `lib/features/auth/services/login_startup_coordinator.dart` initializes auth without waiting for the GitHub update check first; a mandatory update can still block navigation. `LoginScreen` navigates for both session restore and interactive Google sign-in; `LoginButton` only requests login.
+
+Login-path errors use typed `AuthFailure` (`lib/features/auth/domain/auth_errors.dart`). Repositories/providers rethrow; `LoginScreen` reports Crashlytics once. See [`login_rework.md`](login_rework.md).
+
 ---
 
 ## Planned vs actual
@@ -257,7 +267,7 @@ The updater runs from the login flow and can also be started from the main-scree
 
 ### Current flow
 
-1. `LoginScreen` creates an `UpdateManager` and starts `checkAndHandleUpdate` during initialization.
+1. `LoginScreen` creates an `UpdateManager` and runs `LoginStartupCoordinator`: auth init starts without waiting for the update check; the update check runs in parallel and only gates leaving login after both settle.
 2. `UpdateManager` asks `UpdateHandler` to perform the check through `UpdateService`.
 3. `UpdateService` reads the public version file at `https://raw.githubusercontent.com/eelitt/budu/main/version.txt` and compares it with the installed package version. It returns this result as typed `UpdateInfo` data.
 4. If the version is newer, `UpdateService` requests `https://api.github.com/repos/eelitt/budu/releases/latest`, selects the first `.apk` asset, and returns its public `browser_download_url`. A newer version without an APK is represented separately from an available downloadable update.

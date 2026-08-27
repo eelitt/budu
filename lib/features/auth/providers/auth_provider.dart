@@ -1,6 +1,4 @@
 import 'package:budu/features/auth/models/user_model.dart';
-import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
-import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:flutter/material.dart';
 import '../data/auth_repository.dart';
 import '../data/user_profile_repository.dart';
@@ -30,6 +28,7 @@ class AuthProvider with ChangeNotifier {
 
   Future<void> initialize() async {
     _authState = AuthState.loading;
+    notifyListeners();
     try {
       _user = await _authRepo.getCurrentUser();
       if (_user != null) {
@@ -38,33 +37,21 @@ class AuthProvider with ChangeNotifier {
         _authState = AuthState.unauthenticated;
       }
     } catch (e) {
-      // Raportoidaan virhe Crashlyticsiin
-      await FirebaseCrashlytics.instance.recordError(
-        e,
-        StackTrace.current,
-        reason: 'Failed to initialize AuthProvider',
-      );
-
-      // Tunnistetaan virhetyyppi ja lisätään kontekstia
-      if (e is firebase_auth.FirebaseAuthException) {
-        await FirebaseCrashlytics.instance.setCustomKey('error_code', e.code);
-        await FirebaseCrashlytics.instance.setCustomKey('error_message', e.message ?? 'Unknown FirebaseAuth error');
-      }
-
       _user = null;
       _authState = AuthState.unauthenticated;
+      rethrow;
     } finally {
       _isInitialized = true;
-
+      notifyListeners();
     }
   }
 
   Future<void> signInWithGoogle() async {
     _authState = AuthState.loading;
- 
+    notifyListeners();
+
     try {
       _user = await _authRepo.signInWithGoogle();
-      print('AuthProvider: Google-kirjautuminen onnistui: ${_user?.uid}');
 
       if (_user != null) {
         await _userProfiles.ensureUserDocument(
@@ -75,53 +62,21 @@ class AuthProvider with ChangeNotifier {
       } else {
         _authState = AuthState.unauthenticated;
       }
+      notifyListeners();
     } catch (e) {
-      // Raportoidaan vain Firestore-virheet tässä kerroksessa, koska AuthRepository jo raportoi signInWithGoogle-virheet
-      if (e.toString().contains('Failed to create user document')) {
-        // Firestore-virhe on jo raportoitu, ei raportoida uudelleen
-      } else {
-        // Raportoidaan muut virheet Crashlyticsiin
-        await FirebaseCrashlytics.instance.recordError(
-          e,
-          StackTrace.current,
-          reason: 'Google Sign-In failed in AuthProvider',
-        );
-
-        // Tunnistetaan virhetyyppi ja lisätään kontekstia
-        if (e is firebase_auth.FirebaseAuthException) {
-          await FirebaseCrashlytics.instance.setCustomKey('error_code', e.code);
-          await FirebaseCrashlytics.instance.setCustomKey('error_message', e.message ?? 'Unknown FirebaseAuth error');
-        }
-      }
-
       _user = null;
       _authState = AuthState.unauthenticated;
-      print('AuthProvider: Google-kirjautumisvirhe: $e');
+      notifyListeners();
       rethrow;
-    } 
+    }
   }
 
   Future<void> signOut() async {
     _authState = AuthState.loading;
-    try {
-      await _authRepo.signOut();
-      _user = null;
-      _authState = AuthState.unauthenticated;
-    } catch (e) {
-      // Raportoidaan virhe Crashlyticsiin, mutta vain jos se ei ole jo raportoitu AuthRepository:ssa
-      await FirebaseCrashlytics.instance.recordError(
-        e,
-        StackTrace.current,
-        reason: 'Sign out failed in AuthProvider',
-      );
-
-      // Tunnistetaan virhetyyppi ja lisätään kontekstia
-      if (e is firebase_auth.FirebaseAuthException) {
-        await FirebaseCrashlytics.instance.setCustomKey('error_code', e.code);
-        await FirebaseCrashlytics.instance.setCustomKey('error_message', e.message ?? 'Unknown FirebaseAuth error');
-      }
-
-      rethrow;
-    } 
+    notifyListeners();
+    await _authRepo.signOut();
+    _user = null;
+    _authState = AuthState.unauthenticated;
+    notifyListeners();
   }
 }

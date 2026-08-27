@@ -1,132 +1,50 @@
-import 'package:budu/core/app_router/app_router.dart';
-import 'package:budu/features/budget/providers/budget_provider.dart';
-import 'package:budu/features/budget/providers/expense_provider.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
-import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import '../../providers/auth_provider.dart' as custom_auth;
 
-/// Kirjautumispainike, joka käsittelee Google-kirjautumisen ja navigoi oikealle
-/// sivulle (chatbotRoute tai mainRoute) kirjautumisen jälkeen.
+/// Google sign-in button. Starts login via [onLoginRequested]; does not navigate.
 class LoginButton extends StatelessWidget {
-  final bool isLoggingIn; // Näyttääkö kirjautumisindikaattorin
-  final bool isUpdateRequired; // Onko päivitys vaadittu (estää kirjautumisen)
-  final bool isDownloading; // Onko päivitys latautumassa (estää kirjautumisen)
-  final VoidCallback onLoginStart; // Kutsutaan, kun kirjautuminen alkaa
-  final VoidCallback onLoginEnd; // Kutsutaan, kun kirjautuminen päättyy
-  final Function(BuildContext, String) onError; // Kutsutaan virheen sattuessa
+  final bool isLoggingIn;
+  final bool isUpdateRequired;
+  final bool isDownloading;
+  final VoidCallback onLoginRequested;
 
   const LoginButton({
     super.key,
     required this.isLoggingIn,
     required this.isUpdateRequired,
     required this.isDownloading,
-    required this.onLoginStart,
-    required this.onLoginEnd,
-    required this.onError,
+    required this.onLoginRequested,
   });
-
-  /// Navigoi käyttäjän oikealle sivulle kirjautumisen jälkeen.
-  /// Jos budjettia ei ole, ohjaa chatbot-sivulle; muuten pääsivulle.
-  Future<void> _navigateAfterLogin(BuildContext context) async {
-    print('LoginButton: _navigateAfterLogin: Aloitetaan');
-    try {
-      final authProvider = context.read<custom_auth.AuthProvider>();
-      final budgetProvider = context.read<BudgetProvider>();
-      final expenseProvider = context.read<ExpenseProvider>();
-
-      if (authProvider.user == null) {
-        throw Exception('Käyttäjä ei ole kirjautunut');
-      }
-
-      // Haetaan saatavilla olevat budjetit (migraatio on jo suoritettu LoginScreen:ssä)
-      final budgets = await budgetProvider.getAvailableBudgets(authProvider.user!.uid);
-      print('LoginButton: _navigateAfterLogin: Saatavilla olevat budjetit: ${budgets.length}');
-
-      if (context.mounted) {
-        if (budgets.isEmpty) {
-          print('LoginButton: _navigateAfterLogin: Ei budjetteja, ohjataan chatbot-sivulle');
-          Navigator.pushReplacementNamed(context, AppRouter.chatbotRoute);
-        } else {
-          print('LoginButton: _navigateAfterLogin: Budjetteja löytyy, ladataan viimeisin budjetti ja tapahtumat');
-          final latestBudget = budgets.first;
-          await budgetProvider.loadBudget(authProvider.user!.uid, latestBudget.id!);
-          await expenseProvider.loadExpenses(authProvider.user!.uid, latestBudget.id!);
-          Navigator.pushReplacementNamed(context, AppRouter.mainRoute);
-        }
-      }
-    } catch (e) {
-      // Raportoidaan virhe Crashlyticsiin
-      await FirebaseCrashlytics.instance.recordError(
-        e,
-        StackTrace.current,
-        reason: 'Failed to navigate after login in LoginButton',
-      );
-
-      // Tunnistetaan virhetyyppi ja lisätään kontekstia
-      if (e is FirebaseException) {
-        await FirebaseCrashlytics.instance.setCustomKey('error_code', e.code);
-        await FirebaseCrashlytics.instance.setCustomKey('error_message', e.message ?? 'Unknown Firestore error');
-      }
-
-      print('LoginButton: _navigateAfterLogin: Virhe navigoinnissa: $e');
-      onError(context, 'Navigointi epäonnistui: $e');
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
     return isLoggingIn
         ? Center(
             child: CircularProgressIndicator(
-              color: Theme.of(context).primaryColor, // Teeman primaryColor (Colors.blueGrey[800])
+              color: Theme.of(context).primaryColor,
             ),
           )
         : ElevatedButton.icon(
             onPressed: isUpdateRequired || isDownloading
                 ? null
-                : () async {
-                    onLoginStart();
-                    try {
-                      print('LoginButton: Aloitetaan Google-kirjautuminen');
-                      await context.read<custom_auth.AuthProvider>().signInWithGoogle();
-                      print('LoginButton: Google-kirjautuminen onnistui, kutsutaan _navigateAfterLogin');
-                      await _navigateAfterLogin(context);
-                    } catch (e) {
-                      // Raportoidaan virhe Crashlyticsiin, mutta vain jos se ei ole jo raportoitu AuthProviderissa
-                      if (!e.toString().contains('Failed to create user document') &&
-                          !e.toString().contains('Google Sign-In failed')) {
-                        await FirebaseCrashlytics.instance.recordError(
-                          e,
-                          StackTrace.current,
-                          reason: 'Google Sign-In failed in LoginButton',
-                        );
-
-                        // Tunnistetaan virhetyyppi ja lisätään kontekstia
-                        if (e is firebase_auth.FirebaseAuthException) {
-                          await FirebaseCrashlytics.instance.setCustomKey('error_code', e.code);
-                          await FirebaseCrashlytics.instance.setCustomKey('error_message', e.message ?? 'Unknown FirebaseAuth error');
-                        }
-                      }
-
-                      print('LoginButton: Google-kirjautumisvirhe: $e');
-                      onError(context, 'Google-kirjautuminen epäonnistui: $e');
-                    } finally {
-                      onLoginEnd();
-                    }
-                  },
+                : onLoginRequested,
             icon: Icon(
               Icons.g_mobiledata,
               size: 24,
-              color: Theme.of(context).elevatedButtonTheme.style?.foregroundColor?.resolve({}),
+              color: Theme.of(context)
+                  .elevatedButtonTheme
+                  .style
+                  ?.foregroundColor
+                  ?.resolve({}),
             ),
             label: Text(
               'Kirjaudu Googlella',
               style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                     fontSize: 16,
-                    color: Theme.of(context).elevatedButtonTheme.style?.foregroundColor?.resolve({}),
+                    color: Theme.of(context)
+                        .elevatedButtonTheme
+                        .style
+                        ?.foregroundColor
+                        ?.resolve({}),
                   ),
             ),
             style: Theme.of(context).elevatedButtonTheme.style?.copyWith(
