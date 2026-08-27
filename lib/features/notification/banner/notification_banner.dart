@@ -1,12 +1,19 @@
+import 'package:budu/features/budget/screens/create_budget/shared_budget/pending_invites_dialog.dart';
+import 'package:budu/features/mainscreen/services/main_screen_actions_service.dart';
 import 'package:budu/features/notification/models/notification_message.dart';
 import 'package:budu/features/notification/providers/notification_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-/// NotificationBanner: Näyttää in-app-notifikaatiot.
-/// Päivitetty: Näytä lista notifikaatioista (jos useita), merkitse luetuksi klikillä. Banner per notifikaatio.
+/// Renders in-app notification banners. Actions are resolved by [NotificationKind].
 class NotificationBanner extends StatelessWidget {
-  const NotificationBanner({super.key});
+  const NotificationBanner({
+    super.key,
+    this.onReminderActionComplete,
+  });
+
+  /// Called after navigating to create budget from a reminder (e.g. recheck status).
+  final VoidCallback? onReminderActionComplete;
 
   @override
   Widget build(BuildContext context) {
@@ -16,70 +23,23 @@ class NotificationBanner extends StatelessWidget {
 
         if (notifications.isEmpty) return const SizedBox.shrink();
 
+        final actions = MainScreenActionsService();
+
         return Column(
           children: notifications.map((notification) {
-            // Väri tyypin mukaan (säilytetään nykyinen logiikka)
-            final Color backgroundColor = _getBackgroundColor(notification.type);
-
-            final List<Widget> actionButtons = [];
-
-            // Ensisijainen toiminto
-            if (notification.actionText != null && notification.onAction != null) {
-              actionButtons.add(
-                TextButton(
-                  onPressed: () {
-                    notification.onAction!();
-                    if (notification.isTransient) {
-                      notificationProvider.removeTransientNotificationById(
-                          notification.notificationId);
-                    }
-                  },
-                  child: Text(
-                    notification.actionText!,
-                    style: const TextStyle(color: Colors.green),
-                  ),
-                ),
-              );
-            }
-
-            // Toissijainen toiminto (esim. Hylkää)
-            if (notification.secondaryActionText != null &&
-                notification.onSecondaryAction != null) {
-              actionButtons.add(
-                TextButton(
-                  onPressed: () {
-                    notification.onSecondaryAction!();
-                    if (notification.isTransient) {
-                      notificationProvider.removeTransientNotificationById(
-                          notification.notificationId);
-                    }
-                  },
-                  child: Text(
-                    notification.secondaryActionText!,
-                    style: const TextStyle(color: Colors.red),
-                  ),
-                ),
-              );
-            }
-
-            // Sulje-painike
-            actionButtons.add(
+            final backgroundColor = _getBackgroundColor(notification.type);
+            final actionButtons = <Widget>[
+              ..._primaryActions(
+                context: context,
+                notification: notification,
+                actions: actions,
+                onReminderActionComplete: onReminderActionComplete,
+              ),
               TextButton(
-                onPressed: () {
-                  if (notification.isTransient) {
-                    notificationProvider.removeTransientNotificationById(
-                        notification.notificationId);
-                  } else {
-                    if (notification.notificationId != null) {
-                      notificationProvider.markAsRead(
-                          notification.notificationId!);
-                    }
-                    notificationProvider.clearNotification();
-                  }
-                },
+                onPressed: () => notificationProvider.dismiss(notification),
                 child: const Text('Sulje'),
               ),
-            );
+            ];
 
             return Container(
               margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
@@ -101,7 +61,59 @@ class NotificationBanner extends StatelessWidget {
     );
   }
 
-  // Säilytetään nykyinen väri-logiikka
+  List<Widget> _primaryActions({
+    required BuildContext context,
+    required NotificationMessage notification,
+    required MainScreenActionsService actions,
+    VoidCallback? onReminderActionComplete,
+  }) {
+    switch (notification.kind) {
+      case NotificationKind.pendingInvites:
+        return [
+          TextButton(
+            onPressed: () {
+              showDialog(
+                context: context,
+                builder: (_) => const PendingInvitesDialog(),
+              );
+            },
+            child: const Text(
+              'Näytä',
+              style: TextStyle(color: Colors.green),
+            ),
+          ),
+        ];
+      case NotificationKind.reminderPersonal:
+        return [
+          TextButton(
+            onPressed: () {
+              actions.createBudgetForNextMonth(
+                context,
+                () => onReminderActionComplete?.call(),
+              );
+            },
+            child: const Text(
+              'Luo budjetti',
+              style: TextStyle(color: Colors.green),
+            ),
+          ),
+        ];
+      case NotificationKind.reminderShared:
+        return [
+          TextButton(
+            onPressed: () {
+              actions.openHouseholdCreate(context);
+              onReminderActionComplete?.call();
+            },
+            child: const Text(
+              'Luo yhteistalous',
+              style: TextStyle(color: Colors.green),
+            ),
+          ),
+        ];
+    }
+  }
+
   Color _getBackgroundColor(NotificationType type) {
     switch (type) {
       case NotificationType.warning:

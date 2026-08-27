@@ -286,6 +286,7 @@ class BudgetSaver {
           }
         }
         await FirebaseCrashlytics.instance.log('BudgetSaver: Yhteistalousbudjetti ${isEditing ? 'päivitetty' : 'tallennettu'}, sharedBudgetId: $sharedBudgetId');
+        notificationProvider.clearSharedReminder();
       } else {
         // Henkilökohtainen budjetti
         final newBudget = BudgetModel(
@@ -301,9 +302,8 @@ class BudgetSaver {
         await budgetProvider.saveBudget(authProvider.user!.uid, newBudget);
         budgetProvider.setBudget(newBudget);
         await FirebaseCrashlytics.instance.log('BudgetSaver: Henkilökohtainen budjetti tallennettu, ID: $newBudgetId');
+        notificationProvider.clearPersonalReminder();
       }
-
-      notificationProvider.clearNotification();
       if (context.mounted) {
         showSnackBar(
           context,

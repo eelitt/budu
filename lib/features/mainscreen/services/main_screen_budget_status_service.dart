@@ -9,20 +9,21 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 
-/// Palvelu pääsivun budjettitilan tarkistamiseen.
-/// Tarkistaa budjettien olemassaolon ja näyttää ilmoituksia puuttuvista budjeteista.
+/// Checks personal and shared budget coverage and updates reminder banners.
 class MainScreenBudgetStatusService {
-  /// Tarkistaa, onko budjetti olemassa seuraavalle kuukaudelle.
+  /// Whether any personal or shared budget starts next calendar month (app bar).
   Future<bool> checkNextMonthBudget(BuildContext context) async {
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     final budgetProvider = Provider.of<BudgetProvider>(context, listen: false);
-    final sharedProvider = Provider.of<SharedBudgetProvider>(context, listen: false);
+    final sharedProvider =
+        Provider.of<SharedBudgetProvider>(context, listen: false);
     if (authProvider.user == null) {
       return false;
     }
 
     final next = nextMonthStart(DateTime.now());
-    final personal = await budgetProvider.getAvailableBudgets(authProvider.user!.uid);
+    final personal =
+        await budgetProvider.getAvailableBudgets(authProvider.user!.uid);
     await sharedProvider.fetchSharedBudgets(authProvider.user!.uid);
     final shared = sharedProvider.sharedBudgets;
     return [...personal, ...shared].any(
@@ -32,60 +33,93 @@ class MainScreenBudgetStatusService {
     );
   }
 
-  /// Tarkistaa budjettitilan ja näyttää ilmoituksia puuttuvista budjeteista.
+  /// Updates personal/shared reminder banners from independent coverage checks.
   Future<void> checkBudgetStatus(
     BuildContext context,
     Function(bool) onNextMonthBudgetExists,
-    VoidCallback createBudgetCallback,
   ) async {
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     final budgetProvider = Provider.of<BudgetProvider>(context, listen: false);
-    final sharedProvider = Provider.of<SharedBudgetProvider>(context, listen: false);
-    final notificationProvider = Provider.of<NotificationProvider>(context, listen: false);
+    final sharedProvider =
+        Provider.of<SharedBudgetProvider>(context, listen: false);
+    final notificationProvider =
+        Provider.of<NotificationProvider>(context, listen: false);
 
-    if (authProvider.user != null) {
-      final now = DateTime.now();
-      final current = monthRange(now);
-      final nextStart = nextMonthStart(now);
-      final nextEnd = DateTime(nextStart.year, nextStart.month + 1, 0);
-      final dateFormat = DateFormat('d.M.yyyy');
+    if (authProvider.user == null) return;
 
-      final personal = await budgetProvider.getAvailableBudgets(authProvider.user!.uid);
-      await sharedProvider.fetchSharedBudgets(authProvider.user!.uid);
-      final startDates = [
-        ...personal.map((b) => b.startDate),
-        ...sharedProvider.sharedBudgets.map((b) => b.startDate),
-      ];
-      final decision = reminderDecision(now: now, budgetStartDates: startDates);
+    final now = DateTime.now();
+    final current = monthRange(now);
+    final nextStart = nextMonthStart(now);
+    final nextEnd = DateTime(nextStart.year, nextStart.month + 1, 0);
+    final dateFormat = DateFormat('d.M.yyyy');
+    final currentRange =
+        '${dateFormat.format(current.start)} - ${dateFormat.format(current.end)}';
+    final nextRange =
+        '${dateFormat.format(nextStart)} - ${dateFormat.format(nextEnd)}';
 
-      final nextMonthExists = startDates.any(
-        (d) => d.year == nextStart.year && d.month == nextStart.month,
-      );
-      if (decision != ReminderDecision.missingCurrentMonth) {
-        onNextMonthBudgetExists(nextMonthExists);
-      }
+    final personal =
+        await budgetProvider.getAvailableBudgets(authProvider.user!.uid);
+    await sharedProvider.fetchSharedBudgets(authProvider.user!.uid);
+    final personalDates = personal.map((b) => b.startDate).toList();
+    final sharedDates =
+        sharedProvider.sharedBudgets.map((b) => b.startDate).toList();
 
-      switch (decision) {
-        case ReminderDecision.missingCurrentMonth:
-          notificationProvider.showNotification(
-            message: 'Budjettia ei ole luotu kuluvalle kuulle (${dateFormat.format(current.start)} - ${dateFormat.format(current.end)}).',
+    final personalDecision =
+        reminderDecision(now: now, budgetStartDates: personalDates);
+    final sharedDecision =
+        reminderDecision(now: now, budgetStartDates: sharedDates);
+
+    final nextMonthExists = [...personalDates, ...sharedDates].any(
+      (d) => d.year == nextStart.year && d.month == nextStart.month,
+    );
+    onNextMonthBudgetExists(nextMonthExists);
+
+    _applyReminder(
+      notificationProvider: notificationProvider,
+      kind: NotificationKind.reminderPersonal,
+      decision: personalDecision,
+      missingCurrentMessage:
+          'Henkilökohtaista budjettia ei ole luotu kuluvalle kuulle ($currentRange).',
+      missingNextMessage:
+          'Henkilökohtaista budjettia ei ole luotu seuraavalle kuulle ($nextRange).',
+    );
+    _applyReminder(
+      notificationProvider: notificationProvider,
+      kind: NotificationKind.reminderShared,
+      decision: sharedDecision,
+      missingCurrentMessage:
+          'Yhteistalousbudjettia ei ole luotu kuluvalle kuulle ($currentRange).',
+      missingNextMessage:
+          'Yhteistalousbudjettia ei ole luotu seuraavalle kuulle ($nextRange).',
+    );
+  }
+
+  void _applyReminder({
+    required NotificationProvider notificationProvider,
+    required NotificationKind kind,
+    required ReminderDecision decision,
+    required String missingCurrentMessage,
+    required String missingNextMessage,
+  }) {
+    switch (decision) {
+      case ReminderDecision.missingCurrentMonth:
+        notificationProvider.upsert(
+          NotificationMessage(
+            kind: kind,
+            message: missingCurrentMessage,
             type: NotificationType.warning,
-            onAction: createBudgetCallback,
-            actionText: 'Luo budjetti',
-          );
-          break;
-        case ReminderDecision.missingNextMonth:
-          notificationProvider.showNotification(
-            message: 'Budjettia ei ole luotu seuraavalle kuulle (${dateFormat.format(nextStart)} - ${dateFormat.format(nextEnd)}).',
+          ),
+        );
+      case ReminderDecision.missingNextMonth:
+        notificationProvider.upsert(
+          NotificationMessage(
+            kind: kind,
+            message: missingNextMessage,
             type: NotificationType.warning,
-            onAction: createBudgetCallback,
-            actionText: 'Luo budjetti',
-          );
-          break;
-        case ReminderDecision.none:
-          notificationProvider.clearNotification();
-          break;
-      }
+          ),
+        );
+      case ReminderDecision.none:
+        notificationProvider.removeKind(kind);
     }
   }
 }

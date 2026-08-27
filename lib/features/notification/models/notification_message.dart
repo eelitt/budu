@@ -1,34 +1,43 @@
-import 'dart:ui';
+/// In-app banner kind. Identity and priority come from the kind (one active per kind).
+enum NotificationKind {
+  /// Pending household invitations.
+  pendingInvites,
 
-/// Notifikaation malli.
-class NotificationMessage {
-  final String message;
-  final NotificationType type;
-  final VoidCallback? onAction;
-  final String? actionText;
-  final String? notificationId; // ID Firestoresta tai paikallinen tunniste
+  /// Missing personal budget for current/next month.
+  reminderPersonal,
 
-  // Uudet kentät kutsujen käsittelyyn
-  final VoidCallback? onSecondaryAction;
-  final String? secondaryActionText;
-
-  // Jos true → transient (ei tallenneta Firestoreen, sulje poistaa vain muistista)
-  final bool isTransient;
-
-  NotificationMessage({
-    required this.message,
-    required this.type,
-    this.onAction,
-    this.actionText,
-    this.notificationId,
-    this.onSecondaryAction,
-    this.secondaryActionText,
-    this.isTransient = false,
-  });
+  /// Missing shared household budget for current/next month.
+  reminderShared,
 }
 
+/// Visual severity for banner coloring.
 enum NotificationType {
   warning,
   error,
   success,
+}
+
+/// In-app banner payload. Actions are owned by the UI (not stored here).
+class NotificationMessage {
+  final NotificationKind kind;
+  final String message;
+  final NotificationType type;
+
+  const NotificationMessage({
+    required this.kind,
+    required this.message,
+    required this.type,
+  });
+}
+
+/// Display priority: lower sorts first. Invite beats personal beats shared.
+int notificationKindPriority(NotificationKind kind) {
+  switch (kind) {
+    case NotificationKind.pendingInvites:
+      return 0;
+    case NotificationKind.reminderPersonal:
+      return 1;
+    case NotificationKind.reminderShared:
+      return 2;
+  }
 }

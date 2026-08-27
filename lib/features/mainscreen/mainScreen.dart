@@ -116,10 +116,6 @@ class _MainScreenState extends State<MainScreen> {
             _nextMonthBudgetExists.value = exists;
           }
         },
-        () => _mainScreenActions.createBudgetForNextMonth(
-          context,
-          () => _checkBudgetStatus(),
-        ),
       );
     } catch (e) {
       print('MainScreen: _checkBudgetStatus - Virhe budjettitilan tarkistuksessa: $e');
@@ -194,7 +190,9 @@ class _MainScreenState extends State<MainScreen> {
       ),
       body: Column(
         children: [
-          const NotificationBanner(), // Näyttää ilmoitusbannerin (esim. budjetin luomisen kehotukset)
+          NotificationBanner(
+            onReminderActionComplete: _checkBudgetStatus,
+          ),
           const InviteNotificationHandler(),
           Expanded(
             child: _hasBudgetLoadError

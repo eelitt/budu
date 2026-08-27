@@ -8,7 +8,6 @@ import 'package:budu/features/budget/models/budget_model.dart';
 import 'package:budu/features/budget/providers/budget_provider.dart';
 import 'package:budu/features/budget/providers/expense_provider.dart';
 import 'package:budu/features/budget/providers/shared_budget_provider.dart';
-import 'package:budu/features/notification/data/notification_repository.dart';
 import 'package:fake_cloud_firestore/fake_cloud_firestore.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -88,8 +87,6 @@ class _FakeSharedBudgetProvider extends SharedBudgetProvider {
           repository:
               SharedBudgetRepository(firestore: FakeFirebaseFirestore()),
           profiles: UserProfileRepository(firestore: FakeFirebaseFirestore()),
-          notifications:
-              NotificationRepository(firestore: FakeFirebaseFirestore()),
         );
 
   List<BudgetModel> budgets = [];

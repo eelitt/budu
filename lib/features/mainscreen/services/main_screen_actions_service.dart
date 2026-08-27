@@ -85,7 +85,8 @@ class MainScreenActionsService {
     }
   }
 
-  void _openHouseholdCreate(BuildContext context) {
+  /// Opens create-shared-budget (sequential household when a period already exists).
+  void openHouseholdCreate(BuildContext context) {
     final sharedProvider =
         Provider.of<SharedBudgetProvider>(context, listen: false);
     final latest = sharedProvider.latestSharedBudget;
@@ -174,7 +175,7 @@ class MainScreenActionsService {
     } else if (value == 'create_budget') {
       createBudgetForNextMonth(context, () {});
     } else if (value == 'create_shared_budget') {
-      _openHouseholdCreate(context);
+      openHouseholdCreate(context);
     } else if (value == 'settings') {
       Navigator.push(
         context,

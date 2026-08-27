@@ -3,21 +3,17 @@ import 'package:budu/features/budget/data/shared_budget_repository.dart';
 import 'package:budu/features/budget/domain/shared_rules.dart';
 import 'package:budu/features/budget/models/budget_model.dart';
 import 'package:budu/features/budget/models/invitation_model.dart';
-import 'package:budu/features/notification/data/notification_repository.dart';
 import 'package:flutter/material.dart';
 
 class SharedBudgetProvider with ChangeNotifier {
   SharedBudgetProvider({
     SharedBudgetRepository? repository,
     UserProfileRepository? profiles,
-    NotificationRepository? notifications,
   })  : _repository = repository ?? SharedBudgetRepository(),
-        _profiles = profiles ?? UserProfileRepository(),
-        _notifications = notifications ?? NotificationRepository();
+        _profiles = profiles ?? UserProfileRepository();
 
   final SharedBudgetRepository _repository;
   final UserProfileRepository _profiles;
-  final NotificationRepository _notifications;
   List<BudgetModel> _sharedBudgets = [];
   List<Invitation> _invitations = [];
   bool _isLoading = false;
@@ -131,16 +127,6 @@ class SharedBudgetProvider with ChangeNotifier {
       inviteeEmail: inviteeEmail,
       inviteeUid: inviteeUid,
     );
-    final budget = await _repository.getSharedBudgetById(sharedBudgetId);
-    final budgetName = budget?.name ?? 'yhteistalousbudjettiin';
-    if (inviteeUid != null) {
-      await _notifications.createNotification(
-        userId: inviteeUid,
-        type: 'invitation',
-        message: 'Olet kutsuttu yhteistalousbudjettiin "$budgetName"',
-        invitationId: invitationId,
-      );
-    }
     return invitationId;
   }
 

@@ -1,9 +1,7 @@
 import 'package:budu/core/changelog.dart';
 import 'package:budu/core/utils.dart';
 
-import 'package:budu/features/budget/screens/create_budget/shared_budget/pending_invites_dialog.dart';
 import 'package:budu/features/mainscreen/services/main_screen_update_dialog_service.dart';
-import 'package:budu/features/notification/models/notification_message.dart';
 import 'package:budu/features/notification/providers/notification_provider.dart';
 import 'package:budu/features/update/update_manager.dart';
 import 'package:flutter/material.dart';
@@ -130,60 +128,13 @@ class AppBarDebug {
     _showDummyInviteNotification(context, count: 2);
   }
 
-  /// Yhteinen apumetodi dummy-kutsuilmoituksen näyttämiseen
-  /// (transient → ei tallenneta Firestoreen, katoaa sulkiessa)
+  /// Debug: upsert pending-invite banner via [NotificationProvider.syncPendingInvites].
   static void _showDummyInviteNotification(
     BuildContext context, {
     required int count,
   }) {
-    final notificationProvider =
-        Provider.of<NotificationProvider>(context, listen: false);
-
-    // Poistetaan mahdollinen vanha dummy (estää duplikaatit)
-    notificationProvider.removeTransientNotificationById('debug_pending_invites');
-
-    late final String message;
-    VoidCallback? primaryAction;
-    String? primaryText;
-    VoidCallback? secondaryAction;
-    String? secondaryText;
-
-    if (count == 1) {
-      message = 'Uusi kutsu yhteistalousbudjettiin';
-
-      primaryText = 'Hyväksy';
-      primaryAction = () {
-        showSnackBar(context, 'DEBUG: Kutsu hyväksytty (dummy)', backgroundColor: Colors.green);
-      };
-
-      secondaryText = 'Hylkää';
-      secondaryAction = () {
-        showSnackBar(context, 'DEBUG: Kutsu hylätty (dummy)');
-      };
-    } else {
-      message = 'Sinulla on $count odottavaa kutsua';
-      primaryText = 'Näytä kaikki';
-      primaryAction = () {
-        showDialog(
-          context: context,
-          builder: (_) => const PendingInvitesDialog(),
-        );
-      };
-    }
-
-    notificationProvider.showTransientNotification(
-      NotificationMessage(
-        message: message,
-        type: NotificationType.warning,
-        notificationId: 'debug_pending_invites', // Yksilöivä ID debug-testaukseen
-        actionText: primaryText,
-        onAction: primaryAction,
-        secondaryActionText: secondaryText,
-        onSecondaryAction: secondaryAction,
-        isTransient: true,
-      ),
-    );
-
+    Provider.of<NotificationProvider>(context, listen: false)
+        .syncPendingInvites(count);
     showSnackBar(context, 'Debug: Kutsuilmoitus näytetty ($count kpl)');
   }
 

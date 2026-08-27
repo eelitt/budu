@@ -41,7 +41,7 @@ Invariants the rest of this file spells out:
 - Shared: a **household** (`households/{id}`: name + members) owns periods (`shared_budgets` with `householdId`; `users` is a copy of members for queries). Invite `pending` → `accepted` (member added to the household and every period) or `declined`. Sequential periods reuse `householdId`. Invitee must already have a user doc; invite is written only after the household/plan exists.
 - Expense amount `≥ 0` and `≤ 99999`; category required; subcategory required if that category has subs; description `≤ 50` chars. Planned income, if set, `≥ 0` and `≤ 999999`.
 - Max 25 main categories, 20 subs each, names `≤ 20` chars, no duplicates.
-- Reminders use personal **and** shared `startDate`s: no budget this calendar month → warn; no next-month budget → warn only in the last 3 days of the month. Chatbot save is personal only; login skips chatbot if the user already has a shared budget.
+- Reminders are **separate** for personal and shared: each side uses its own `startDate`s (no budget this calendar month → warn; no next-month budget → warn only in the last 3 days of the month). Chatbot save is personal only; login skips chatbot if the user already has a shared budget.
 - Chatbot: 2-week answers stored as monthly/2; yearly answers stored as /12. Chatbot saves personal budgets only.
 
 Details, formulas, category tree, Firestore paths, and as-implemented caveats follow.
@@ -220,10 +220,12 @@ Limits:
 
 ## “Need a budget” reminders
 
-Personal **and** shared `startDate` year/month:
+Personal and shared are evaluated **independently** with the same rule on their own `startDate` lists:
 
-1. If no budget starts in the **current** calendar month → warn and offer create.
-2. Else if no budget starts in the **next** month → warn only when **≤ 3 days** remain in the current month.
+1. If no budget of that kind starts in the **current** calendar month → warn and offer create (personal → create personal; shared → create household).
+2. Else if no budget of that kind starts in the **next** month → warn only when **≤ 3 days** remain in the current month.
+
+Both reminders can show at once when both kinds are missing (subject to the banner max of 2; pending invites outrank reminders).
 
 ---
 
@@ -255,7 +257,7 @@ budgets/{uid}/monthly_budgets/{year}_{month}
 - Summary owns loading events for the currently selected budget; tracking, distribution, and event views consume the resulting provider state and do not initiate duplicate loads. The initial load passes the personal/shared storage path explicitly.
 - If multiple selected-budget loads overlap, only the newest request may replace the provider’s in-memory events. A slower result from an older selection is ignored.
 - The create-budget screen reuses one budget-list request for its lifetime instead of starting a new budget-list read on every rebuild. The request is refreshed only by an explicit new screen flow.
-- Budget, event, and invitation **writes** store dates as ISO-8601 strings (`DateTime.toIso8601String()`). Reads still accept Firestore `Timestamp` (legacy shared updates / old invites). User profile `createdAt` and notification `timestamp` use `FieldValue.serverTimestamp()` and are separate from budget/event date fields.
+- Budget, event, and invitation **writes** store dates as ISO-8601 strings (`DateTime.toIso8601String()`). Reads still accept Firestore `Timestamp` (legacy shared updates / old invites). User profile `createdAt` uses `FieldValue.serverTimestamp()` and is separate from budget/event date fields. In-app banners are not persisted to Firestore.
 - Deleting a personal or shared budget also deletes its `events` (and personal legacy expenses).
 - Personal in-memory edits debounce-save after **1 second**.
 
@@ -298,83 +300,61 @@ The developer-menu changelog path uses the public GitHub Contents API at `https:
 
 ## Notifications (in-app)
 
-Notifications in Budu are **in-app banners** on the main screen. There is no OS push, no local system notification plugin, and no Cloud Function that sends alerts. Banner UI lives above the tab `Navigator` in `MainScreen`.
+Notifications in Budu are **in-app banners** on the main screen. There is no OS push, no local system notification plugin, and no Cloud Function that sends alerts. Banners are **not** written to Firestore. UI lives above the tab `Navigator` in `MainScreen`. Rework history: [`notifications_rework.md`](notifications_rework.md).
 
-Business rules for “need a budget” reminders are under [“Need a budget” reminders](#need-a-budget-reminders). This section describes how those reminders and invite alerts are produced, stored, and shown. Known wiring problems and a rework plan are in [`notifications_rework.md`](notifications_rework.md).
+Business rules for coverage: [“Need a budget” reminders](#need-a-budget-reminders).
 
 ### Pieces
 
 | Piece | Role |
 | --- | --- |
-| `NotificationMessage` / `NotificationType` | Banner payload: message, type (`warning` / `error` / `success`), optional primary/secondary actions, optional id, `isTransient` |
-| `NotificationProvider` | App-wide `ChangeNotifier` (`main.dart`): in-memory reminder slot, transient list, Firestore unread stream + `markAsRead` |
-| `NotificationRepository` | Firestore CRUD under `users/{uid}/notifications/{id}` |
-| `NotificationBanner` | Renders `notificationProvider.notifications` as a column of colored banners |
-| `InviteNotificationHandler` | Invisible widget: turns pending invitations into a transient banner |
-| `MainScreenBudgetStatusService` | Loads personal + shared budgets and calls `showNotification` / `clearNotification` from `reminderDecision` |
-| `PendingInvitesDialog` | Accept / decline pending invitations (real invite actions) |
+| `NotificationKind` / `NotificationMessage` / `NotificationType` | Kind (`pendingInvites`, `reminderPersonal`, `reminderShared`), Finnish message, color type. No action callbacks on the model. |
+| `NotificationProvider` | In-memory map of active kinds; `notifications` = priority-sorted, **max 2** |
+| `NotificationBanner` | Renders visible banners; actions by kind (**Näytä**, **Luo budjetti**, **Luo yhteistalous**, **Sulje**) |
+| `InviteNotificationHandler` | Post-frame sync from `SharedBudgetProvider.pendingInvitations` → `syncPendingInvites` |
+| `MainScreenBudgetStatusService` | Independent `reminderDecision` for personal vs shared startDates → upsert/remove reminder kinds |
+| `PendingInvitesDialog` | Accept / decline invitations |
 
-### Three channels
+### Priority and cap
 
-| Channel | How it is stored | Who writes | Who is supposed to show it |
-| --- | --- | --- | --- |
-| Budget reminders | In-memory `_currentNotification` via `showNotification` | `MainScreenBudgetStatusService` | Banner (see caveats: not included in the list the banner reads) |
-| Pending-invite hint | In-memory transient list via `showTransientNotification` | `InviteNotificationHandler` (and debug menu dummies) | `NotificationBanner` |
-| Persisted invite docs | Firestore `users/{uid}/notifications/{id}` | `SharedBudgetProvider.inviteUser` → `createNotification` | Provider stream after `initializeNotifications(uid)` (never called from app code today) |
+1. `pendingInvites`
+2. `reminderPersonal`
+3. `reminderShared`
 
-### Current flows
+At most **two** banners are shown. Example: invite + personal missing hides the shared reminder until the invite is gone.
+
+### Flows
 
 #### Budget reminders
 
-1. `MainScreen` runs `_checkBudgetStatus` after the first frame and again when switching bottom-nav tabs (and after some budget create/delete paths).
-2. `MainScreenBudgetStatusService.checkBudgetStatus` loads available personal budgets and shared budgets, collects `startDate`s, and runs `reminderDecision`.
-3. On `missingCurrentMonth` or `missingNextMonth`, it calls `NotificationProvider.showNotification` with Finnish copy and action **Luo budjetti** (creates / navigates to next-month budget via `MainScreenActionsService`).
-4. On `none`, it calls `clearNotification`.
-5. Successful budget save (`BudgetSaver`) and deleting the last budget (chatbot navigation) also clear the reminder slot.
+1. `MainScreen` runs `_checkBudgetStatus` after the first frame, on tab changes, and after some create/delete paths.
+2. Status service loads personal and shared budgets, runs `reminderDecision` on each list separately, upserts or removes `reminderPersonal` / `reminderShared` with Finnish copy.
+3. Banner **Luo budjetti** → `MainScreenActionsService.createBudgetForNextMonth`; **Luo yhteistalous** → `openHouseholdCreate`.
+4. App bar “next month exists” still uses **combined** personal ∪ shared startDates.
+5. `BudgetSaver` clears the matching reminder kind after save; deleting the last budget clears both reminder kinds.
 
-#### Pending invitations (live path that can appear in the UI)
+#### Pending invitations
 
-1. Once per authenticated `MainScreen` session, `didChangeDependencies` fetches shared budgets and pending invitations for the signed-in email.
-2. `InviteNotificationHandler` watches `SharedBudgetProvider.pendingInvitations`. If any status is `pending`, it upserts a transient message with id `pending_invites` (**View** → `PendingInvitesDialog`, **Dismiss**).
-3. Accept/decline happen in the dialog against `invitations/{id}`; that path does not update Firestore notification docs.
+1. `MainScreen` fetches pending invitations once per session for the signed-in email.
+2. `InviteNotificationHandler` watches the shared provider and, after the frame, calls `syncPendingInvites(count)` (Finnish singular/plural).
+3. Banner **Näytä** opens `PendingInvitesDialog`. Accept/decline update `invitations/{id}` only (no notification subcollection writes).
 
-#### Persisted invite notifications (write path)
+### Provider API (as implemented)
 
-1. When an existing household period is invited via `SharedBudgetProvider.inviteUser`, after the invitation document is created the provider writes an unread notification to the invitee’s `users/{inviteeUid}/notifications/{id}` if `inviteeUid` is known.
-2. Document fields: `type` (e.g. `'invitation'`), `message`, `invitationId`, `read: false`, `timestamp: serverTimestamp()`.
-3. `NotificationProvider.initializeNotifications(userId)` would subscribe to unread docs (`read == false`, order by `timestamp` desc, limit 50), map them to banner rows with a hardcoded **Hyväksy** action that only calls `markAsRead`, and store the signed-in uid for later updates. **No production call site invokes `initializeNotifications`** (only unit tests).
+- `upsert` / `removeKind` / `dismiss` / `syncPendingInvites` / `clearReminders` / `clearPersonalReminder` / `clearSharedReminder`
+- Notify listeners via post-frame callback to avoid build-phase updates
 
-### Firestore path and rules
+### Legacy Firestore path
 
-```
-users/{uid}/notifications/{notificationId}
-  type, message, invitationId?, read, timestamp
-```
-
-Rules (see [`firebase_rules.md`](firebase_rules.md)): any signed-in user may **create** a doc if `type == 'invitation'`; the document owner may **read** and **update**. There is no delete rule. Invitee-facing create is intentional (inviter writes under the invitee’s uid); the rule does not check inviter identity or that the invitee matches the path.
-
-### Provider state (as implemented)
-
-- `notifications` getter = Firestore-backed list **plus** transient list. It does **not** include `_currentNotification`.
-- `showNotification` / `clearNotification` only touch `_currentNotification` (post-frame `notifyListeners`).
-- Transient helpers upsert/remove by `notificationId`.
-- `markAsRead` is a no-op until `initializeNotifications` has set `_userId`.
-- Provider `dispose` cancels the Firestore subscription.
+`users/{uid}/notifications/{id}` may still exist in rules and old data. The client no longer reads or writes it. See [`firebase_rules.md`](firebase_rules.md).
 
 ### Notification testing
 
-- `test/features/notification/notification_mark_as_read_test.dart`: after `initializeNotifications(uid)`, `markAsRead` updates `users/{uid}/notifications/{id}`; before initialize it does not write under a placeholder uid.
-- Reminder decision coverage: `reminder_rules_test.dart` (see [`tests.md`](tests.md)).
-
-### Notification caveats
-
-- Reminder banners are written to `_currentNotification` but the banner widget only paints `notifications`, so budget reminders do not appear in the UI as wired today.
-- Firestore invite docs are created on invite but never streamed in the running app.
-- Invite dismiss / “no pending invites” paths call `clearNotification`, which clears the reminder slot rather than (or in addition to) removing the transient invite row. Side effects also run inside `InviteNotificationHandler.build`.
-- Banner copy mixes Finnish (reminders, Firestore message text, **Sulje** / **Hyväksy**) and English (pending-invite transient **View** / **Dismiss**).
-- Details and rework stages: [`notifications_rework.md`](notifications_rework.md).
+- `notification_banner_list_test.dart`: kinds, invite↔reminder isolation, max-2 priority, Finnish invite copy
+- `reminder_rules_test.dart`: pure coverage decision (see [`tests.md`](tests.md))
 
 ---
+
 
 ## Caveats (as implemented)
 

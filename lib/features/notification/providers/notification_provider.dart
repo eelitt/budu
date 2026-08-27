@@ -1,117 +1,89 @@
 import 'package:budu/features/notification/models/notification_message.dart';
-import 'package:budu/features/notification/data/notification_repository.dart';
 import 'package:flutter/material.dart';
-import 'package:firebase_crashlytics/firebase_crashlytics.dart';
-import 'dart:async'; // Lisätty: StreamSubscription varten
 
-
-/// NotificationProvider: Hallinnoi in-app-notifikaatioita.
+/// In-app notification banners: invites + personal/shared budget reminders.
 class NotificationProvider with ChangeNotifier {
-  NotificationProvider({NotificationRepository? repository})
-      : _repository = repository ?? NotificationRepository();
+  NotificationProvider();
 
-  NotificationMessage? _currentNotification;
-  List<NotificationMessage> _notifications = [];
-  StreamSubscription<List<NotificationMessage>>? _notificationsSubscription;
-  final NotificationRepository _repository;
-  String? _userId;
+  static const int maxVisible = 2;
 
-  NotificationMessage? get currentNotification => _currentNotification;
-  // Transient (paikalliset) notifikaatiot – ei tallenneta Firestoreen
-  final List<NotificationMessage> _transientNotifications = [];
+  final Map<NotificationKind, NotificationMessage> _active = {};
 
-  // Yhdistetty lista: Firestore + transient
-  List<NotificationMessage> get notifications =>
-      [..._notifications, ..._transientNotifications];
-
-  /// Näyttää transient-notifikaation (ei Firestoreen)
-  void showTransientNotification(NotificationMessage message) {
-    // Poista mahdollinen vanha saman ID:n notifikaatio
-    _transientNotifications
-        .removeWhere((n) => n.notificationId == message.notificationId);
-    _transientNotifications.add(message);
-    notifyListeners();
-  }
-
-  /// Poistaa transient-notifikaation ID:llä
-  void removeTransientNotificationById(String? id) {
-    if (id == null) return;
-    _transientNotifications.removeWhere((n) => n.notificationId == id);
-    notifyListeners();
-  }
-
-  /// Näyttää notifikaation (olemassa oleva, mutta päivitetty safe-notify:llä).
-  void showNotification({
-    required String message,
-    required NotificationType type,
-    VoidCallback? onAction,
-    String? actionText,
-  }) {
-    _currentNotification = NotificationMessage(
-      message: message,
-      type: type,
-      onAction: onAction,
-      actionText: actionText,
-    );
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      notifyListeners();
-    });
-  }
-
-  /// Tyhjentää nykyisen notifikaation.
-  void clearNotification() {
-    _currentNotification = null;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      notifyListeners();
-    });
-  }
-
-  /// Alustaa notifikaatioiden kuuntelun Firestoresta (kutsutaan esim. MainScreen:initState:ssa).
-  /// Käytä repository:a stream:in hakemiseen (modulaarinen).
-  void initializeNotifications(String userId) {
-    _userId = userId;
-    _notificationsSubscription?.cancel();
-    _notificationsSubscription = _repository.getUnreadNotificationsStream(userId).listen((notifications) {
-      _notifications = notifications.map((notif) {
-        return NotificationMessage(
-          message: notif.message,
-          type: notif.type,
-          onAction: () {
-            // Handle action (esim. navigoi invitation:iin)
-            if (notif.notificationId != null) {
-              markAsRead(notif.notificationId!); // Merkitse luetuksi actionin jälkeen (käytä repositorya)
-            }
-          },
-          actionText: 'Hyväksy', // Esim. invitationille
-          notificationId: notif.notificationId,
-        );
-      }).toList();
-      notifyListeners();
-    }, onError: (e, stackTrace) {
-      FirebaseCrashlytics.instance.recordError(
-        e,
-        stackTrace,
-        reason: 'Failed to stream notifications for user $userId',
+  /// Active banners by priority, capped at [maxVisible].
+  List<NotificationMessage> get notifications {
+    final list = _active.values.toList()
+      ..sort(
+        (a, b) => notificationKindPriority(a.kind)
+            .compareTo(notificationKindPriority(b.kind)),
       );
-      print('NotificationProvider: Virhe notifikaatioiden streamissa: $e');
+    if (list.length <= maxVisible) return list;
+    return list.sublist(0, maxVisible);
+  }
+
+  /// All active kinds (including those hidden by the max-visible cap).
+  Set<NotificationKind> get activeKinds => _active.keys.toSet();
+
+  /// Insert or replace a banner for [message.kind].
+  void upsert(NotificationMessage message) {
+    _active[message.kind] = message;
+    _safeNotify();
+  }
+
+  /// Removes one kind. No-op if absent.
+  void removeKind(NotificationKind kind) {
+    if (_active.remove(kind) != null) {
+      _safeNotify();
+    }
+  }
+
+  /// Dismisses the banner for [message.kind].
+  void dismiss(NotificationMessage message) {
+    removeKind(message.kind);
+  }
+
+  /// Sync pending-invite banner from invitation count (Finnish copy).
+  void syncPendingInvites(int pendingCount) {
+    if (pendingCount <= 0) {
+      removeKind(NotificationKind.pendingInvites);
+      return;
+    }
+    final message = pendingCount == 1
+        ? 'Sinulla on 1 odottava budjettikutsu'
+        : 'Sinulla on $pendingCount odottavaa budjettikutsua';
+    upsert(
+      NotificationMessage(
+        kind: NotificationKind.pendingInvites,
+        message: message,
+        type: NotificationType.warning,
+      ),
+    );
+  }
+
+  /// Clears personal and shared reminder banners only.
+  void clearReminders() {
+    final removedPersonal =
+        _active.remove(NotificationKind.reminderPersonal) != null;
+    final removedShared =
+        _active.remove(NotificationKind.reminderShared) != null;
+    if (removedPersonal || removedShared) {
+      _safeNotify();
+    }
+  }
+
+  /// Clears only the personal reminder.
+  void clearPersonalReminder() {
+    removeKind(NotificationKind.reminderPersonal);
+  }
+
+  /// Clears only the shared reminder.
+  void clearSharedReminder() {
+    removeKind(NotificationKind.reminderShared);
+  }
+
+  void _safeNotify() {
+    final binding = WidgetsBinding.instance;
+    binding.addPostFrameCallback((_) {
+      notifyListeners();
     });
-  }
-
-  /// Merkitsee notifikaation luetuksi signed-in uid:lle ([initializeNotifications]).
-  Future<void> markAsRead(String notificationId) async {
-    final userId = _userId;
-    if (userId == null) return;
-    await _repository.markAsRead(userId, notificationId);
-  }
-
-  /// Peruuttaa stream-kuuntelijan (dispose:ssa).
-  void cancelSubscriptions() {
-    _notificationsSubscription?.cancel();
-  }
-
-  @override
-  void dispose() {
-    cancelSubscriptions();
-    super.dispose();
   }
 }

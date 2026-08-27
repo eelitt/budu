@@ -214,7 +214,8 @@ class BudgetScreenController {
         );
       } else {
         if (context.mounted && !_isDisposed) {
-          Provider.of<NotificationProvider>(context, listen: false).clearNotification();
+          Provider.of<NotificationProvider>(context, listen: false)
+              .clearReminders();
           Navigator.of(context, rootNavigator: true).pushNamedAndRemoveUntil(
             AppRouter.chatbotRoute,
             (Route<dynamic> route) => false, // Poistaa kaikki aiemmat reitit

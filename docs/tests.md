@@ -51,7 +51,7 @@ Production rules sit in `lib/features/budget/domain/`. Tests call those function
 | `EventRepository` | `event_repository_test.dart` |
 | `ExpenseProvider` stale-load protection | `expense_provider_test.dart` |
 | ISO date writes + Timestamp reads | `date_encoding_test.dart` |
-| `NotificationProvider.markAsRead` | `test/features/notification/notification_mark_as_read_test.dart` |
+| Banner kinds, max-2 priority, invite↔reminder isolation, Finnish invite copy | `test/features/notification/notification_banner_list_test.dart` |
 | `UserProfileRepository` | `test/features/auth/user_profile_repository_test.dart` |
 | `AuthProvider` session transitions | `test/features/auth/auth_provider_test.dart` |
 | `decideLoginDestination` | `test/features/auth/login_destination_test.dart` |
@@ -72,7 +72,7 @@ Date-dependent rules take `now`. Production callers pass `DateTime.now()`.
 
 **Periods** — calendar month range (Feb leap/non-leap, December); next month wrapping year; days left in month; overlap (same day and shared endpoint overlap; adjacent days do not); `hasOverlappingBudgetPeriod` uses the list the saver passes (personal-only or household-only) and ignores `excludeId` (edit); next period after latest end (monthly vs +13 days biweekly).
 
-**Reminders** — no budget whose `startDate` is in the current month → `missingCurrentMonth`; else no next-month start and ≤3 days left → `missingNextMonth`; otherwise `none`. A start mid-month still counts as that month.
+**Reminders** — `reminderDecision` is pure: no budget whose `startDate` is in the current month → `missingCurrentMonth`; else no next-month start and ≤3 days left → `missingNextMonth`; otherwise `none`. A start mid-month still counts as that month. The UI runs it separately on personal and shared startDate lists.
 
 **Tracking** — expense events only; default subcategory rolls up to the mapped parent even if `event.category` differs; custom sub uses `event.category`; subcategory totals filter `budgetId` + category + sub; progress 0 when planned is 0; remaining % clamped 0–100 (100 when planned is 0); pie **Muut** for &lt;5% of planned total.
 
@@ -94,7 +94,7 @@ Date-dependent rules take `now`. Production callers pass `DateTime.now()`.
 
 **User profile** — `ensureUserDocument` creates `users/{uid}` once and does not overwrite `isAdmin`/email on a second call. Missing profile is null.
 
-**Notifications** — after `initializeNotifications(uid)`, `markAsRead` updates `users/{uid}/notifications/{id}` (`read: true`). It does not write under a placeholder user id. Before initialize, `markAsRead` is a no-op.
+**Notifications** — in-memory kinds only (no Firestore). `syncPendingInvites` / reminder upserts feed `notifications` (priority invite > personal > shared, max 2). Removing invite leaves reminders; `clearReminders` leaves invites.
 
 **Events for one budget** — `EventRepository.getEventsForBudget` returns every matching event (no 50-event cap). Extra `budgetId`s are excluded. Shared path uses `shared_budgets/{id}/events`. Empty personal `events` falls back to legacy `monthly_budgets/.../expenses`. Tracking totals on the loaded list include all of those expenses. `saveEvent` / `deleteEvent` write that same `events` collection. History uses that uncapped load for each period in the filter list.
 
