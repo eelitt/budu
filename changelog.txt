@@ -34,3 +34,6 @@
 
 ## 1.1.0
 - Bugikorjauksia
+
+## 1.1.1
+- Lisää bugikorjauksia. muutama refaktorointi.
