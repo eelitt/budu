@@ -138,79 +138,103 @@ class _HistoryScreenState extends State<HistoryScreen> {
       return matchesCategory && matchesType && matchesQuery && matchesBudget;
     }).toList();
 
-    return Column(
-      children: [
-        // Toggle at the top
-        if (Provider.of<SharedBudgetProvider>(context, listen: false).hasSharedBudget)
-          Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text('Henkilökohtainen',
+    // CustomScrollView: filter card + toggle can exceed the shell body when
+    // notification banners shrink height (IndexedStack constraints).
+    return CustomScrollView(
+      slivers: [
+        if (Provider.of<SharedBudgetProvider>(context, listen: false)
+            .hasSharedBudget)
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    'Henkilökohtainen',
                     style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                          fontWeight: _isSharedBudget ? FontWeight.normal : FontWeight.bold,
-                        )),
-                Switch(
-                  value: _isSharedBudget,
-                  onChanged: _onToggleChanged,
-                  activeColor: Colors.blueGrey[700],
-                ),
-                Text('Yhteistalous',
+                          fontWeight: _isSharedBudget
+                              ? FontWeight.normal
+                              : FontWeight.bold,
+                        ),
+                  ),
+                  Switch(
+                    value: _isSharedBudget,
+                    onChanged: _onToggleChanged,
+                    activeColor: Colors.blueGrey[700],
+                  ),
+                  Text(
+                    'Yhteistalous',
                     style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                          fontWeight: _isSharedBudget ? FontWeight.bold : FontWeight.normal,
-                        )),
-              ],
+                          fontWeight: _isSharedBudget
+                              ? FontWeight.bold
+                              : FontWeight.normal,
+                        ),
+                  ),
+                ],
+              ),
             ),
           ),
+        SliverToBoxAdapter(
+          child: EventFilterSection(
+            availableBudgets: budgetOptions,
+            onCategoryChanged: (category) =>
+                setState(() => _selectedCategory = category),
+            onTypeChanged: (type) => setState(() => _selectedType = type),
+            onBudgetChanged: (budget) async {
+              setState(() {
+                _selectedBudgetId = budget == 'Kaikki budjetit'
+                    ? null
+                    : _availableBudgets[budgetOptions.indexOf(budget!) - 1].id;
+                _isLoadingEvents = true;
+              });
 
-        EventFilterSection(
-          availableBudgets: budgetOptions,
-          onCategoryChanged: (category) => setState(() => _selectedCategory = category),
-          onTypeChanged: (type) => setState(() => _selectedType = type),
-          onBudgetChanged: (budget) async {
-            setState(() {
-              _selectedBudgetId = budget == 'Kaikki budjetit'
-                  ? null
-                  : _availableBudgets[budgetOptions.indexOf(budget!) - 1].id;
-              _isLoadingEvents = true;
-            });
+              final authProvider =
+                  Provider.of<AuthProvider>(context, listen: false);
+              final expenseProvider =
+                  Provider.of<ExpenseProvider>(context, listen: false);
 
-            final authProvider = Provider.of<AuthProvider>(context, listen: false);
-            final expenseProvider = Provider.of<ExpenseProvider>(context, listen: false);
+              if (_selectedBudgetId != null) {
+                await expenseProvider.loadExpenses(
+                  authProvider.user!.uid,
+                  _selectedBudgetId!,
+                  isSharedBudget: _isSharedBudget,
+                );
+              } else {
+                await expenseProvider.loadHistoryExpenses(
+                  authProvider.user!.uid,
+                  isSharedBudget: _isSharedBudget,
+                  budgets: _availableBudgets,
+                );
+              }
 
-            if (_selectedBudgetId != null) {
-              await expenseProvider.loadExpenses(
-                authProvider.user!.uid,
-                _selectedBudgetId!,
-                isSharedBudget: _isSharedBudget,
-              );
-            } else {
-              await expenseProvider.loadHistoryExpenses(
-                authProvider.user!.uid,
-                isSharedBudget: _isSharedBudget,
-                budgets: _availableBudgets,
-              );
-            }
-
-            if (mounted) setState(() => _isLoadingEvents = false);
-          },
-          onSearchQueryChanged: (query) => setState(() => _searchQuery = query),
+              if (mounted) setState(() => _isLoadingEvents = false);
+            },
+            onSearchQueryChanged: (query) =>
+                setState(() => _searchQuery = query),
+          ),
         ),
-
-        Expanded(
-          child: _isLoadingEvents
-              ? const Center(
-                  child: CircularProgressIndicator(), // ← LOADING INDICATOR HERE
-                )
-              : filteredEvents.isEmpty
-                  ? const Center(child: Text('Ei tapahtumia'))
-                  : ListView.builder(
-                      padding: const EdgeInsets.all(16),
-                      itemCount: filteredEvents.length,
-                      itemBuilder: (context, index) => EventListItem(event: filteredEvents[index]),
-                    ),
-        ),
+        if (_isLoadingEvents)
+          const SliverFillRemaining(
+            hasScrollBody: false,
+            child: Center(child: CircularProgressIndicator()),
+          )
+        else if (filteredEvents.isEmpty)
+          const SliverFillRemaining(
+            hasScrollBody: false,
+            child: Center(child: Text('Ei tapahtumia')),
+          )
+        else
+          SliverPadding(
+            padding: const EdgeInsets.all(16),
+            sliver: SliverList(
+              delegate: SliverChildBuilderDelegate(
+                (context, index) =>
+                    EventListItem(event: filteredEvents[index]),
+                childCount: filteredEvents.length,
+              ),
+            ),
+          ),
       ],
     );
   }
