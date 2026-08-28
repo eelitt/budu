@@ -6,14 +6,12 @@ class SubCategoryTile extends StatelessWidget {
   final String subCategory;
   final double subCategoryBudget;
   final double spentAmount;
-  final String categoryName;
 
   const SubCategoryTile({
     super.key,
     required this.subCategory,
     required this.subCategoryBudget,
     required this.spentAmount,
-    required this.categoryName,
   });
 
   @override
@@ -42,7 +40,10 @@ class SubCategoryTile extends StatelessWidget {
               Flexible(
                 child: Text(
                   '${formatCurrency(spentAmount)} / ${formatCurrency(subCategoryBudget)}',
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.black54),
+                  style: Theme.of(context)
+                      .textTheme
+                      .bodyMedium
+                      ?.copyWith(color: Colors.black54),
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
@@ -52,14 +53,19 @@ class SubCategoryTile extends StatelessWidget {
           LinearProgressIndicator(
             value: subProgress > 1 ? 1 : subProgress,
             backgroundColor: Colors.grey[200],
-            valueColor: AlwaysStoppedAnimation<Color>(isOverBudget ? Colors.red : Colors.green),
+            valueColor: AlwaysStoppedAnimation<Color>(
+              isOverBudget ? Colors.red : Colors.green,
+            ),
             minHeight: 8,
             borderRadius: BorderRadius.circular(4),
           ),
           const SizedBox(height: 4),
           Text(
             '${subRemainingPercentage.toStringAsFixed(0)}% jäljellä',
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.black54),
+            style: Theme.of(context)
+                .textTheme
+                .bodyMedium
+                ?.copyWith(color: Colors.black54),
           ),
         ],
       ),

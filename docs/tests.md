@@ -40,7 +40,8 @@ Production rules sit in `lib/features/budget/domain/`. Tests call those function
 | `domain/periods.dart` | `periods_test.dart` |
 | `domain/reminder_rules.dart` | `reminder_rules_test.dart` |
 | `domain/money.dart` | `money_test.dart` |
-| `domain/tracking.dart` | `tracking_test.dart` |
+| `domain/tracking.dart` (incl. expense-only pie grouping) | `tracking_test.dart` |
+| `domain/period_summary.dart` (Summary overview snapshot) | `period_summary_test.dart` |
 | `domain/event_rules.dart` | `event_rules_test.dart` |
 | `domain/save_decisions.dart` | `save_decisions_test.dart` |
 | `domain/shared_rules.dart` | `shared_rules_test.dart` |
@@ -77,7 +78,9 @@ Date-dependent rules take `now`. Production callers pass `DateTime.now()`.
 
 **Reminders** — `reminderDecision` is pure: no budget whose `startDate` is in the current month → `missingCurrentMonth`; else no next-month start and ≤3 days left → `missingNextMonth`; otherwise `none`. A start mid-month still counts as that month. The UI runs it separately on personal and shared startDate lists.
 
-**Tracking** — expense events only; default subcategory rolls up to the mapped parent even if `event.category` differs; custom sub uses `event.category`; subcategory totals filter `budgetId` + category + sub; progress 0 when planned is 0; remaining % clamped 0–100 (100 when planned is 0); pie **Muut** for &lt;5% of planned total.
+**Tracking** — expense events only; default subcategory rolls up to the mapped parent even if `event.category` differs; custom sub uses `event.category`; subcategory totals filter `budgetId` + category + sub; planned 0 + actual 0 → progress 0 and 100% remaining; planned 0 + actual &gt; 0 → over budget and 0% remaining; remaining % otherwise clamped 0–100; `groupExpenseAmountsByCategory` ignores income; pie **Muut** for &lt;5% of **actual** expense total.
+
+**Period summary** — `buildBudgetPeriodSummary` keeps planned vs actual income separate; expense totals ignore income events; plan deficit / expenses-over-plan flags; planned-0 + spend and unplanned categories appear in overspent list; `topOverspent` sorts by over amount.
 
 **Events** — amount must parse and be ≥ 0; expense max 99999; expense needs category; subcategory required only if that category already has subs; description ≤ 50; must be logged in. Income does not need a category. `eventValidationField` maps the 50-character description message to the description field (not the old 75-character string).
 

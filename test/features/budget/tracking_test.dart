@@ -63,12 +63,16 @@ void main() {
 
   test('progress and remaining percent', () {
     expect(trackingProgress(5, 10), 0.5);
-    expect(trackingProgress(5, 0), 0);
+    expect(trackingProgress(0, 0), 0);
+    expect(trackingProgress(5, 0), greaterThan(1));
     expect(isOverBudget(11, 10), isTrue);
+    expect(isOverBudget(0, 0), isFalse);
+    expect(isOverBudget(1, 0), isTrue);
     expect(remainingPercentClamped(5, 10), 50);
     expect(remainingPercentClamped(12, 10), 0);
-    expect(remainingPercentClamped(1, 0), 100);
-    expect(remainingPercentClamped(1, 0, whenPlannedZero: 0), 0);
+    expect(remainingPercentClamped(0, 0), 100);
+    expect(remainingPercentClamped(1, 0), 0);
+    expect(remainingPercentClamped(0, 0, whenPlannedZero: 0), 0);
   });
 
   test('Muut lumps categories under 5%', () {
@@ -85,5 +89,30 @@ void main() {
       'A': {'x': 1.0},
     };
     expect(combineSmallCategories(expenses, 0), {'Muut': 1.0});
+  });
+
+  test('groupExpenseAmountsByCategory ignores income', () {
+    final grouped = groupExpenseAmountsByCategory([
+      ev(type: EventType.income, category: 'Tulo', subcategory: null, amount: 100),
+      ev(category: 'Ruoka', subcategory: 'Ruokakauppa', amount: 12),
+      ev(id: '2', category: 'Ruoka', subcategory: 'Ruokakauppa', amount: 3),
+      ev(id: '3', category: 'Viihde', subcategory: null, amount: 5),
+    ]);
+    expect(grouped.total, 20);
+    expect(grouped.byCategory['Ruoka'], {'Ruokakauppa': 15.0});
+    expect(grouped.byCategory['Viihde'], {'Ei alakategoriaa': 5.0});
+    expect(grouped.byCategory.containsKey('Tulo'), isFalse);
+  });
+
+  test('expense-only grouping feeds Muut without income skew', () {
+    final grouped = groupExpenseAmountsByCategory([
+      ev(type: EventType.income, category: 'Tulo', subcategory: null, amount: 500),
+      ev(category: 'Iso', subcategory: 'a', amount: 96),
+      ev(id: '2', category: 'Pieni', subcategory: 'b', amount: 4),
+    ]);
+    expect(
+      combineSmallCategories(grouped.byCategory, grouped.total),
+      {'Iso': 96.0, 'Muut': 4.0},
+    );
   });
 }

@@ -139,9 +139,12 @@ For a selected budget:
   - If the event’s `subcategory` is in the default `categoryMapping`, it rolls up to that mapping’s parent.
   - Otherwise it uses `event.category`.
 - **Subcategory actual** = expense events with matching `budgetId`, `category`, and `subcategory`.
-- **Progress** = `actual / planned` (`0` if planned is `0`). Over budget when `progress > 1`.
-- Remaining percentage is clamped to `0–100` (overspend still shows 0% left).
-- Pie chart **Muut**: main categories whose planned share is **&lt; 5%** of total planned expenses are lumped together.
+- **Progress** = `actual / planned`. If planned is `0` and actual is `0`, progress is `0`; if planned is `0` and actual &gt; `0`, it counts as over budget.
+- Over budget when actual &gt; planned, or when planned is `0` and actual &gt; `0`.
+- Remaining percentage is clamped to `0–100`. Unused empty plan (planned `0`, actual `0`) shows 100% left; planned `0` with any spend shows 0% left.
+- Pie chart (“Menojen jakautuminen”) uses **expense events only** (income excluded). **Muut** lumps main categories whose actual share is **&lt; 5%** of total actual expenses.
+- Tracking footer **Yhteensä** is all actual expenses for the loaded period vs planned category total. Spend in categories outside the plan is included in that actual total and called out as **Suunnittelemattomat** when non-zero.
+- Summary **Yhteenveto** card (`buildBudgetPeriodSummary`): planned vs actual income (separate), planned vs actual expenses, plan leftover (`plannedIncome − plannedExpenses`), actual leftover (`actualIncome − actualExpenses`), plan-used progress, overspent categories (including planned-0 + spend and unplanned categories), and unplanned expense total. Income events never change planned income.
 
 ---
 

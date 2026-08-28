@@ -44,7 +44,7 @@ The signed-in home is a shell with three tabs:
 | Tab | Finnish label | Purpose |
 | --- | --- | --- |
 | Budget | Muokkaa budjettia | Edit the selected plan (income, categories) |
-| Summary | Seuranta | See progress vs caps; distribution; events for the selection |
+| Summary | Seuranta | Period overview (plan vs actual), progress vs caps, distribution, events |
 | History | Historia | Browse logged events across periods |
 
 Menus and banners live on the shell: add event, create personal or household budget, account settings, logout. In-app banners can show pending invites and “you need a budget for this/next month” reminders. There is no OS push notification system.
