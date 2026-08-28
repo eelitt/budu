@@ -11,12 +11,15 @@ class EventListItem extends StatelessWidget {
   Widget build(BuildContext context) {
     final isIncome = event.type == EventType.income;
     final amountColor = isIncome ? Colors.green : Colors.red;
+    final subcategory = event.subcategory?.trim();
+    final hasSubcategory =
+        subcategory != null && subcategory.isNotEmpty;
 
     return Card(
       margin: const EdgeInsets.only(bottom: 16),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       elevation: 4,
-      color: Colors.white, // Varmistetaan kortin taustaväri valkoiseksi
+      color: Colors.white,
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Row(
@@ -33,23 +36,43 @@ class EventListItem extends StatelessWidget {
                 children: [
                   Text(
                     event.category,
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                    style: Theme.of(context)
+                        .textTheme
+                        .titleMedium
+                        ?.copyWith(fontWeight: FontWeight.bold),
                   ),
+                  if (hasSubcategory)
+                    Text(
+                      subcategory,
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodyMedium
+                          ?.copyWith(color: Colors.grey[700]),
+                    ),
                   if (event.description != null)
                     Text(
                       event.description!,
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.grey[600]),
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodyMedium
+                          ?.copyWith(color: Colors.grey[600]),
                     ),
                   Text(
-                    DateFormat('dd/MM/yyyy').format(event.createdAt),
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.grey[500]),
+                    DateFormat('d.M.yyyy').format(event.createdAt),
+                    style: Theme.of(context)
+                        .textTheme
+                        .bodySmall
+                        ?.copyWith(color: Colors.grey[500]),
                   ),
                 ],
               ),
             ),
             Text(
               '${isIncome ? "+" : "-"}${event.amount.toStringAsFixed(2)} €',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(color: amountColor),
+              style: Theme.of(context)
+                  .textTheme
+                  .titleMedium
+                  ?.copyWith(color: amountColor),
             ),
           ],
         ),

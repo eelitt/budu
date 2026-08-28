@@ -1,21 +1,28 @@
-import 'package:budu/features/budget/providers/expense_provider.dart';
+import 'package:budu/features/history/domain/history_filters.dart';
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 
-/// Widget, joka tarjoaa suodattimet tapahtumahistorian tapahtumille: kategoria, tyyppi, budjetti ja hakukysely.
+/// Controlled filters for History: category, budget, type chips, description search.
 class EventFilterSection extends StatefulWidget {
-  final List<String> availableBudgets; // Lista budjettien aikaväleistä
-  final Function(String?) onCategoryChanged; // Callback kategorian muutokselle
-  final Function(String?) onTypeChanged; // Callback tyypin muutokselle
-  final Function(String?) onBudgetChanged; // Callback budjetin muutokselle
-  final Function(String) onSearchQueryChanged; // Callback hakukyselyn muutokselle
+  final List<String> categories;
+  final List<String> availableBudgetLabels;
+  final String selectedCategory;
+  final String selectedType;
+  final String selectedBudgetLabel;
+  final ValueChanged<String> onCategoryChanged;
+  final ValueChanged<String> onTypeChanged;
+  final ValueChanged<String> onBudgetLabelChanged;
+  final ValueChanged<String> onSearchQueryChanged;
 
   const EventFilterSection({
     super.key,
-    required this.availableBudgets,
+    required this.categories,
+    required this.availableBudgetLabels,
+    required this.selectedCategory,
+    required this.selectedType,
+    required this.selectedBudgetLabel,
     required this.onCategoryChanged,
     required this.onTypeChanged,
-    required this.onBudgetChanged,
+    required this.onBudgetLabelChanged,
     required this.onSearchQueryChanged,
   });
 
@@ -24,9 +31,6 @@ class EventFilterSection extends StatefulWidget {
 }
 
 class _EventFilterSectionState extends State<EventFilterSection> {
-  String? _selectedCategory = 'Kaikki kategoriat';
-  String? _selectedType = 'Kaikki';
-  String? _selectedBudget = 'Kaikki budjetit';
   final TextEditingController _searchController = TextEditingController();
 
   @override
@@ -37,11 +41,9 @@ class _EventFilterSectionState extends State<EventFilterSection> {
 
   @override
   Widget build(BuildContext context) {
-    // Käytetään kaikkia mahdollisia kategorioita ExpenseProvider:sta, jos budjetti ei ole valittuna
-    final expenseProvider = Provider.of<ExpenseProvider>(context);
     final categories = [
-      'Kaikki kategoriat',
-      ...expenseProvider.expenses.map((e) => e.category).toSet().toList()..sort(),
+      historyAllCategoriesLabel,
+      ...widget.categories,
     ];
 
     return Container(
@@ -55,7 +57,6 @@ class _EventFilterSectionState extends State<EventFilterSection> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // "Historia"-otsikko
               Text(
                 'Historia',
                 style: Theme.of(context).textTheme.headlineSmall?.copyWith(
@@ -64,7 +65,6 @@ class _EventFilterSectionState extends State<EventFilterSection> {
                     ),
               ),
               const SizedBox(height: 16),
-              // Kategoria-suodatin
               InputDecorator(
                 decoration: InputDecoration(
                   labelText: 'Kategoria',
@@ -72,15 +72,11 @@ class _EventFilterSectionState extends State<EventFilterSection> {
                         color: Theme.of(context).textTheme.bodyMedium?.color,
                       ),
                   border: const OutlineInputBorder(),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 ),
                 child: PopupMenuButton<String>(
-                  onSelected: (value) {
-                    setState(() {
-                      _selectedCategory = value;
-                      widget.onCategoryChanged(value);
-                    });
-                  },
+                  onSelected: widget.onCategoryChanged,
                   itemBuilder: (BuildContext context) {
                     return categories.map((category) {
                       return PopupMenuItem<String>(
@@ -99,7 +95,7 @@ class _EventFilterSectionState extends State<EventFilterSection> {
                     children: [
                       Expanded(
                         child: Text(
-                          _selectedCategory ?? 'Kaikki kategoriat',
+                          widget.selectedCategory,
                           style: Theme.of(context).textTheme.bodyMedium,
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -113,7 +109,6 @@ class _EventFilterSectionState extends State<EventFilterSection> {
                 ),
               ),
               const SizedBox(height: 16),
-              // Budjetti-suodatin
               InputDecorator(
                 decoration: InputDecoration(
                   labelText: 'Budjetti',
@@ -121,17 +116,13 @@ class _EventFilterSectionState extends State<EventFilterSection> {
                         color: Theme.of(context).textTheme.bodyMedium?.color,
                       ),
                   border: const OutlineInputBorder(),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 ),
                 child: PopupMenuButton<String>(
-                  onSelected: (value) {
-                    setState(() {
-                      _selectedBudget = value;
-                      widget.onBudgetChanged(value);
-                    });
-                  },
+                  onSelected: widget.onBudgetLabelChanged,
                   itemBuilder: (BuildContext context) {
-                    return widget.availableBudgets.map((budget) {
+                    return widget.availableBudgetLabels.map((budget) {
                       return PopupMenuItem<String>(
                         value: budget,
                         child: Text(
@@ -148,7 +139,7 @@ class _EventFilterSectionState extends State<EventFilterSection> {
                     children: [
                       Expanded(
                         child: Text(
-                          _selectedBudget ?? 'Kaikki budjetit',
+                          widget.selectedBudgetLabel,
                           style: Theme.of(context).textTheme.bodyMedium,
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -162,55 +153,41 @@ class _EventFilterSectionState extends State<EventFilterSection> {
                 ),
               ),
               const SizedBox(height: 16),
-              // Tyyppi-suodatin
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: [
                   ChoiceChip(
                     label: Text(
-                      'Kaikki',
+                      historyAllTypesLabel,
                       style: Theme.of(context).textTheme.bodyMedium,
                     ),
-                    selected: _selectedType == 'Kaikki',
-                    onSelected: (selected) {
-                      setState(() {
-                        _selectedType = 'Kaikki';
-                        widget.onTypeChanged('Kaikki');
-                      });
-                    },
+                    selected: widget.selectedType == historyAllTypesLabel,
+                    onSelected: (_) =>
+                        widget.onTypeChanged(historyAllTypesLabel),
                   ),
                   ChoiceChip(
                     label: Text(
-                      'Tulot',
+                      historyIncomeTypeLabel,
                       style: Theme.of(context).textTheme.bodyMedium,
                     ),
-                    selected: _selectedType == 'Tulot',
-                    onSelected: (selected) {
-                      setState(() {
-                        _selectedType = 'Tulot';
-                        widget.onTypeChanged('Tulot');
-                      });
-                    },
+                    selected: widget.selectedType == historyIncomeTypeLabel,
+                    onSelected: (_) =>
+                        widget.onTypeChanged(historyIncomeTypeLabel),
                     selectedColor: Colors.green,
                   ),
                   ChoiceChip(
                     label: Text(
-                      'Menot',
+                      historyExpenseTypeLabel,
                       style: Theme.of(context).textTheme.bodyMedium,
                     ),
-                    selected: _selectedType == 'Menot',
-                    onSelected: (selected) {
-                      setState(() {
-                        _selectedType = 'Menot';
-                        widget.onTypeChanged('Menot');
-                      });
-                    },
+                    selected: widget.selectedType == historyExpenseTypeLabel,
+                    onSelected: (_) =>
+                        widget.onTypeChanged(historyExpenseTypeLabel),
                     selectedColor: Colors.red,
                   ),
                 ],
               ),
               const SizedBox(height: 16),
-              // Hakukenttä
               TextField(
                 controller: _searchController,
                 decoration: InputDecoration(
@@ -221,9 +198,7 @@ class _EventFilterSectionState extends State<EventFilterSection> {
                   border: const OutlineInputBorder(),
                   prefixIcon: const Icon(Icons.search),
                 ),
-                onChanged: (value) {
-                  widget.onSearchQueryChanged(value);
-                },
+                onChanged: widget.onSearchQueryChanged,
               ),
             ],
           ),

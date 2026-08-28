@@ -49,7 +49,8 @@ Production rules sit in `lib/features/budget/domain/`. Tests call those function
 | `ExpenseEvent.parse` | `expense_event_parse_test.dart` |
 | `BudgetRepository` / `SharedBudgetRepository` | `budget_repository_test.dart` |
 | `EventRepository` | `event_repository_test.dart` |
-| `ExpenseProvider` stale-load protection | `expense_provider_test.dart` |
+| `ExpenseProvider` stale-load protection; history vs summary list isolation | `expense_provider_test.dart` |
+| History client filters | `test/features/history/history_filters_test.dart` |
 | ISO date writes + Timestamp reads | `date_encoding_test.dart` |
 | Banner kinds, max-2 priority, invite↔reminder isolation, Finnish invite copy | `test/features/notification/notification_banner_list_test.dart` |
 | Main-screen add-event target + personal create month range | `test/features/mainscreen/main_screen_decisions_test.dart` |
@@ -98,11 +99,13 @@ Date-dependent rules take `now`. Production callers pass `DateTime.now()`.
 
 **Notifications** — in-memory kinds only (no Firestore). `syncPendingInvites` / reminder upserts feed `notifications` (priority invite > personal > shared, max 2). Removing invite leaves reminders; `clearReminders` leaves invites.
 
-**Events for one budget** — `EventRepository.getEventsForBudget` returns every matching event (no 50-event cap). Extra `budgetId`s are excluded. Shared path uses `shared_budgets/{id}/events`. Empty personal `events` falls back to legacy `monthly_budgets/.../expenses`. Tracking totals on the loaded list include all of those expenses. `saveEvent` / `deleteEvent` write that same `events` collection. History uses that uncapped load for each period in the filter list.
+**Events for one budget** — `EventRepository.getEventsForBudget` returns every matching event (no 50-event cap). Extra `budgetId`s are excluded. Shared path uses `shared_budgets/{id}/events`. Empty personal `events` falls back to legacy `monthly_budgets/.../expenses`. Tracking totals on the loaded list include all of those expenses. `saveEvent` / `deleteEvent` write that same `events` collection. History `loadHistoryExpenses` uses that uncapped load per listed period into `historyExpenses` (does not overwrite Summary `expenses`).
+
+**History filters** — `filterHistoryEvents` applies category / type / description query / budgetId; Finnish “Kaikki …” sentinels and null mean no filter; query is trimmed and case-insensitive.
 
 **Android updater integration** — `integration_test/updater_android_test.dart` runs only through the device runner, which uses `flutter drive` and refuses to start without an Android device. It launches `MyApp`, reads the installed Android package version, and verifies the public GitHub update metadata contract. APK installation and system-settings permission flows still require manual device validation.
 
-**Event loading races** — `ExpenseProvider.loadExpenses` ignores an older asynchronous result when a newer budget selection has started loading.
+**Event loading races** — `ExpenseProvider.loadExpenses` and `loadHistoryExpenses` each ignore an older asynchronous result when a newer load of the same kind has started.
 
 **Income events** — adding or deleting an income event does not change planned `Budget.income`.
 

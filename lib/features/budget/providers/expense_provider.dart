@@ -19,10 +19,17 @@ class ExpenseProvider with ChangeNotifier {
 
   final EventRepository _eventRepository;
   List<ExpenseEvent> _expenses = [];
+  List<ExpenseEvent> _historyExpenses = [];
   String? _errorMessage;
   int _loadRequestId = 0;
+  int _historyLoadRequestId = 0;
 
+  /// Selected-budget events for Summary / tracking. History must not write here.
   List<ExpenseEvent> get expenses => _expenses;
+
+  /// Multi-period (or filtered) browse list for History only.
+  List<ExpenseEvent> get historyExpenses => _historyExpenses;
+
   String? get errorMessage => _errorMessage;
 
   void _clearError() {
@@ -117,6 +124,7 @@ class ExpenseProvider with ChangeNotifier {
       );
 
       _expenses.removeWhere((e) => e.id == expenseId);
+      _historyExpenses.removeWhere((e) => e.id == expenseId);
       notifyListeners();
     } catch (e, stackTrace) {
       await FirebaseCrashlytics.instance.recordError(e, stackTrace,
@@ -126,18 +134,20 @@ class ExpenseProvider with ChangeNotifier {
     }
   }
 
-  /// History toggle: personal events only, or shared events only.
+  /// History browse load: personal events only, or shared events only.
+  /// Writes [historyExpenses] only — does not touch Summary [expenses].
   Future<void> loadHistoryExpenses(
     String userId, {
     required bool isSharedBudget,
     List<BudgetModel> budgets = const [],
   }) async {
+    final requestId = ++_historyLoadRequestId;
     try {
       _clearError();
-      _expenses = [];
+      final loaded = <ExpenseEvent>[];
       for (final budget in budgets) {
         if (budget.id == null) continue;
-        _expenses.addAll(
+        loaded.addAll(
           await _eventRepository.getEventsForBudget(
             userId: userId,
             budgetId: budget.id!,
@@ -145,9 +155,12 @@ class ExpenseProvider with ChangeNotifier {
           ),
         );
       }
-      _expenses.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      if (requestId != _historyLoadRequestId) return;
+      loaded.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      _historyExpenses = loaded;
       notifyListeners();
     } catch (e, stackTrace) {
+      if (requestId != _historyLoadRequestId) return;
       await FirebaseCrashlytics.instance.recordError(
         e,
         stackTrace,
@@ -157,8 +170,6 @@ class ExpenseProvider with ChangeNotifier {
       rethrow;
     }
   }
-
-  void cancelSubscriptions() {}
 
   Future<bool> hasSubcategoryEvents({
     required String userId,
@@ -205,6 +216,7 @@ class ExpenseProvider with ChangeNotifier {
       );
       if (ids.isEmpty) return false;
       _expenses.removeWhere((e) => ids.contains(e.id));
+      _historyExpenses.removeWhere((e) => ids.contains(e.id));
       notifyListeners();
       return true;
     } catch (e, stackTrace) {
@@ -231,6 +243,7 @@ class ExpenseProvider with ChangeNotifier {
         isSharedBudget: isSharedBudget,
       );
       _expenses.removeWhere((e) => e.budgetId == budgetId);
+      _historyExpenses.removeWhere((e) => e.budgetId == budgetId);
       notifyListeners();
     } catch (e, stackTrace) {
       await FirebaseCrashlytics.instance.recordError(

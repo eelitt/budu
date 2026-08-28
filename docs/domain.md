@@ -207,7 +207,7 @@ Both reminders can show at once when both kinds are missing (subject to the in-a
 ## Persistence behavior (money-facing)
 
 - Available personal budgets: `isPlaceholder == false`, ordered by `startDate` descending.
-- Events for the **selected** budget are loaded in full (no event cap) so tracking totals are complete. History loads every event for each period in the current list.
+- Events for the **selected** budget are loaded in full (no event cap) so tracking totals are complete (`ExpenseProvider.expenses`). History loads every event for each listed period into a **separate** list (`historyExpenses`) so browse loads do not overwrite Summary/tracking.
 - Summary owns loading events for the currently selected budget; tracking, distribution, and event views consume that state and do not start duplicate loads. Overlapping loads: only the newest request may replace in-memory events.
 - The create-budget screen reuses one budget-list request for its lifetime (refresh only on an explicit new screen flow).
 - Personal in-memory edits debounce-save after **1 second**.

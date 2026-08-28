@@ -185,11 +185,9 @@ class MainScreenActionsService {
     } else if (value == 'logout') {
       final authProvider = Provider.of<AuthProvider>(context, listen: false);
       final budgetProvider = Provider.of<BudgetProvider>(context, listen: false);
-      final expenseProvider = Provider.of<ExpenseProvider>(context, listen: false);
 
       try {
         budgetProvider.cancelSubscriptions();
-        expenseProvider.cancelSubscriptions();
         // MainScreen shell navigates to login when auth becomes unauthenticated.
         await authProvider.signOut();
       } catch (e) {

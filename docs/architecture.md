@@ -74,7 +74,9 @@ budgets/{uid}/monthly_budgets/{year}_{month}
 - User `createdAt` uses `FieldValue.serverTimestamp()` (separate from budget/event dates).
 - In-app banners are **not** written to Firestore. Legacy `users/{uid}/notifications/{id}` may still exist in rules/old data; client does not use it. See [`firebase_rules.md`](firebase_rules.md).
 - Deleting a personal or shared budget also deletes its events (and personal legacy expenses).
-- Selected-budget events load uncapped (tracking completeness). Budget list streams often `limit(50)`.
+- Selected-budget events load uncapped into `ExpenseProvider.expenses` (Summary/tracking). History uses a separate `historyExpenses` list so multi-period browse does not overwrite tracking. Deep dive: [`history_rework.md`](history_rework.md).
+- Named `/history` remains a deep-link stub (`HistoryScreen(isActive: true)`); the signed-in shell embeds History in the bottom-nav `IndexedStack` and loads on first tab activation.
+- Budget list streams often `limit(50)`.
 
 Money-facing persistence behavior (debounce, overlap lists, etc.): [`domain.md`](domain.md).
 

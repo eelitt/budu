@@ -62,7 +62,8 @@ class AppRouter {
           return _createFadeRoute(const SummaryScreen());
         case historyRoute:
           print('AppRouter: Generoidaan reitti: $historyRoute');
-          return _createFadeRoute(const HistoryScreen());
+          // Deep-link / named route outside the main shell — load immediately.
+          return _createFadeRoute(const HistoryScreen(isActive: true));
         case chatbotRoute:
           print('AppRouter: Generoidaan reitti: $chatbotRoute');
           return _createFadeRoute(

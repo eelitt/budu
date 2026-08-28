@@ -139,7 +139,7 @@ class _MainScreenState extends State<MainScreen> {
               children: [
                 BudgetScreen(onBudgetDeleted: _checkBudgetStatus),
                 const SummaryScreen(),
-                const HistoryScreen(),
+                HistoryScreen(isActive: _selectedIndex == 2),
               ],
             ),
           ),

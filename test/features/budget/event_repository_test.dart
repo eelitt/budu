@@ -180,6 +180,7 @@ void main() {
       ],
     );
 
-    expect(expenses.expenses.length, 120);
+    expect(expenses.historyExpenses.length, 120);
+    expect(expenses.expenses, isEmpty);
   });
 }
