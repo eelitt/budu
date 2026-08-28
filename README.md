@@ -33,8 +33,6 @@ Deeper product and engineering docs live under [`docs/`](docs/):
 | [`docs/domain.md`](docs/domain.md) | Money/budget rules as implemented |
 | [`docs/tests.md`](docs/tests.md) | How to run tests and what they cover |
 
-Contributor conventions: [`AGENTS.md`](AGENTS.md).
-
 ---
 
 ## Quick start
