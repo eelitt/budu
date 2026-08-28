@@ -12,7 +12,7 @@ class NotificationBanner extends StatelessWidget {
     this.onReminderActionComplete,
   });
 
-  /// Called after navigating to create budget from a reminder (e.g. recheck status).
+  /// Called after a reminder create flow returns (personal or shared), e.g. recheck status.
   final VoidCallback? onReminderActionComplete;
 
   @override
@@ -102,8 +102,10 @@ class NotificationBanner extends StatelessWidget {
         return [
           TextButton(
             onPressed: () {
-              actions.openHouseholdCreate(context);
-              onReminderActionComplete?.call();
+              actions.openHouseholdCreate(
+                context,
+                onComplete: () => onReminderActionComplete?.call(),
+              );
             },
             child: const Text(
               'Luo yhteistalous',

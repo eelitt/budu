@@ -298,9 +298,45 @@ The developer-menu changelog path uses the public GitHub Contents API at `https:
 
 ---
 
+## Main screen shell
+
+After login (or session restore), the signed-in app lives in `MainScreen` (`lib/features/mainscreen/`). It is the shell around budget editing, tracking (summary), and history — not the place where plan math or event validation live.
+
+Rework findings and staged cleanup: [`mainscreen_rework.md`](mainscreen_rework.md).
+
+### What it does
+
+1. **Auth gate** — If auth is not authenticated (or user is null), the shell shows nothing and navigates to login. Menu logout cancels budget/event subscriptions and signs out via `AuthProvider`; the shell alone clears the navigation stack to login when auth becomes unauthenticated.
+2. **One-shot session extras** — On first authenticated `didChangeDependencies`, it loads `UserProvider` profile fields (admin/premium for the developer menu) and, after the frame, fetches shared budgets plus pending invitations for the signed-in email.
+3. **Budget coverage reminders** — After the first frame (and again on tab changes / some create–delete paths), `MainScreenBudgetStatusService` updates in-app reminder banners and a next-month-exists flag used by the app bar. Rules: [“Need a budget” reminders](#need-a-budget-reminders). Banner UI: [Notifications (in-app)](#notifications-in-app).
+4. **Tab body** — Bottom nav switches among three peer screens in an `IndexedStack` (budget, summary/tracking, history). Tab local state (scroll, toggles, selectors) is kept across switches. `BudgetScreen(onBudgetDeleted: …)` re-runs coverage checks after delete. Named `/budget`, `/summary`, `/history` routes still exist on `AppRouter` for deep links, but the signed-in shell does not use a nested tab `Navigator`.
+5. **Chrome** — App bar shows product name, first name from Google display name, optional admin developer menu, and the main overflow menu. Bottom nav labels: Muokkaa budjettia / Seuranta / Historia.
+6. **Menu actions** (`MainScreenActionsService`) — add event (respects personal vs shared toggle prefs), create personal budget for current or next calendar month, open household create, open account settings, logout. Reminder banner actions reuse create personal / open household from the same service.
+
+### Where things live
+
+| Piece | Path |
+| --- | --- |
+| Shell widget | `lib/features/mainscreen/mainScreen.dart` |
+| Pure menu decisions | `…/domain/main_screen_decisions.dart` (add-event target, personal create month range) |
+| Menu / create / logout | `…/services/main_screen_actions_service.dart` |
+| Reminder + next-month flag | `…/services/main_screen_budget_status_service.dart` |
+| App bar / bottom nav / admin debug | `…/widgets/` |
+| Debug update dialog only | `…/services/main_screen_update_dialog_service.dart` |
+
+Login may already preload the newest personal budget and events (`SessionBootstrapService`). The main shell still re-fetches shared budgets, invitations, and coverage for banners. There is no separate main-shell budget-load error/retry surface. Normal update checks use `UpdateManager`; the mainscreen update-dialog service is only for the admin “simulate update” path.
+
+### Constraints (as implemented)
+
+- Tabs are peer screens under one shell (`IndexedStack`); full-screen flows (create budget, settings) push on the surrounding navigator via `MaterialPageRoute` / named routes, not as bottom-nav items.
+- “Luo uusi budjetti” in the overflow menu is shown only when **no** personal or shared budget starts next calendar month (combined startDates). Reminder banners still evaluate personal and shared **separately**.
+- Admin (`UserProvider.isAdmin`) unlocks the developer menu in `MainScreenAppBar`; actions are handled by `AppBarDebug` (update check, debug update toggle, changelog, invite-banner tests).
+
+---
+
 ## Notifications (in-app)
 
-Notifications in Budu are **in-app banners** on the main screen. There is no OS push, no local system notification plugin, and no Cloud Function that sends alerts. Banners are **not** written to Firestore. UI lives above the tab `Navigator` in `MainScreen`. Rework history: [`notifications_rework.md`](notifications_rework.md).
+Notifications in Budu are **in-app banners** on the main screen. There is no OS push, no local system notification plugin, and no Cloud Function that sends alerts. Banners are **not** written to Firestore. UI lives above the tab `IndexedStack` in `MainScreen`. Rework history: [`notifications_rework.md`](notifications_rework.md).
 
 Business rules for coverage: [“Need a budget” reminders](#need-a-budget-reminders).
 

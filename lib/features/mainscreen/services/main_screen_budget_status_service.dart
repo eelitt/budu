@@ -11,28 +11,6 @@ import 'package:intl/intl.dart';
 
 /// Checks personal and shared budget coverage and updates reminder banners.
 class MainScreenBudgetStatusService {
-  /// Whether any personal or shared budget starts next calendar month (app bar).
-  Future<bool> checkNextMonthBudget(BuildContext context) async {
-    final authProvider = Provider.of<AuthProvider>(context, listen: false);
-    final budgetProvider = Provider.of<BudgetProvider>(context, listen: false);
-    final sharedProvider =
-        Provider.of<SharedBudgetProvider>(context, listen: false);
-    if (authProvider.user == null) {
-      return false;
-    }
-
-    final next = nextMonthStart(DateTime.now());
-    final personal =
-        await budgetProvider.getAvailableBudgets(authProvider.user!.uid);
-    await sharedProvider.fetchSharedBudgets(authProvider.user!.uid);
-    final shared = sharedProvider.sharedBudgets;
-    return [...personal, ...shared].any(
-      (budget) =>
-          budget.startDate.year == next.year &&
-          budget.startDate.month == next.month,
-    );
-  }
-
   /// Updates personal/shared reminder banners from independent coverage checks.
   Future<void> checkBudgetStatus(
     BuildContext context,

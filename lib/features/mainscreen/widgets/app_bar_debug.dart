@@ -9,17 +9,16 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// Kapseloi kehittäjävalikon debug-toiminnot MainScreenAppBar:lle.
-/// Sisältää metodit päivitystarkistukseen, testitilan kytkemiseen ja changelogin näyttämiseen.
+/// Developer-menu handlers for [MainScreenAppBar].
+/// User-facing errors go through [showErrorSnackBar] (same util as actions service).
 class AppBarDebug {
   /// Näyttää sovelluksen changelogin kehittäjävalikosta (simuloitu dialogi).
   Future<void> showChangelog(BuildContext context) async {
     try {
-
-       final packageInfo = await PackageInfo.fromPlatform();
+      final packageInfo = await PackageInfo.fromPlatform();
       final changelog = await Changelog.fetchChanges(packageInfo.version);
 
-       if (context.mounted && changelog != null) {
+      if (context.mounted && changelog != null) {
         await showDialog(
           context: context,
           barrierDismissible: false,
@@ -32,7 +31,7 @@ class AppBarDebug {
               ),
               content: SingleChildScrollView(
                 child: Text(
-                 changelog,
+                  changelog,
                   style: Theme.of(context).textTheme.bodyLarge,
                 ),
               ),
@@ -49,12 +48,8 @@ class AppBarDebug {
         );
       }
     } catch (e) {
-      
-      // Näytä ystävällinen virheilmoitus käyttäjälle
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Changelogin näyttäminen epäonnistui: $e')),
-        );
+        showErrorSnackBar(context, 'Changelogin näyttäminen epäonnistui: $e');
       }
     }
   }
@@ -67,24 +62,18 @@ class AppBarDebug {
       final isDebugUpdate = prefs.getBool('debug_update_enabled') ?? false;
 
       if (isDebugUpdate) {
-        // Debug-tila: Simuloi päivitysdialogi
         final dialog = MainScreenUpdateDialogService();
         await dialog.checkForUpdateDialog(
           context,
-          debugVersion: '99.9.9', // Simuloitu "uusin versio"
+          debugVersion: '99.9.9',
         );
       } else {
-        // Normaali päivitystarkistus UpdateManager:illa
         final updateManager = UpdateManager();
         await updateManager.checkAndHandleUpdate(context);
       }
     } catch (e) {
-      
-      // Näytä ystävällinen virheilmoitus käyttäjälle
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Päivitystarkistus epäonnistui: $e')),
-        );
+        showErrorSnackBar(context, 'Päivitystarkistus epäonnistui: $e');
       }
     }
   }
@@ -97,23 +86,16 @@ class AppBarDebug {
       await prefs.setBool('debug_update_enabled', !isDebugUpdate);
 
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              !isDebugUpdate
-                  ? 'Päivityksen testitila kytketty päälle'
-                  : 'Päivityksen testitila kytketty pois',
-            ),
-          ),
+        showSnackBar(
+          context,
+          !isDebugUpdate
+              ? 'Päivityksen testitila kytketty päälle'
+              : 'Päivityksen testitila kytketty pois',
         );
       }
     } catch (e) {
-  
-      // Näytä ystävällinen virheilmoitus käyttäjälle
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Testitilan kytkeminen epäonnistui: $e')),
-        );
+        showErrorSnackBar(context, 'Testitilan kytkeminen epäonnistui: $e');
       }
     }
   }
@@ -136,42 +118,5 @@ class AppBarDebug {
     Provider.of<NotificationProvider>(context, listen: false)
         .syncPendingInvites(count);
     showSnackBar(context, 'Debug: Kutsuilmoitus näytetty ($count kpl)');
-  }
-
-  // ... existing _showDebugMenu method – add new entries below ...
-
-  /// Näyttää debug-valikon (pitkä painallus AppBarissa tai muu triggeri)
-  static void showDebugMenu(BuildContext context) {
-    showMenu(
-      context: context,
-      position: RelativeRect.fromLTRB(100, 80, 16, 0), // Säädä sijaintia tarvittaessa
-      items: [
-        // ... existing items (Update check, Toggle debug update, Changelog, etc.) ...
-
-        const PopupMenuItem(
-          value: 'test_single_invite',
-          child: Text('Test Invite Notification (Single)'),
-        ),
-        const PopupMenuItem(
-          value: 'test_multiple_invites',
-          child: Text('Test Invite Notification (Multiple)'),
-        ),
-
-        // ... other existing items ...
-      ],
-    ).then((value) {
-      if (value == null) return;
-
-      switch (value) {
-        // ... existing cases ...
-
-        case 'test_single_invite':
-          testSingleInviteNotification(context);
-          break;
-        case 'test_multiple_invites':
-          testMultipleInviteNotifications(context);
-          break;
-      }
-    });
   }
 }

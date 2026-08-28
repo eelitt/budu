@@ -52,6 +52,8 @@ Production rules sit in `lib/features/budget/domain/`. Tests call those function
 | `ExpenseProvider` stale-load protection | `expense_provider_test.dart` |
 | ISO date writes + Timestamp reads | `date_encoding_test.dart` |
 | Banner kinds, max-2 priority, invite↔reminder isolation, Finnish invite copy | `test/features/notification/notification_banner_list_test.dart` |
+| Main-screen add-event target + personal create month range | `test/features/mainscreen/main_screen_decisions_test.dart` |
+| Main-screen chrome: bottom nav labels; create-budget menu vs next-month flag | `test/features/mainscreen/main_screen_chrome_test.dart` |
 | `UserProfileRepository` | `test/features/auth/user_profile_repository_test.dart` |
 | `AuthProvider` session transitions | `test/features/auth/auth_provider_test.dart` |
 | `decideLoginDestination` | `test/features/auth/login_destination_test.dart` |

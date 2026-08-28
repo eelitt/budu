@@ -53,9 +53,10 @@ class AppRouter {
           final initialIndex = args?['index'] as int? ?? 0;
           return _createFadeRoute(MainScreen(initialIndex: initialIndex));
         case budgetRoute:
+          // Tabs normally live in MainScreen's IndexedStack; these routes remain
+          // for named navigation / deep links without shell callbacks.
           print('AppRouter: Generoidaan reitti: $budgetRoute');
-          final args = settings.arguments as BudgetScreen?;
-          return _createFadeRoute(args ?? const BudgetScreen());
+          return _createFadeRoute(const BudgetScreen());
         case summaryRoute:
           print('AppRouter: Generoidaan reitti: $summaryRoute');
           return _createFadeRoute(const SummaryScreen());
