@@ -1,6 +1,6 @@
 # Tests
 
-Domain spec: [`architecture.md`](architecture.md). Tests encode **current** behavior, including caveats. They do not boot the real Firebase app.
+Domain spec: [`domain.md`](domain.md). System map: [`architecture.md`](architecture.md). Tests encode **current** behavior, including caveats. They do not boot the real Firebase app.
 
 ## How to run
 
@@ -143,7 +143,7 @@ The runner fails before starting Flutter when no Android device is available or 
 
 The current integration test verifies app launch, Firebase initialization, installed-version lookup, and public update metadata. It does not perform a real APK installation, grant the unknown-apps permission, return from Android settings, or verify post-install `SharedPreferences` state.
 
-If the code today is surprising, test that surprise and mention it in `architecture.md` caveats. Do not “fix” a caveat in the same change as extracting it unless that is the task.
+If the code today is surprising, test that surprise and mention it in `domain.md` caveats. Do not “fix” a caveat in the same change as extracting it unless that is the task.
 
 ## Not covered here
 
