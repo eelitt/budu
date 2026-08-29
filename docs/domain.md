@@ -106,13 +106,15 @@ Display format: `X.XX €`.
 
 ## Periods
 
-- **Create-budget default** (no source budget): current calendar month, first day through last day, `type = monthly`.
-- **monthly**: first day of a month → last day of that month.
-- **biweekly**: `endDate = startDate + 13 days` (14-day window).
-- **custom**: whatever range the user picked.
+- **Create-budget default** (no explicit period, no real source id): current calendar month, first day through last day, `type = monthly`.
+- **Caller-supplied period** (menu/banner personal create): `personalCreateMonthRange` — current month if none starts this month, otherwise next month. Passed into create as `initialStart` / `initialEnd` / `initialType`; wins over “next after source.”
+- **Create with a real source id and no caller period**: `nextPeriodAfter` from that source’s `endDate` + `type` (household sequential create).
+- **monthly**: first day of a month → last day of that month. On the create form, choosing `monthly` (or changing start while monthly) snaps to the calendar month containing the start date.
+- **biweekly**: `endDate = startDate + 13 days` (14-day window). Choosing `biweekly` (or changing start while biweekly) resets end to start + 13.
+- **custom**: whatever range the user picked. If the user edits end while typed monthly/biweekly so the range no longer matches, type demotes to `custom`.
 - **Chatbot**, if any personal budget already exists: next period starts the day after the latest `endDate`. Otherwise the current month (or current start + 13 days if biweekly).
 
-Copying a budget into a new period copies planned income and the category/subcategory tree.
+Copying a budget into a new period copies planned income and the category/subcategory tree. `sourceBudget` on the create screen is for amounts only; fake empty source models are not used.
 
 Creating from scratch seeds empty main categories from `categoryMapping` (no subcategories until the user adds them). Creating from an existing budget copies its amounts.
 

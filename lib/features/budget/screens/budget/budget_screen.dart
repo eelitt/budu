@@ -314,6 +314,9 @@ class _BudgetScreenState extends State<BudgetScreen> {
                                         context: context,
                                         builder: (_) => InviteToExistingBudgetDialog(
                                           sharedBudgetId: budget.id!,
+                                          memberUids: List<String>.from(
+                                            budget.users ?? const [],
+                                          ),
                                         ),
                                       );
                                     },

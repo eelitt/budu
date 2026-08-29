@@ -121,4 +121,28 @@ void main() {
       InviteValidation.ok,
     );
   });
+
+  test('inviteValidationMessage covers every reject reason', () {
+    expect(
+      inviteValidationMessage(InviteValidation.emptyEmail),
+      'Syötä kutsuttavan sähköposti',
+    );
+    expect(
+      inviteValidationMessage(InviteValidation.self),
+      'Et voi kutsua itseäsi',
+    );
+    expect(
+      inviteValidationMessage(InviteValidation.userNotFound),
+      'Sähköpostiosoitetta ei löydy sovelluksen käyttäjistä',
+    );
+    expect(
+      inviteValidationMessage(InviteValidation.alreadyMember),
+      'Käyttäjä on jo budjetissa',
+    );
+    expect(
+      inviteValidationMessage(InviteValidation.duplicatePending),
+      'Kutsu on jo lähetetty',
+    );
+    expect(inviteValidationMessage(InviteValidation.ok), '');
+  });
 }

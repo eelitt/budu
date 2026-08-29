@@ -8,10 +8,12 @@ import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 /// Invite a registered user to an existing household budget.
 class InviteToExistingBudgetDialog extends StatefulWidget {
   final String sharedBudgetId;
+  final List<String> memberUids;
 
   const InviteToExistingBudgetDialog({
     super.key,
     required this.sharedBudgetId,
+    required this.memberUids,
   });
 
   @override
@@ -31,23 +33,31 @@ class _InviteToExistingBudgetDialogState
     super.dispose();
   }
 
-  Future<void> _createInvitation(BuildContext context) async {
+  Future<void> _createInvitation() async {
     final inviteeEmail = _inviteeEmailController.text;
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     final sharedBudgetProvider =
         Provider.of<SharedBudgetProvider>(context, listen: false);
 
-    if (normalizeInviteEmailForLookup(inviteeEmail).isEmpty) {
-      setState(() {
-        _errorMessage = inviteValidationMessage(InviteValidation.emptyEmail);
-      });
-      return;
-    }
-
     setState(() {
       _isLoading = true;
       _errorMessage = null;
     });
+
+    final result = await sharedBudgetProvider.validateNewInvite(
+      inviterEmail: authProvider.user!.email,
+      inviteeEmail: inviteeEmail,
+      memberUids: widget.memberUids,
+      queuedEmails: const [],
+    );
+    if (!mounted) return;
+    if (result != InviteValidation.ok) {
+      setState(() {
+        _isLoading = false;
+        _errorMessage = inviteValidationMessage(result);
+      });
+      return;
+    }
 
     try {
       await sharedBudgetProvider.inviteUser(
@@ -94,6 +104,7 @@ class _InviteToExistingBudgetDialogState
               border: OutlineInputBorder(),
             ),
             keyboardType: TextInputType.emailAddress,
+            enabled: !_isLoading,
           ),
           if (_errorMessage != null) ...[
             const SizedBox(height: 8),
@@ -106,13 +117,17 @@ class _InviteToExistingBudgetDialogState
       ),
       actions: [
         TextButton(
-          onPressed: () => Navigator.pop(context),
+          onPressed: _isLoading ? null : () => Navigator.pop(context),
           child: const Text('Peruuta'),
         ),
         ElevatedButton(
-          onPressed: _isLoading ? null : () => _createInvitation(context),
+          onPressed: _isLoading ? null : _createInvitation,
           child: _isLoading
-              ? const CircularProgressIndicator()
+              ? const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
               : const Text('Lähetä kutsu'),
         ),
       ],

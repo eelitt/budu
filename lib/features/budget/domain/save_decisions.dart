@@ -10,7 +10,7 @@ String? validateIncomeText(String? value) {
   if (value == null || value.isEmpty) return null;
   final parsed = double.tryParse(value);
   if (parsed == null) return 'Syötä kelvollinen numero';
-  if (parsed < 0) return 'Tulot eivät voivat olla negatiivisia';
+  if (parsed < 0) return 'Tulot eivät voi olla negatiivisia';
   if (parsed > 999999) {
     return 'Tulot eivät voi olla suurempia kuin 999999 €';
   }

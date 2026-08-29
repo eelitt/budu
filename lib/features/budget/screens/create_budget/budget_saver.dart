@@ -1,7 +1,7 @@
-import 'package:budu/core/utils.dart';
 import 'package:budu/features/budget/domain/money.dart';
 import 'package:budu/features/budget/domain/periods.dart';
 import 'package:budu/features/budget/domain/save_decisions.dart';
+import 'package:budu/features/budget/domain/save_result.dart';
 import 'package:budu/features/auth/providers/auth_provider.dart';
 import 'package:budu/features/budget/models/budget_model.dart';
 import 'package:budu/features/budget/providers/budget_provider.dart';
@@ -12,20 +12,17 @@ import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 
-/// Luokka, joka vastaa budjetin tallentamisesta Firestoreen.
-/// Suorittaa validoinnit, näyttää varoitusdialogeja ja optimoi Firestore-lukuja/kirjoituksia.
-/// Käyttää annettuja totalIncome/Expenses-arvoja duplikaation välttämiseksi.
+/// Validates, confirms warnings, and writes a **new** personal or shared budget.
+/// Edit flows live on the budget tab — not here.
+///
+/// Income and expense totals are read from controllers and sanitized at save time.
 class BudgetSaver {
   final BuildContext context;
   final TextEditingController incomeController;
   final Map<String, Map<String, TextEditingController>> expenseControllers;
-  DateTime startDate;
-  DateTime endDate;
-  String type;
-  final double totalIncome;
-  final double totalExpenses;
-  String? errorMessage;
-  final bool isEditing;
+  final DateTime startDate;
+  final DateTime endDate;
+  final String type;
   final String? budgetName;
 
   BudgetSaver({
@@ -35,20 +32,14 @@ class BudgetSaver {
     required this.startDate,
     required this.endDate,
     required this.type,
-    required this.totalIncome,
-    required this.totalExpenses,
-    this.isEditing = false,
     this.budgetName,
   });
 
-  /// Näyttää geneerisen dialogin (vahvistus tai virhe).
-  /// Modulaaristaa dialog-koodin toiston vähentämiseksi.
   Future<bool?> _showDialog({
     required String title,
     required String content,
     required List<Widget> actions,
-    bool isError = false,
-  }) async {
+  }) {
     return showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -76,7 +67,6 @@ class BudgetSaver {
     );
   }
 
-  /// Validoi budjetin tulot (yksityinen, laajennettavissa expense-validoinnille).
   Future<bool> _confirmWarning(SaveDecision decision) async {
     final content = switch (decision) {
       SaveDecision.warnOverlap =>
@@ -98,29 +88,17 @@ class BudgetSaver {
         ElevatedButton(
           onPressed: () => Navigator.pop(context, true),
           style: Theme.of(context).elevatedButtonTheme.style,
-          child: Text('Jatka'),
+          child: const Text('Jatka'),
         ),
       ],
     );
     return confirm == true;
   }
 
-  String _cancelReason(SaveDecision decision) {
-    return switch (decision) {
-      SaveDecision.warnOverlap => 'Päällekkäinen aikaväli',
-      SaveDecision.warnEmpty => 'Tyhjä budjetti',
-      SaveDecision.warnExpensesExceedIncome => 'Menot ylittävät tulot',
-      _ => 'Peruutettu',
-    };
-  }
-
-  String? _validateIncome(String? value) => validateIncomeText(value);
-
   /// Personal vs personal, household vs household. Same month of both types is allowed.
   Future<bool> _checkOverlappingBudgets(
     String userId, {
     required bool isShared,
-    String? excludeId,
   }) async {
     final budgetProvider = Provider.of<BudgetProvider>(context, listen: false);
     final sharedBudgetProvider =
@@ -139,7 +117,6 @@ class BudgetSaver {
         start: startDate,
         end: endDate,
         existing: existing,
-        excludeId: excludeId,
       );
     } catch (e, stackTrace) {
       await FirebaseCrashlytics.instance.recordError(
@@ -151,25 +128,24 @@ class BudgetSaver {
     }
   }
 
-  Future<String> createBudget({
-    String? budgetId,
+  Future<BudgetSaveResult> createBudget({
     String? sharedBudgetId,
-    String? budgetName,
     List<String>? memberIds,
     List<String>? inviteEmails,
     String? householdId,
   }) async {
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     final budgetProvider = Provider.of<BudgetProvider>(context, listen: false);
-    final sharedBudgetProvider = Provider.of<SharedBudgetProvider>(context, listen: false);
-    final notificationProvider = Provider.of<NotificationProvider>(context, listen: false);
+    final sharedBudgetProvider =
+        Provider.of<SharedBudgetProvider>(context, listen: false);
+    final notificationProvider =
+        Provider.of<NotificationProvider>(context, listen: false);
 
     if (authProvider.user == null) {
-      errorMessage = 'Käyttäjä ei ole kirjautunut';
-      throw Exception('Käyttäjä ei ole kirjautunut');
+      return const BudgetSaveResult.failed('Käyttäjä ei ole kirjautunut');
     }
 
-    final incomeError = _validateIncome(incomeController.text);
+    final incomeError = validateIncomeText(incomeController.text);
     if (incomeError != null) {
       await _showDialog(
         title: 'Virhe',
@@ -180,51 +156,55 @@ class BudgetSaver {
             child: Text('OK', style: Theme.of(context).textTheme.bodyLarge),
           ),
         ],
-        isError: true,
       );
-      errorMessage = incomeError;
-      throw Exception(incomeError);
+      return BudgetSaveResult.failed(incomeError);
     }
 
-    final double income = totalIncome;
+    final double income = double.tryParse(incomeController.text) ?? 0.0;
     final rawExpenses = <String, Map<String, double>>{};
-    for (var category in expenseControllers.keys) {
+    for (final category in expenseControllers.keys) {
       final subcategoryMap = expenseControllers[category]!;
       rawExpenses[category] = {
-        for (var subcategory in subcategoryMap.keys)
-          subcategory: double.tryParse(subcategoryMap[subcategory]!.text) ?? 0.0,
+        for (final subcategory in subcategoryMap.keys)
+          subcategory:
+              double.tryParse(subcategoryMap[subcategory]!.text) ?? 0.0,
       };
     }
-    final Map<String, Map<String, double>> expenses =
-        sanitizePlannedExpenses(rawExpenses);
+    final expenses = sanitizePlannedExpenses(rawExpenses);
+    final sanitizedExpenseTotal = totalPlannedExpenses(expenses);
 
-    var overlaps = await _checkOverlappingBudgets(
-      authProvider.user!.uid,
-      isShared: sharedBudgetId != null,
-      excludeId: isEditing ? budgetId : null,
-    );
+    final bool overlaps;
+    try {
+      overlaps = await _checkOverlappingBudgets(
+        authProvider.user!.uid,
+        isShared: sharedBudgetId != null,
+      );
+    } catch (e) {
+      return BudgetSaveResult.failed('Virhe budjetin tallentamisessa: $e');
+    }
+
     var ignoreEmpty = false;
     var ignoreOverspend = false;
+    var overlapsFlag = overlaps;
 
     while (true) {
       final decision = decideBudgetSave(
         incomeError: null,
-        overlaps: overlaps,
+        overlaps: overlapsFlag,
         income: income,
         hasExpenses: expenses.isNotEmpty,
-        totalExpenses: totalExpenses,
+        totalExpenses: sanitizedExpenseTotal,
         ignoreEmpty: ignoreEmpty,
         ignoreOverspend: ignoreOverspend,
       );
       if (decision == SaveDecision.ok) break;
       final confirmed = await _confirmWarning(decision);
       if (!confirmed) {
-        errorMessage = 'Budjetin tallennus peruutettu';
-        throw Exception(_cancelReason(decision));
+        return const BudgetSaveResult.cancelled();
       }
       switch (decision) {
         case SaveDecision.warnOverlap:
-          overlaps = false;
+          overlapsFlag = false;
           break;
         case SaveDecision.warnEmpty:
           ignoreEmpty = true;
@@ -237,58 +217,43 @@ class BudgetSaver {
       }
     }
 
-    final newBudgetId = budgetId ?? const Uuid().v4();
+    final newBudgetId =
+        sharedBudgetId ?? const Uuid().v4();
 
     try {
       if (sharedBudgetId != null) {
-        // Yhteistalousbudjetti: Käytä provideria, mutta lisää batch-tuki jos provider tukee
-        if (isEditing) {
-          await sharedBudgetProvider.updateSharedBudget(
-            BudgetModel(
-              income: income,
-              expenses: expenses,
-              createdAt: DateTime.now(),
-              startDate: startDate,
-              endDate: endDate,
-              type: type,
-              isPlaceholder: false,
-              id: sharedBudgetId,
-              sharedBudgetId: sharedBudgetId,
-            ),
+        await sharedBudgetProvider.createSharedBudget(
+          userId: authProvider.user!.uid,
+          budget: BudgetModel(
+            income: income,
+            expenses: expenses,
+            createdAt: DateTime.now(),
+            startDate: startDate,
+            endDate: endDate,
+            type: type,
+            isPlaceholder: false,
+            id: sharedBudgetId,
+            sharedBudgetId: sharedBudgetId,
+            householdId: householdId,
+            users: memberIds,
+            createdBy: authProvider.user!.uid,
+            name: budgetName,
+          ),
+        );
+        final inviterEmail = authProvider.user!.email;
+        for (final email in inviteEmails ?? const <String>[]) {
+          await sharedBudgetProvider.inviteUser(
+            sharedBudgetId: sharedBudgetId,
+            inviterId: authProvider.user!.uid,
+            inviterEmail: inviterEmail,
+            inviteeEmail: email,
           );
-        } else {
-          await sharedBudgetProvider.createSharedBudget(
-            userId: authProvider.user!.uid,
-            budget: BudgetModel(
-              income: income,
-              expenses: expenses,
-              createdAt: DateTime.now(),
-              startDate: startDate,
-              endDate: endDate,
-              type: type,
-              isPlaceholder: false,
-              id: sharedBudgetId,
-              sharedBudgetId: sharedBudgetId,
-              householdId: householdId,
-              users: memberIds,
-              createdBy: authProvider.user!.uid,
-              name: this.budgetName,
-            ),
-          );
-          final inviterEmail = authProvider.user!.email;
-          for (final email in inviteEmails ?? const <String>[]) {
-            await sharedBudgetProvider.inviteUser(
-              sharedBudgetId: sharedBudgetId,
-              inviterId: authProvider.user!.uid,
-              inviterEmail: inviterEmail,
-              inviteeEmail: email,
-            );
-          }
         }
-        await FirebaseCrashlytics.instance.log('BudgetSaver: Yhteistalousbudjetti ${isEditing ? 'päivitetty' : 'tallennettu'}, sharedBudgetId: $sharedBudgetId');
+        await FirebaseCrashlytics.instance.log(
+          'BudgetSaver: Yhteistalousbudjetti tallennettu, sharedBudgetId: $sharedBudgetId',
+        );
         notificationProvider.clearSharedReminder();
       } else {
-        // Henkilökohtainen budjetti
         final newBudget = BudgetModel(
           income: income,
           expenses: expenses,
@@ -301,27 +266,20 @@ class BudgetSaver {
         );
         await budgetProvider.saveBudget(authProvider.user!.uid, newBudget);
         budgetProvider.setBudget(newBudget);
-        await FirebaseCrashlytics.instance.log('BudgetSaver: Henkilökohtainen budjetti tallennettu, ID: $newBudgetId');
+        await FirebaseCrashlytics.instance.log(
+          'BudgetSaver: Henkilökohtainen budjetti tallennettu, ID: $newBudgetId',
+        );
         notificationProvider.clearPersonalReminder();
       }
-      if (context.mounted) {
-        showSnackBar(
-          context,
-          'Budjetti tallennettu onnistuneesti',
-          duration: const Duration(seconds: 3),
-          backgroundColor: Colors.green,
-        );
-      }
-
-      return newBudgetId;
+      return BudgetSaveResult.ok(newBudgetId);
     } catch (e, stackTrace) {
       await FirebaseCrashlytics.instance.recordError(
         e,
         stackTrace,
-        reason: 'Budjetin tallentaminen epäonnistui käyttäjälle ${authProvider.user!.uid}',
+        reason:
+            'Budjetin tallentaminen epäonnistui käyttäjälle ${authProvider.user!.uid}',
       );
-      errorMessage = 'Virhe budjetin tallentamisessa: $e';
-      throw e;
+      return BudgetSaveResult.failed('Virhe budjetin tallentamisessa: $e');
     }
   }
 }

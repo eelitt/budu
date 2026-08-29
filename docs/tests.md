@@ -37,13 +37,14 @@ Production rules sit in `lib/features/budget/domain/`. Tests call those function
 
 | Production | Tests |
 | --- | --- |
-| `domain/periods.dart` | `periods_test.dart` |
+| `domain/periods.dart` (incl. create-budget initial period) | `periods_test.dart` |
 | `domain/reminder_rules.dart` | `reminder_rules_test.dart` |
 | `domain/money.dart` | `money_test.dart` |
 | `domain/tracking.dart` (incl. expense-only pie grouping) | `tracking_test.dart` |
 | `domain/period_summary.dart` (Summary overview snapshot) | `period_summary_test.dart` |
 | `domain/event_rules.dart` | `event_rules_test.dart` |
 | `domain/save_decisions.dart` | `save_decisions_test.dart` |
+| `domain/save_result.dart` | `save_result_test.dart` |
 | `domain/shared_rules.dart` | `shared_rules_test.dart` |
 | `domain/chatbot_amounts.dart` | `chatbot_amounts_test.dart` |
 | `BudgetModel.parse` | `budget_model_parse_test.dart` |
@@ -72,9 +73,9 @@ Date-dependent rules take `now`. Production callers pass `DateTime.now()`.
 
 ## What each file covers
 
-**Money** — round to 2 decimals; planned totals and remaining (can be negative); `isShared` when `users` is non-empty; drop ≤0 sub-amounts and empty mains on sanitize; income add; income subtract clamped at 0; `BudgetModel.copy()` does not share nested maps.
+**Money** — round to 2 decimals; planned totals and remaining (can be negative); `isShared` when `users` is non-empty; drop ≤0 sub-amounts and empty mains on sanitize (create-budget save warnings use the sanitized total); income add; income subtract clamped at 0; `BudgetModel.copy()` does not share nested maps.
 
-**Periods** — calendar month range (Feb leap/non-leap, December); next month wrapping year; days left in month; overlap (same day and shared endpoint overlap; adjacent days do not); `hasOverlappingBudgetPeriod` uses the list the saver passes (personal-only or household-only) and ignores `excludeId` (edit); next period after latest end (monthly vs +13 days biweekly).
+**Periods** — calendar month range (Feb leap/non-leap, December); next month wrapping year; days left in month; overlap (same day and shared endpoint overlap; adjacent days do not); `hasOverlappingBudgetPeriod` uses the list the saver passes (personal-only or household-only) and ignores `excludeId` (edit); next period after latest end (monthly vs +13 days biweekly); create-budget initial period resolution; monthly/biweekly snap and demote-to-custom on date edits.
 
 **Reminders** — `reminderDecision` is pure: no budget whose `startDate` is in the current month → `missingCurrentMonth`; else no next-month start and ≤3 days left → `missingNextMonth`; otherwise `none`. A start mid-month still counts as that month. The UI runs it separately on personal and shared startDate lists.
 
@@ -84,9 +85,11 @@ Date-dependent rules take `now`. Production callers pass `DateTime.now()`.
 
 **Events** — amount must parse and be ≥ 0; expense max 99999; expense needs category; subcategory required only if that category already has subs; description ≤ 50; must be logged in. Income does not need a category. `eventValidationField` maps the 50-character description message to the description field (not the old 75-character string).
 
-**Save decisions** — income text: empty ok, else number ≥ 0 and ≤ 999999 (hard reject). Decision order: income error → overlap warning → empty plan → expenses &gt; income → ok. After confirm, `ignoreEmpty` / `ignoreOverspend` skip that step. There is no “continue with income too large” warning.
+**Save decisions** — income text: empty ok, else number ≥ 0 and ≤ 999999 (hard reject; negative uses “Tulot eivät voi olla negatiivisia”). Decision order: income error → overlap warning → empty plan → expenses &gt; income → ok. After confirm, `ignoreEmpty` / `ignoreOverspend` skip that step. There is no “continue with income too large” warning.
 
-**Shared** — invite status `pending` / `accepted` / `declined`; only `pending` may go to accepted or declined; lookup email is trim + lowercase; `Invitation.toMap` writes that normalized email. `validateInvite` rejects empty, self, missing user, already member, duplicate pending. `householdUsersForNewPeriod` always includes the creator and copies previous members. Create invitation requires the plan doc; sequential create copies `users`.
+**Save result** — `BudgetSaveResult.ok` carries budget id; `cancelled` is not a failure; `failed` carries message only. Create-budget screen treats cancel as clear-error, fail as red banner.
+
+**Shared** — invite status `pending` / `accepted` / `declined`; only `pending` may go to accepted or declined; lookup email is trim + lowercase; `Invitation.toMap` writes that normalized email. `validateInvite` rejects empty, self, missing user, already member, duplicate pending; `inviteValidationMessage` Finnish copy for each reject. `householdUsersForNewPeriod` always includes the creator and copies previous members. Create invitation requires the plan doc; sequential create copies `users`.
 
 **Delete** — `BudgetRepository.deleteBudget` removes the plan, matching `events`, and legacy expenses. `deleteSharedBudget` removes the shared plan and its events. Other `budgetId`s’ events stay.
 

@@ -134,4 +134,155 @@ void main() {
       expect(period.end, DateTime(2025, 3, 15));
     });
   });
+
+  group('resolveCreateBudgetInitialPeriod', () {
+    test('explicit initials win over source next-period', () {
+      final period = resolveCreateBudgetInitialPeriod(
+        initialStart: DateTime(2025, 3, 1),
+        initialEnd: DateTime(2025, 3, 31),
+        initialType: 'monthly',
+        sourceId: 'jan',
+        sourceEnd: DateTime(2025, 1, 31),
+        sourceType: 'monthly',
+      );
+      expect(period.start, DateTime(2025, 3, 1));
+      expect(period.end, DateTime(2025, 3, 31));
+      expect(period.type, 'monthly');
+    });
+
+    test('real source without initials uses nextPeriodAfter', () {
+      final period = resolveCreateBudgetInitialPeriod(
+        sourceId: 'jan',
+        sourceEnd: DateTime(2025, 1, 31),
+        sourceType: 'monthly',
+      );
+      expect(period.start, DateTime(2025, 2, 1));
+      expect(period.end, DateTime(2025, 2, 28));
+      expect(period.type, 'monthly');
+    });
+
+    test('no source and no initials uses calendar month of now', () {
+      final period = resolveCreateBudgetInitialPeriod(
+        now: DateTime(2025, 3, 15),
+      );
+      expect(period.start, DateTime(2025, 3, 1));
+      expect(period.end, DateTime(2025, 3, 31));
+      expect(period.type, 'monthly');
+    });
+
+    test('source without id is treated as from-scratch', () {
+      final period = resolveCreateBudgetInitialPeriod(
+        sourceEnd: DateTime(2025, 1, 31),
+        sourceType: 'monthly',
+        now: DateTime(2025, 3, 15),
+      );
+      expect(period.start, DateTime(2025, 3, 1));
+      expect(period.end, DateTime(2025, 3, 31));
+    });
+  });
+
+  group('calendar / biweekly period checks', () {
+    test('isCalendarMonthPeriod accepts full March', () {
+      expect(
+        isCalendarMonthPeriod(DateTime(2025, 3, 1), DateTime(2025, 3, 31)),
+        isTrue,
+      );
+    });
+
+    test('isCalendarMonthPeriod rejects mid-month start', () {
+      expect(
+        isCalendarMonthPeriod(DateTime(2025, 3, 15), DateTime(2025, 3, 31)),
+        isFalse,
+      );
+    });
+
+    test('isBiweeklyPeriod is start + 13 days', () {
+      expect(
+        isBiweeklyPeriod(DateTime(2025, 3, 1), DateTime(2025, 3, 14)),
+        isTrue,
+      );
+      expect(
+        isBiweeklyPeriod(DateTime(2025, 3, 1), DateTime(2025, 3, 15)),
+        isFalse,
+      );
+    });
+  });
+
+  group('applyBudgetPeriodType', () {
+    test('monthly snaps mid-month start to calendar month', () {
+      final period = applyBudgetPeriodType(
+        type: 'monthly',
+        start: DateTime(2025, 3, 15),
+        end: DateTime(2025, 3, 20),
+      );
+      expect(period.start, DateTime(2025, 3, 1));
+      expect(period.end, DateTime(2025, 3, 31));
+      expect(period.type, 'monthly');
+    });
+
+    test('biweekly sets end to start + 13', () {
+      final period = applyBudgetPeriodType(
+        type: 'biweekly',
+        start: DateTime(2025, 3, 5),
+        end: DateTime(2025, 4, 1),
+      );
+      expect(period.start, DateTime(2025, 3, 5));
+      expect(period.end, DateTime(2025, 3, 18));
+      expect(period.type, 'biweekly');
+    });
+
+    test('custom clamps end before start', () {
+      final period = applyBudgetPeriodType(
+        type: 'custom',
+        start: DateTime(2025, 3, 10),
+        end: DateTime(2025, 3, 5),
+      );
+      expect(period.start, DateTime(2025, 3, 10));
+      expect(period.end, DateTime(2025, 3, 10));
+      expect(period.type, 'custom');
+    });
+  });
+
+  group('reconcile and date adjustments', () {
+    test('reconcile demotes monthly when range is not a calendar month', () {
+      final period = reconcileBudgetPeriodType(
+        type: 'monthly',
+        start: DateTime(2025, 3, 1),
+        end: DateTime(2025, 3, 15),
+      );
+      expect(period.type, 'custom');
+      expect(period.start, DateTime(2025, 3, 1));
+      expect(period.end, DateTime(2025, 3, 15));
+    });
+
+    test('adjustCreateBudgetStart monthly re-snaps to month of new start', () {
+      final period = adjustCreateBudgetStart(
+        type: 'monthly',
+        newStart: DateTime(2025, 4, 20),
+        currentEnd: DateTime(2025, 3, 31),
+      );
+      expect(period.type, 'monthly');
+      expect(period.start, DateTime(2025, 4, 1));
+      expect(period.end, DateTime(2025, 4, 30));
+    });
+
+    test('adjustCreateBudgetEnd demotes biweekly when end is wrong', () {
+      final period = adjustCreateBudgetEnd(
+        type: 'biweekly',
+        currentStart: DateTime(2025, 3, 1),
+        newEnd: DateTime(2025, 3, 20),
+      );
+      expect(period.type, 'custom');
+      expect(period.end, DateTime(2025, 3, 20));
+    });
+
+    test('adjustCreateBudgetEnd keeps biweekly when end is start + 13', () {
+      final period = adjustCreateBudgetEnd(
+        type: 'biweekly',
+        currentStart: DateTime(2025, 3, 1),
+        newEnd: DateTime(2025, 3, 14),
+      );
+      expect(period.type, 'biweekly');
+    });
+  });
 }

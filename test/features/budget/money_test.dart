@@ -46,6 +46,17 @@ void main() {
     expect(sanitized['Ruoka'], {'A': 1.0});
   });
 
+  test('save warnings use sanitized total, not raw zeros', () {
+    final raw = {
+      'Ruoka': {'A': 50.0, 'B': 0.0},
+      'Tyhjä': {'X': 0.0},
+    };
+    final sanitized = sanitizePlannedExpenses(raw);
+    expect(totalPlannedExpenses(raw), 50.0);
+    expect(totalPlannedExpenses(sanitized), 50.0);
+    expect(sanitized.isNotEmpty, isTrue);
+  });
+
   test('income add/subtract clamp', () {
     expect(incomeAfterAdd(10, 3), 13);
     expect(incomeAfterSubtract(10, 3), 7);

@@ -45,27 +45,30 @@ class MainScreenActionsService {
           authProvider.user!.uid,
           sourceBudget.id!,
         );
-      } else {
-        sourceBudget = BudgetModel(
-          income: 0.0,
-          expenses: {},
-          createdAt: now,
-          startDate: range.start,
-          endDate: range.end,
-          type: 'monthly',
-        );
       }
 
       if (!context.mounted) return;
-      await Navigator.push(
+      final result = await Navigator.push<String>(
         context,
         MaterialPageRoute(
           builder: (context) => CreateBudgetScreen(
             sourceBudget: sourceBudget,
+            initialStart: range.start,
+            initialEnd: range.end,
+            initialType: 'monthly',
           ),
         ),
       );
-      if (context.mounted) onBudgetCreated();
+      if (!context.mounted) return;
+      if (result != null) {
+        showSnackBar(
+          context,
+          'Budjetti tallennettu onnistuneesti',
+          duration: const Duration(seconds: 3),
+          backgroundColor: Colors.green,
+        );
+      }
+      onBudgetCreated();
     } catch (e) {
       await FirebaseCrashlytics.instance.recordError(
         e,
@@ -87,7 +90,7 @@ class MainScreenActionsService {
     final sharedProvider =
         Provider.of<SharedBudgetProvider>(context, listen: false);
     final latest = sharedProvider.latestSharedBudget;
-    await Navigator.push(
+    final result = await Navigator.push<String>(
       context,
       MaterialPageRoute(
         builder: (context) => CreateBudgetScreen(
@@ -98,7 +101,16 @@ class MainScreenActionsService {
         ),
       ),
     );
-    if (context.mounted) onComplete?.call();
+    if (!context.mounted) return;
+    if (result != null) {
+      showSnackBar(
+        context,
+        'Budjetti tallennettu onnistuneesti',
+        duration: const Duration(seconds: 3),
+        backgroundColor: Colors.green,
+      );
+    }
+    onComplete?.call();
   }
 
   /// Käsittelee toimintovalikon valinnat.

@@ -1,57 +1,68 @@
 import 'package:budu/core/constants.dart';
-import 'package:budu/features/budget/screens/create_budget/managers/category_manager.dart';
-import 'package:budu/features/budget/screens/create_budget/managers/subcategory_manager.dart';
+import 'package:budu/features/budget/screens/create_budget/dialogs/add_category_dialog.dart';
+import 'package:budu/features/budget/screens/create_budget/dialogs/add_subcategory_dialog.dart';
 import 'package:flutter/material.dart';
 
-/// Widget, joka näyttää budjetin menot kategorioittain ja niiden alakategorioiden avulla.
-/// Mahdollistaa kategorioiden ja alakategorioiden lisäämisen, poistamisen ja muokkaamisen.
+/// Category tree UI for create-budget: add/remove mains and subs, amount fields.
 class ExpensesSection extends StatefulWidget {
-  final Map<String, Map<String, TextEditingController>> expenseControllers; // Kategorioiden ja alakategorioiden ohjaimet
-  final VoidCallback onUpdate; // Callback-funktio, jota kutsutaan, kun kategoriat tai alakategoriat päivittyvät
+  final Map<String, Map<String, TextEditingController>> expenseControllers;
+  final VoidCallback onUpdate;
+  final void Function(TextEditingController controller) attachController;
+  final void Function(TextEditingController controller) detachController;
 
   const ExpensesSection({
     super.key,
     required this.expenseControllers,
     required this.onUpdate,
+    required this.attachController,
+    required this.detachController,
   });
 
   @override
   State<ExpensesSection> createState() => _ExpensesSectionState();
 }
 
-/// ExpensesSectionin tilallinen tila, joka hallinnoi fokusnodeja ja käyttöliittymän tilaa.
 class _ExpensesSectionState extends State<ExpensesSection> {
-  Map<String, Map<String, FocusNode>> focusNodes = {}; // Fokusnodet tekstikenttien hallintaan
+  Map<String, Map<String, FocusNode>> focusNodes = {};
 
   @override
   void initState() {
     super.initState();
-    // Alustetaan fokusnodet kategorioille ja alakategorioille
     _updateFocusNodes();
   }
 
   @override
   void didUpdateWidget(ExpensesSection oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // Päivitetään fokusnodet, kun widget päivittyy (esim. kategoria lisätään tai poistetaan)
     _updateFocusNodes();
   }
 
-  /// Päivittää fokusnodet kategorioiden ja alakategorioiden perusteella.
-  /// Varmistaa, että fokusnodet vastaavat nykyisiä kategorioita ja alakategorioita.
+  /// Keeps focus nodes aligned with controllers; disposes nodes that leave the tree.
   void _updateFocusNodes() {
     final currentCategories = widget.expenseControllers.keys.toSet();
-    // Poistetaan vanhat fokusnodet, jotka eivät ole enää käytössä
-    focusNodes.removeWhere((category, _) => !currentCategories.contains(category));
+    final removedCategories = focusNodes.keys
+        .where((category) => !currentCategories.contains(category))
+        .toList();
+    for (final category in removedCategories) {
+      final subs = focusNodes.remove(category)!;
+      for (final node in subs.values) {
+        node.dispose();
+      }
+    }
 
-    for (var category in widget.expenseControllers.keys) {
+    for (final category in widget.expenseControllers.keys) {
       focusNodes[category] ??= {};
-      final currentSubcategories = widget.expenseControllers[category]!.keys.toSet();
-      // Poistetaan vanhat fokusnodet alakategorioista, jotka eivät ole enää käytössä
-      focusNodes[category]!.removeWhere((subcategory, _) => !currentSubcategories.contains(subcategory));
+      final currentSubcategories =
+          widget.expenseControllers[category]!.keys.toSet();
+      final removedSubs = focusNodes[category]!
+          .keys
+          .where((subcategory) => !currentSubcategories.contains(subcategory))
+          .toList();
+      for (final subcategory in removedSubs) {
+        focusNodes[category]!.remove(subcategory)!.dispose();
+      }
 
-      for (var subcategory in widget.expenseControllers[category]!.keys) {
-        // Luodaan uusi fokusnode, jos sellaista ei ole
+      for (final subcategory in widget.expenseControllers[category]!.keys) {
         focusNodes[category]![subcategory] ??= FocusNode();
       }
     }
@@ -59,19 +70,15 @@ class _ExpensesSectionState extends State<ExpensesSection> {
 
   @override
   void dispose() {
-    // Vapautetaan fokusnodet ja niiden resurssit
     focusNodes.forEach((_, subFocusNodes) {
       subFocusNodes.forEach((_, focusNode) => focusNode.dispose());
     });
     super.dispose();
   }
 
-  /// Validoi budjetin menoarvon.
-  /// [value] on tarkistettava arvo.
-  /// Palauttaa virheviestin, jos arvo on virheellinen, muuten null.
   String? _validateAmount(String? value) {
     if (value == null || value.isEmpty) {
-      return null; // Salli tyhjä arvo
+      return null;
     }
     final parsed = double.tryParse(value);
     if (parsed == null) {
@@ -86,8 +93,6 @@ class _ExpensesSectionState extends State<ExpensesSection> {
     return null;
   }
 
-  /// Muotoilee menoarvon kahden desimaalin tarkkuudella.
-  /// [controller] on muotoiltava tekstikentän ohjain.
   void _formatAmount(TextEditingController controller) {
     final value = controller.text;
     if (value.isEmpty) {
@@ -101,55 +106,83 @@ class _ExpensesSectionState extends State<ExpensesSection> {
     }
   }
 
+  Future<void> _addCategory() async {
+    final name = await showAddCategoryDialog(
+      context: context,
+      existingCategories: widget.expenseControllers.keys.toSet(),
+    );
+    if (name == null || !mounted) return;
+    widget.expenseControllers[name] = {};
+    widget.onUpdate();
+  }
+
+  void _removeCategory(String category) {
+    final subs = widget.expenseControllers.remove(category);
+    if (subs != null) {
+      for (final controller in subs.values) {
+        widget.detachController(controller);
+      }
+    }
+    widget.onUpdate();
+  }
+
+  Future<void> _addSubcategory(String category) async {
+    final name = await showAddSubcategoryDialog(
+      context: context,
+      category: category,
+      existingSubcategories:
+          widget.expenseControllers[category]?.keys.toSet() ?? {},
+    );
+    if (name == null || !mounted) return;
+
+    final controller = TextEditingController(text: '0.00');
+    widget.attachController(controller);
+    widget.expenseControllers[category]![name] = controller;
+    widget.onUpdate();
+    _updateFocusNodes();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      focusNodes[category]?[name]?.requestFocus();
+    });
+  }
+
+  void _removeSubcategory(String category, String subcategory) {
+    final controller =
+        widget.expenseControllers[category]?.remove(subcategory);
+    if (controller != null) {
+      widget.detachController(controller);
+    }
+    widget.onUpdate();
+  }
+
   @override
   Widget build(BuildContext context) {
-    // Alustetaan CategoryManager kategorioiden hallintaa varten
-    final categoryManager = CategoryManager(
-      expenseControllers: widget.expenseControllers,
-      onUpdate: widget.onUpdate,
-    );
-    // Alustetaan SubcategoryManager alakategorioiden hallintaa varten
-    final subcategoryManager = SubcategoryManager(
-      expenseControllers: widget.expenseControllers,
-      onUpdate: ({required String category, required String subcategory}) {
-        widget.onUpdate();
-        _updateFocusNodes(); // Varmistetaan, että fokusnodet on päivitetty
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (focusNodes[category] != null && focusNodes[category]![subcategory] != null) {
-            // Siirretään fokus uuteen alakategoriaan
-            focusNodes[category]![subcategory]!.requestFocus();
-          }
-        });
-      },
-    );
-
-    // Järjestetään kategoriat aakkosjärjestykseen
     final sortedCategories = widget.expenseControllers.keys.toList()..sort();
-    final canAddCategory = categoryManager.canAddCategory;
+    final canAddCategory =
+        widget.expenseControllers.length < Constants.maxCategories;
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 16), // Välistys alareunaan
+      margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
-        color: Colors.white, // Taustaväri
-        borderRadius: BorderRadius.circular(12), // Pyöristetyt kulmat
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.15), // Varjon väri
-            blurRadius: 8, // Varjon pehmennys
-            offset: const Offset(0, 4), // Varjon siirtymä
+            color: Colors.black.withValues(alpha: 0.15),
+            blurRadius: 8,
+            offset: const Offset(0, 4),
           ),
         ],
       ),
       child: Theme(
         data: Theme.of(context).copyWith(
-          dividerColor: Colors.transparent, // Poistetaan oletusjakajat
+          dividerColor: Colors.transparent,
         ),
         child: ExpansionTile(
-          initiallyExpanded: true, // Alkuasetus laajennustilalle
+          initiallyExpanded: true,
           title: Row(
             children: [
-              const Icon(Icons.account_balance_wallet, size: 24), // Ikoni osion alussa
-              const SizedBox(width: 8), // Väli ikonin ja tekstin välillä
+              const Icon(Icons.account_balance_wallet, size: 24),
+              const SizedBox(width: 8),
               Text(
                 'Menot kategorioittain',
                 style: Theme.of(context).textTheme.bodyLarge?.copyWith(
@@ -167,68 +200,80 @@ class _ExpensesSectionState extends State<ExpensesSection> {
           ),
           children: [
             Padding(
-              padding: const EdgeInsets.all(16.0), // Sisäinen välistys
+              padding: const EdgeInsets.all(16.0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          ElevatedButton(
-                            onPressed: canAddCategory ? () => categoryManager.addCategory(context) : null,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Theme.of(context).elevatedButtonTheme.style?.backgroundColor?.resolve({}),
-                              foregroundColor: Theme.of(context).elevatedButtonTheme.style?.foregroundColor?.resolve({}),
-                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8), // Sisäinen välistys
-                            ),
-                            child: Row(
-                              children: [
-                                Icon(
-                                  canAddCategory ? Icons.add : Icons.info,
-                                  size: 16,
-                                  color: Theme.of(context).elevatedButtonTheme.style?.foregroundColor?.resolve({}),
-                                ),
-                                const SizedBox(width: 4), // Väli ikonin ja tekstin välillä
-                                Text(
-                                  canAddCategory ? 'Lisää kategoria' : 'Kategorioiden maksimimäärä (${Constants.maxCategories}) saavutettu',
-                                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                                        color: Theme.of(context).elevatedButtonTheme.style?.foregroundColor?.resolve({}),
-                                      ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
+                  ElevatedButton(
+                    onPressed: canAddCategory ? _addCategory : null,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Theme.of(context)
+                          .elevatedButtonTheme
+                          .style
+                          ?.backgroundColor
+                          ?.resolve({}),
+                      foregroundColor: Theme.of(context)
+                          .elevatedButtonTheme
+                          .style
+                          ?.foregroundColor
+                          ?.resolve({}),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 8,
                       ),
-                    ],
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          canAddCategory ? Icons.add : Icons.info,
+                          size: 16,
+                          color: Theme.of(context)
+                              .elevatedButtonTheme
+                              .style
+                              ?.foregroundColor
+                              ?.resolve({}),
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          canAddCategory
+                              ? 'Lisää kategoria'
+                              : 'Kategorioiden maksimimäärä (${Constants.maxCategories}) saavutettu',
+                          style:
+                              Theme.of(context).textTheme.bodyLarge?.copyWith(
+                                    color: Theme.of(context)
+                                        .elevatedButtonTheme
+                                        .style
+                                        ?.foregroundColor
+                                        ?.resolve({}),
+                                  ),
+                        ),
+                      ],
+                    ),
                   ),
-                  const SizedBox(height: 16), // Väli painikkeen ja kategorioiden välillä
-                  // Näytetään jokainen kategoria laajennettavassa muodossa
+                  const SizedBox(height: 16),
                   ...sortedCategories.map((category) {
-                    // Järjestetään alakategoriat aakkosjärjestykseen
-                    final sortedSubcategories = widget.expenseControllers[category]!.keys.toList()..sort();
-                    final canAddSubcategory = subcategoryManager.canAddSubcategory(category);
+                    final sortedSubcategories =
+                        widget.expenseControllers[category]!.keys.toList()
+                          ..sort();
+                    final canAddSubcategory =
+                        (widget.expenseControllers[category]?.length ?? 0) <
+                            Constants.maxSubcategories;
 
                     return Container(
-                      margin: const EdgeInsets.only(bottom: 8), // Välistys kategorioiden välillä
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), // Sisäinen välistys
+                      margin: const EdgeInsets.only(bottom: 8),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
                       decoration: BoxDecoration(
-                        color: Colors.white, // Taustaväri
-                        borderRadius: BorderRadius.circular(8), // Pyöristetyt kulmat
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.15), // Varjon väri
-                            blurRadius: 6, // Varjon pehmennys
-                            offset: const Offset(0, 2), // Varjon siirtymä
-                          ),
-                        ],
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.grey[300]!),
                       ),
                       child: Theme(
                         data: Theme.of(context).copyWith(
-                          dividerColor: Colors.transparent, // Poistetaan oletusjakajat
+                          dividerColor: Colors.transparent,
                         ),
                         child: ExpansionTile(
                           title: Row(
@@ -237,78 +282,93 @@ class _ExpensesSectionState extends State<ExpensesSection> {
                               Expanded(
                                 child: Text(
                                   category,
-                                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+                                  style: const TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w500,
+                                  ),
                                   maxLines: 2,
                                   overflow: TextOverflow.ellipsis,
                                 ),
                               ),
                               IconButton(
-                                icon: const Icon(Icons.delete, color: Colors.red),
-                                onPressed: () {
-                                  // Poistetaan kategoria ja sen alakategoriat
-                                  categoryManager.removeCategory(category);
-                                },
+                                icon: const Icon(
+                                  Icons.delete,
+                                  color: Colors.red,
+                                ),
+                                onPressed: () => _removeCategory(category),
                                 tooltip: 'Poista kategoria',
                               ),
                             ],
                           ),
                           children: [
-                            // Näytetään jokainen alakategoria
                             ...sortedSubcategories.map((subcategory) {
                               return Container(
-                                margin: const EdgeInsets.symmetric(vertical: 8.0), // Välistys alakategorioiden välillä
-                                padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0), // Sisäinen välistys
+                                margin: const EdgeInsets.symmetric(
+                                  vertical: 8.0,
+                                ),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16.0,
+                                  vertical: 8.0,
+                                ),
                                 decoration: BoxDecoration(
-                                  color: Colors.white, // Taustaväri
-                                  border: Border.all(color: Colors.grey[300]!), // Reunan väri
-                                  borderRadius: BorderRadius.circular(8), // Pyöristetyt kulmat
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: Colors.black.withValues(alpha: 0.15), // Varjon väri
-                                      blurRadius: 6, // Varjon pehmennys
-                                      offset: const Offset(0, 2), // Varjon siirtymä
-                                    ),
-                                  ],
+                                  color: Colors.white,
+                                  border: Border.all(
+                                    color: Colors.grey[300]!,
+                                  ),
+                                  borderRadius: BorderRadius.circular(8),
                                 ),
                                 child: Row(
                                   children: [
-                                    // Alakategorian nimi
                                     Expanded(child: Text(subcategory)),
-                                    // Tekstikenttä alakategorian summan syöttämiseen
                                     SizedBox(
                                       width: 100,
                                       child: TextField(
-                                        controller: widget.expenseControllers[category]![subcategory],
-                                        focusNode: focusNodes[category]![subcategory],
+                                        controller: widget.expenseControllers[
+                                            category]![subcategory],
+                                        focusNode: focusNodes[category]![
+                                            subcategory],
                                         keyboardType: TextInputType.number,
                                         decoration: InputDecoration(
                                           labelText: 'Summa (€)',
                                           border: const OutlineInputBorder(),
-                                          errorText: _validateAmount(widget.expenseControllers[category]![subcategory]!.text),
+                                          errorText: _validateAmount(
+                                            widget
+                                                .expenseControllers[category]![
+                                                    subcategory]!
+                                                .text,
+                                          ),
                                         ),
-                                        onChanged: (value) {
-                                          widget.onUpdate();
-                                        },
+                                        onChanged: (_) => widget.onUpdate(),
                                         onEditingComplete: () {
-                                          _formatAmount(widget.expenseControllers[category]![subcategory]!);
+                                          _formatAmount(
+                                            widget.expenseControllers[
+                                                category]![subcategory]!,
+                                          );
                                           widget.onUpdate();
                                           FocusScope.of(context).unfocus();
                                         },
                                       ),
                                     ),
-                                    // Poistopainike alakategorialle
                                     IconButton(
-                                      icon: const Icon(Icons.delete, color: Colors.red),
-                                      onPressed: () => subcategoryManager.removeSubcategory(category, subcategory),
+                                      icon: const Icon(
+                                        Icons.delete,
+                                        color: Colors.red,
+                                      ),
+                                      onPressed: () => _removeSubcategory(
+                                        category,
+                                        subcategory,
+                                      ),
                                       tooltip: 'Poista alakategoria',
                                     ),
                                   ],
                                 ),
                               );
                             }),
-                            // Alakategorioiden lisäyspainike ja rajoitusviesti
                             Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16.0,
+                                vertical: 8.0,
+                              ),
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
@@ -320,20 +380,34 @@ class _ExpensesSectionState extends State<ExpensesSection> {
                                       icon: const Icon(Icons.add),
                                       label: Text(
                                         'Lisää alakategoria',
-                                        style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                                              color: Theme.of(context).elevatedButtonTheme.style?.foregroundColor?.resolve({}),
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .bodyLarge
+                                            ?.copyWith(
+                                              color: Theme.of(context)
+                                                  .elevatedButtonTheme
+                                                  .style
+                                                  ?.foregroundColor
+                                                  ?.resolve({}),
                                             ),
                                       ),
                                       style: ElevatedButton.styleFrom(
-                                        backgroundColor: Theme.of(context).elevatedButtonTheme.style?.backgroundColor?.resolve({}),
-                                        foregroundColor: Theme.of(context).elevatedButtonTheme.style?.foregroundColor?.resolve({}),
+                                        backgroundColor: Theme.of(context)
+                                            .elevatedButtonTheme
+                                            .style
+                                            ?.backgroundColor
+                                            ?.resolve({}),
+                                        foregroundColor: Theme.of(context)
+                                            .elevatedButtonTheme
+                                            .style
+                                            ?.foregroundColor
+                                            ?.resolve({}),
                                       ),
                                       onPressed: canAddSubcategory
-                                          ? () => subcategoryManager.addSubcategory(context, category)
+                                          ? () => _addSubcategory(category)
                                           : null,
                                     ),
                                   ),
-                                  // Näytetään viesti, jos alakategorioiden maksimimäärä on saavutettu
                                   if (!canAddSubcategory) ...[
                                     const SizedBox(height: 4),
                                     Text(

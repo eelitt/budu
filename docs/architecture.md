@@ -102,6 +102,7 @@ Money-facing persistence behavior (debounce, overlap lists, etc.): [`domain.md`]
 | [`overview.md`](overview.md) | Learning how the product works end to end (human) |
 | [`tests.md`](tests.md) | Running tests; what is covered |
 | `*_rework.md` | Feature as-implemented deep dives and staged cleanup history |
+| [`create-budget_rework.md`](create-budget_rework.md) | Create personal/household plan form, period defaults, save/invite dialogs |
 | [`designthoughts.md`](designthoughts.md) | Opinion / product friction — not a behavior spec |
 | [`firebase_rules.md`](firebase_rules.md) | Security rules notes |
 

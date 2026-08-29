@@ -8,7 +8,12 @@ void main() {
       expect(validateIncomeText(''), isNull);
     });
     test('non-number', () => expect(validateIncomeText('x'), isNotNull));
-    test('negative', () => expect(validateIncomeText('-1'), isNotNull));
+    test('negative', () {
+      expect(
+        validateIncomeText('-1'),
+        'Tulot eivät voi olla negatiivisia',
+      );
+    });
     test('999999 ok', () => expect(validateIncomeText('999999'), isNull));
     test('1000000 rejected', () => expect(validateIncomeText('1000000'), isNotNull));
   });
@@ -102,6 +107,17 @@ void main() {
           hasExpenses: false,
           totalExpenses: 0,
           ignoreEmpty: true,
+        ),
+        SaveDecision.ok,
+      );
+      expect(
+        decideBudgetSave(
+          incomeError: null,
+          overlaps: false,
+          income: 10,
+          hasExpenses: true,
+          totalExpenses: 11,
+          ignoreOverspend: true,
         ),
         SaveDecision.ok,
       );

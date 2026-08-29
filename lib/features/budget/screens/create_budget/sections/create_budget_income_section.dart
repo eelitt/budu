@@ -1,3 +1,4 @@
+import 'package:budu/features/budget/domain/save_decisions.dart';
 import 'package:flutter/material.dart';
 
 class IncomeSection extends StatefulWidget {
@@ -33,25 +34,10 @@ class _IncomeSectionState extends State<IncomeSection> {
     super.dispose();
   }
 
-  String? _validateIncome(String? value) {
-    if (value == null || value.isEmpty) {
-      return null; // Salli tyhjä kenttä, _formatAmount hoitaa arvon asettamisen
-    }
-    final parsed = double.tryParse(value);
-    if (parsed == null) {
-      return 'Syötä kelvollinen numero';
-    }
-    if (parsed < 0) {
-      return 'Tulot eivät voi olla negatiivisia';
-    }
-    if (parsed > 999999) {
-      return 'Tulot eivät voi olla suurempia kuin 999999 €';
-    }
-    return null;
-  }
-
   void _validateAndFormat(TextEditingController controller) {
-    final error = _validateIncome(controller.text);
+    final error = validateIncomeText(
+      controller.text.isEmpty ? null : controller.text,
+    );
     setState(() {
       _errorText = error;
     });
@@ -107,7 +93,9 @@ class _IncomeSectionState extends State<IncomeSection> {
             ),
             onChanged: (value) {
               setState(() {
-                _errorText = _validateIncome(value);
+                _errorText = validateIncomeText(
+                  value.isEmpty ? null : value,
+                );
               });
             },
             onEditingComplete: () {
